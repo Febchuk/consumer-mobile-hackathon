@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, Text, TextInput, View, Pressable } from "react-native";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { loadPasscode, savePasscode } from "@/lib/identity";
@@ -107,6 +107,7 @@ function AdminPanel({ passcode }: { passcode: string }) {
             <BetAdmin key={b._id} bet={b} passcode={passcode} run={run} />
           ))}
           <AddBet roundId={r._id} passcode={passcode} run={run} />
+          <AiDrafts roundId={r._id} passcode={passcode} />
         </Card>
       ))}
     </ScrollView>
@@ -271,6 +272,85 @@ function AddBet({ roundId, passcode, run }: { roundId: Id<"rounds">; passcode: s
         <TextInput value={opts} onChangeText={setOpts} placeholder="Options, comma separated" placeholderTextColor={C.faint} style={input} />
       ) : null}
       <Button small label="Add bet" color={C.yes} onPress={submit} disabled={!question.trim()} />
+    </View>
+  );
+}
+
+type Draft = { question: string; kind: "yesno" | "overunder"; line?: number; keep: boolean };
+
+function AiDrafts({ roundId, passcode }: { roundId: Id<"rounds">; passcode: string }) {
+  const draft = useAction(api.ai.draftBets);
+  const add = useMutation(api.admin.addBet);
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (!open) return <Button small color={C.goldSoft} textColor={C.ink} label="✦ Draft bets with AI" onPress={() => setOpen(true)} />;
+  const kept = drafts.filter((d) => d.keep && d.question.trim());
+  return (
+    <View style={{ gap: 8, borderTopWidth: 1.5, borderTopColor: C.line, paddingTop: 10 }}>
+      <Text style={s.label}>Draft bets with AI</Text>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        multiline
+        placeholder="Paste a transcript, Granola notes, or what's going on in the room"
+        placeholderTextColor={C.faint}
+        style={[input, { minHeight: 110, textAlignVertical: "top" }]}
+      />
+      <Button
+        small
+        label={busy ? "Drafting…" : "Draft 6 bets"}
+        disabled={busy || text.trim().length < 10}
+        onPress={async () => {
+          setBusy(true);
+          setMsg(null);
+          try {
+            const out = await draft({ passcode, text });
+            setDrafts(out.map((d) => ({ ...d, keep: true })));
+            if (!out.length) setMsg("The model returned no usable bets. Try more detail.");
+          } catch (e) {
+            setMsg(String((e as { data?: string }).data ?? (e as Error).message));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      {drafts.map((d, i) => (
+        <View key={i} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+          <Pressable
+            onPress={() => setDrafts(drafts.map((x, j) => (j === i ? { ...x, keep: !x.keep } : x)))}
+            style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: d.keep ? C.yes : C.tile, alignItems: "center", justifyContent: "center" }}
+          >
+            <Text style={{ color: "#fff", fontFamily: F.bodyBold }}>{d.keep ? "✓" : ""}</Text>
+          </Pressable>
+          <TextInput
+            value={d.question}
+            onChangeText={(t) => setDrafts(drafts.map((x, j) => (j === i ? { ...x, question: t } : x)))}
+            style={[input, { flex: 1, paddingVertical: 6, fontSize: 14 }]}
+          />
+          <Text style={[s.sub, { width: 64 }]}>{d.kind === "yesno" ? "Yes/No" : "O/U " + d.line}</Text>
+        </View>
+      ))}
+      {kept.length ? (
+        <Button
+          small
+          color={C.yes}
+          label={"Add " + kept.length + " to this drop"}
+          onPress={async () => {
+            try {
+              for (const d of kept) await add({ passcode, roundId, question: d.question, kind: d.kind, line: d.line });
+              setDrafts([]);
+              setText("");
+              setMsg("Added " + kept.length + " bets");
+            } catch (e) {
+              setMsg(String((e as { data?: string }).data ?? (e as Error).message));
+            }
+          }}
+        />
+      ) : null}
+      {msg ? <Text style={s.sub}>{msg}</Text> : null}
     </View>
   );
 }

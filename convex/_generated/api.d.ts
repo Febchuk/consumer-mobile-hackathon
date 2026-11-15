@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as ai from "../ai.js";
 import type * as crons from "../crons.js";
 import type * as game from "../game.js";
 import type * as groups from "../groups.js";
@@ -27,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  ai: typeof ai;
   crons: typeof crons;
   game: typeof game;
   groups: typeof groups;
