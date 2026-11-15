@@ -14,6 +14,7 @@ import type * as game from "../game.js";
 import type * as hosting from "../hosting.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
+import type * as reveal from "../reveal.js";
 import type * as users from "../users.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   hosting: typeof hosting;
   http: typeof http;
   lib: typeof lib;
+  reveal: typeof reveal;
   users: typeof users;
 }>;
 
