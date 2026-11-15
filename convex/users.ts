@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { START_POINTS, userByToken, requireUser, normalizeUsername, ensureDefaultGroup } from "./lib";
+import { START_POINTS, userByToken, requireUser, normalizeUsername, ensureDefaultGroup, isTestName } from "./lib";
 
 export const join = mutation({
   args: { name: v.string(), emoji: v.string(), token: v.string() },
@@ -26,6 +26,7 @@ export const join = mutation({
       points: START_POINTS,
       streak: 0,
       lastSeen: Date.now(),
+      isTest: isTestName(username) || undefined,
     });
     await ctx.db.insert("members", { groupId: await ensureDefaultGroup(ctx), userId });
     return userId;

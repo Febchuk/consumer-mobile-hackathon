@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { LiveCounter } from "@/components/live-counter";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useQueries, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
@@ -139,6 +140,7 @@ function Body({ d, token, now }: { d: Detail; token: string | null; now: number 
         ) : null}
       </View>
 
+      {m.counter !== undefined && m.line !== undefined ? <LiveCounter count={m.counter} line={m.line} settled={settled} /> : null}
       <View style={{ gap: 6 }}>
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
           {settled ? (

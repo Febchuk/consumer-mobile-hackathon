@@ -136,3 +136,7 @@ export async function streakFor(ctx: QueryCtx, user: Doc<"users">, round: Doc<"r
   if (prev && user.lastRoundId === prev._id) return { shown: user.streak, next: user.streak + 1 };
   return { shown: 0, next: 1 };
 }
+
+export function isTestName(username: string) {
+  return /^(revyl|zz_|zz|test_|qa_)/.test(username);
+}

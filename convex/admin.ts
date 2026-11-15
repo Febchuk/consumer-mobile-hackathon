@@ -2,7 +2,7 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
-import { HOUR, LOCK_AFTER_MS, multiplier, percents, requireAdmin, ensureDefaultGroup, normalizeUsername, uniqueUsername } from "./lib";
+import { HOUR, LOCK_AFTER_MS, multiplier, percents, requireAdmin, ensureDefaultGroup, normalizeUsername, uniqueUsername, isTestName } from "./lib";
 
 const kind = v.union(v.literal("yesno"), v.literal("overunder"), v.literal("multi"));
 
@@ -303,7 +303,7 @@ export const seed = internalMutation({
 export const seedBets = internalMutation({
   args: {
     opensAt: v.number(),
-    bets: v.array(v.object({ question: v.string(), kind, line: v.optional(v.number()) })),
+    bets: v.array(v.object({ question: v.string(), kind, line: v.optional(v.number()), counter: v.optional(v.number()) })),
   },
   handler: async (ctx, { opensAt, bets }) => {
     const roundId = await ensureRound(ctx, opensAt);
@@ -313,7 +313,8 @@ export const seedBets = internalMutation({
       .collect();
     for (const b of bets) {
       if (existing.some((e) => e.question === b.question)) continue;
-      await insertBet(ctx, roundId, b.question, b.kind, b.line);
+      const id = await insertBet(ctx, roundId, b.question, b.kind, b.line);
+      if (b.counter !== undefined) await ctx.db.patch(id, { counter: b.counter });
     }
     return roundId;
   },
@@ -379,6 +380,41 @@ export const purgeTestUsers = internalMutation({
       await ctx.db.delete(u._id);
     }
     return users.length;
+  },
+});
+
+export const markTest = internalMutation({
+  args: { usernames: v.array(v.string()), isTest: v.boolean() },
+  handler: async (ctx, { usernames, isTest }) => {
+    let n = 0;
+    for (const u of await ctx.db.query("users").collect()) {
+      if (usernames.includes(u.username ?? u.name) || (isTest && isTestName(u.username ?? u.name))) {
+        await ctx.db.patch(u._id, { isTest });
+        n++;
+      }
+    }
+    return n;
+  },
+});
+
+export const adjustCounter = mutation({
+  args: { passcode: v.string(), betId: v.id("bets"), delta: v.number() },
+  handler: async (ctx, { passcode, betId, delta }) => {
+    requireAdmin(passcode);
+    const bet = await ctx.db.get(betId);
+    if (!bet) throw new ConvexError("Bet not found");
+    if (bet.line === undefined) throw new ConvexError("Counters are for over/under bets");
+    await ctx.db.patch(betId, { counter: Math.max(0, (bet.counter ?? 0) + Math.sign(delta)) });
+  },
+});
+
+export const settleFromCounter = mutation({
+  args: { passcode: v.string(), betId: v.id("bets") },
+  handler: async (ctx, { passcode, betId }) => {
+    requireAdmin(passcode);
+    const bet = await ctx.db.get(betId);
+    if (!bet || bet.line === undefined || bet.counter === undefined) throw new ConvexError("No counter on this bet");
+    return await settleBet(ctx, betId, bet.counter > bet.line ? 0 : 1);
   },
 });
 

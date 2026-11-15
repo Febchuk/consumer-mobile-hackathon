@@ -1,4 +1,5 @@
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { LiveCounter } from "@/components/live-counter";
 import { api } from "@convex/_generated/api";
 import { useStableQuery } from "@/lib/use-stable-query";
 import { useNow, useQueryNow, fmt, hourLabel } from "@/lib/time";
@@ -69,7 +70,9 @@ export default function TV() {
   const k = wide ? 1.2 : 0.75;
   const round = today?.round ?? null;
   const bets = round && now >= round.opensAt ? today?.bets ?? [] : [];
-  const featured = bets.length ? Math.floor(now / 15000) % bets.length : 0;
+  const counterIdx = bets.findIndex((b) => b.counter !== undefined && b.line !== undefined);
+  const featured = counterIdx >= 0 ? counterIdx : bets.length ? Math.floor(now / 15000) % bets.length : 0;
+  const counterBet = counterIdx >= 0 ? bets[counterIdx] : null;
   const rest = bets.filter((_, i) => i !== featured);
   return (
     <ScrollView style={s.screen} contentContainerStyle={{ flexGrow: 1, padding: wide ? 40 : 16 }}>
@@ -77,6 +80,12 @@ export default function TV() {
         <View style={{ flex: 3, gap: 20 }}>
           <Wordmark size={wide ? 46 : 26} />
           {today ? <DropHeader round={round} next={today.next} now={now} big={wide} /> : null}
+          {counterBet ? (
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: F.display, fontSize: 30 * k, lineHeight: 36 * k, color: C.ink }}>{counterBet.question}</Text>
+              <LiveCounter count={counterBet.counter ?? 0} line={counterBet.line ?? 0} scale={wide ? 1.6 : 0.8} settled={counterBet.status === "settled"} />
+            </View>
+          ) : null}
           {bets.length ? (
             <BigBet m={bets[featured]} start={round!.opensAt} end={today?.next?.opensAt ?? round!.opensAt + 3600000} now={now} k={k} />
           ) : null}

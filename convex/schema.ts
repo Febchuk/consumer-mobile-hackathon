@@ -12,6 +12,7 @@ export default defineSchema({
     lastRoundId: v.optional(v.id("rounds")),
     lastSeen: v.number(),
     username: v.optional(v.string()),
+    isTest: v.optional(v.boolean()),
   })
     .index("by_token", ["token"])
     .index("by_points", ["points"])
@@ -51,6 +52,7 @@ export default defineSchema({
     subjectUserId: v.optional(v.id("users")),
     hidden: v.optional(v.boolean()),
     order: v.number(),
+    counter: v.optional(v.number()),
   }).index("by_round", ["roundId"]),
   stakes: defineTable({
     betId: v.id("bets"),

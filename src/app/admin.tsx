@@ -115,6 +115,8 @@ function AdminPanel({ passcode }: { passcode: string }) {
 
 type Bet = {
   _id: Id<"bets">;
+  counter?: number;
+  line?: number;
   question: string;
   options: string[];
   pools: number[];
@@ -128,6 +130,8 @@ function BetAdmin({ bet, passcode, run }: { bet: Bet; passcode: string; run: (f:
   const del = useMutation(api.admin.deleteBet);
   const edit = useMutation(api.admin.editBet);
   const [q, setQ] = useState(bet.question);
+  const adjust = useMutation(api.admin.adjustCounter);
+  const settleCount = useMutation(api.admin.settleFromCounter);
   const [pending, setPending] = useState<number | null>(null);
   const preview = useQuery(api.admin.settlePreview, pending === null ? "skip" : { passcode, betId: bet._id, winningOption: pending });
   const done = bet.status === "settled" || bet.status === "refunded";
@@ -145,6 +149,31 @@ function BetAdmin({ bet, passcode, run }: { bet: Bet; passcode: string; run: (f:
       <Text style={[s.sub, tnum]}>
         {bet.options.map((o, i) => o + ": " + fmt(bet.pools[i])).join(" · ")}
       </Text>
+      {bet.counter !== undefined && bet.line !== undefined ? (
+        <View style={{ backgroundColor: C.ink, borderRadius: 14, padding: 14, gap: 10 }}>
+          <Text style={[s.label, { color: C.faint }]}>Live counter · line {bet.line}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <Pressable
+              disabled={done}
+              onPress={() => run(() => adjust({ passcode, betId: bet._id, delta: -1 }))}
+              style={{ width: 64, height: 64, borderRadius: 14, backgroundColor: "#ffffff22", alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 30, color: "#fff" }}>−1</Text>
+            </Pressable>
+            <Text style={[{ fontFamily: F.monoBold, fontSize: 64, color: bet.counter > bet.line ? C.gold : "#fff", flex: 1, textAlign: "center" }, tnum]}>{bet.counter}</Text>
+            <Pressable
+              disabled={done}
+              onPress={() => run(() => adjust({ passcode, betId: bet._id, delta: 1 }))}
+              style={({ pressed }) => ({ width: 96, height: 96, borderRadius: 18, backgroundColor: C.yes, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.92 : 1 }] })}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 38, color: "#fff" }}>+1</Text>
+            </Pressable>
+          </View>
+          {!done ? (
+            <Button small color={C.gold} textColor={C.ink} label={"Settle from count: " + (bet.counter > bet.line ? bet.options[0] : bet.options[1])} onPress={() => run(() => settleCount({ passcode, betId: bet._id }))} />
+          ) : null}
+        </View>
+      ) : null}
       {pending !== null && !done ? (
         <View style={{ backgroundColor: OPTION_COLORS[pending % 4].bg, borderRadius: 12, padding: 12, gap: 8 }}>
           <Text style={[s.body, tnum, { fontFamily: F.bodyBold }]}>

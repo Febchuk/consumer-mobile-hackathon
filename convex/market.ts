@@ -108,6 +108,7 @@ export const market = query({
         pools: bet.pools,
         status: bet.status,
         winningOption: bet.winningOption,
+        counter: bet.counter,
         subject: subject ? { name: subject.name, emoji: subject.emoji } : null,
         locked: await betLocked(ctx, bet, round, now),
         pct: percents(bet.pools),

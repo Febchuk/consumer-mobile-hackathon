@@ -25,9 +25,7 @@ export const today = query({
     const isDefault = groupId === defaultId;
     const round = await currentRound(ctx, groupId, now);
     const upcoming = await nextRound(ctx, groupId, now);
-    const players = groupId
-      ? (await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()).length
-      : (await ctx.db.query("users").collect()).length;
+    const players = (await ctx.db.query("users").collect()).filter((u) => !u.isTest).length;
     const streak = user && isDefault ? await streakFor(ctx, user, round) : { shown: user?.streak ?? 0, next: 1 };
     if (!round) return { round: null, next: upcoming, bets: [], players, streak, waiting: [], aboutMe: 0 };
     const bets = (
@@ -150,7 +148,7 @@ export const leaderboard = query({
   handler: async (ctx, { now, groupId: requested }) => {
     const defaultId = await defaultGroupId(ctx);
     const groupId = requested ?? defaultId;
-    let users = await ctx.db.query("users").withIndex("by_points").order("desc").take(500);
+    let users = (await ctx.db.query("users").withIndex("by_points").order("desc").take(500)).filter((u) => !u.isTest);
     if (groupId && groupId !== defaultId) {
       const memberIds = new Set(
         (await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()).map((m) => m.userId),

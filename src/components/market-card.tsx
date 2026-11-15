@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LiveCounter } from "./live-counter";
 import { Modal, Pressable, Text, TextInput, View, Platform } from "react-native";
 import { useMutation, useQueries } from "convex/react";
 import { router } from "expo-router";
@@ -23,6 +24,7 @@ export type Market = {
   locked: boolean;
   status: "open" | "locked" | "settled" | "refunded";
   winningOption?: number;
+  counter?: number;
   subject?: { name: string; emoji: string } | null;
   ticks: { t: number; pct: number[] }[];
   mine: { option: number; amount: number; late: boolean; payout?: number }[];
@@ -118,6 +120,7 @@ export function MarketCard({ m, ctx }: { m: Market; ctx: Ctx }) {
       <Pressable onPress={open} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, gap: 10 })}>
         <SubjectLine subject={m.subject} />
         <Text style={[s.h2, { fontSize: 23, lineHeight: 28 }]}>{m.question}</Text>
+        {m.counter !== undefined && m.line !== undefined ? <LiveCounter count={m.counter} line={m.line} scale={0.55} settled={m.status === "settled"} /> : null}
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
           {settled ? (
             <Text
