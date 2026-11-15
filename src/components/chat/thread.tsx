@@ -402,7 +402,7 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
       >
         <View style={{ alignItems: "center", paddingVertical: 8, gap: 2 }}>
           <Text style={[t(11, "600", I.secondary), { fontVariant: ["tabular-nums"] }]}>
-            {data.group.revealed ? "The reveal is live. Rub the ink." : "Reveal at 5:00 PM · " + clock(left)}
+            {data.group.revealed ? "The reveal is live. Rub the ink." : "Reveal at " + stamp(data.group.revealAt) + " · " + clock(left)}
           </Text>
           <Text style={t(11, "400", I.secondary)}>Bets about you are hidden in invisible ink until then.</Text>
           {data.aboutMe.bets > 0 && !data.group.revealed ? (
@@ -457,7 +457,7 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
                 {time}
                 {gap}
                 <Row who={it.author} mine={false} showName={showName} last={last} faces={it.faces}>
-                  <InvisibleInk name={"@" + data.me.name} canRub={false} hint={"Unlocks at 5:00 · " + (it.friends === 1 ? "1 friend is in" : it.friends + " friends are in")} />
+                  <InvisibleInk name={"@" + data.me.name} canRub={false} hint={"Unlocks at " + stamp(data.group.revealAt) + " · " + (it.friends === 1 ? "1 friend is in" : it.friends + " friends are in")} />
                 </Row>
               </View>
             );

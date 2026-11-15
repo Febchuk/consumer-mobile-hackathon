@@ -93,7 +93,7 @@ export function MarketSheet({ betId, token, onClose }: { betId: Id<"bets">; toke
               colors={m.options.map((_, i) => optionColor(m.kind, i).fg)}
               height={110}
               startLabel="dropped"
-              endLabel="reveal 5:00"
+              endLabel={"reveal " + new Date(m.revealAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             />
             {m.canDeclare ? (
               <View style={{ gap: 10, backgroundColor: C.goldSoft, borderRadius: 14, padding: 14 }}>
@@ -139,7 +139,7 @@ export function MarketSheet({ betId, token, onClose }: { betId: Id<"bets">; toke
                 <Button
                   label={busy ? "Placing…" : pick === null ? "Pick a side" : "Call it · " + fmt(amt) + " on " + m.options[pick]}
                   disabled={busy || pick === null || amt < 1}
-                  onPress={() => pick !== null && run(() => stake({ token, betId, option: pick, amount: amt }))}
+                  onPress={() => pick !== null && run(async () => { await stake({ token, betId, option: pick, amount: amt }); onClose(); })}
                 />
               </View>
             ) : null}

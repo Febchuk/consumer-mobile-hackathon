@@ -37,7 +37,7 @@ function OnDevice({ style }: { style?: object }) {
       ]}
     >
       <Text style={{ fontSize: 12, color: C.ink2 }}>🔒︎</Text>
-      <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.ink2, letterSpacing: 0.2 }}>Apple on-device model · only bet text leaves your phone</Text>
+      <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.ink2, letterSpacing: 0.2, flexShrink: 1 }}>Apple on-device model · only bet text leaves your phone</Text>
     </View>
   );
 }
