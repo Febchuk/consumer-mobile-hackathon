@@ -395,7 +395,7 @@ export function BottomTabs() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
   const tabs = [
-    { href: "/", label: "Today" },
+    { href: "/hackathon", label: "Today" },
     { href: "/board", label: "Board" },
     { href: "/me", label: "Me" },
   ] as const;

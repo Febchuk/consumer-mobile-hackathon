@@ -71,7 +71,7 @@ export default function BetPage() {
           };
   }
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/hackathon"));
 
   return (
     <View style={s.screen}>
