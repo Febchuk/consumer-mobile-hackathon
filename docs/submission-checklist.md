@@ -1,62 +1,67 @@
 # Submission checklist
 
-Source: https://consumermobilehackathon.com/ and its Capy, Revyl and Convex pages (fetched today). The site does not list a submission form or a rules page. These are the fields we expect. Confirm against the real form and the kickoff rules.
+Source: https://consumermobilehackathon.com/ and its Capy, Revyl and Convex pages. The site lists no submission form, rules page, video requirement or deadline. The fields below are the ones we expect. Confirm them against the real form and the kickoff rules.
 
 ## What the hackathon site says
 
 - Build an iOS or Android app in one day and demo it live on a phone tonight.
-- Capy, Revyl and Convex are marked "Required to win": Capy writes the app, Revyl runs it on a device and checks it, Convex is the backend.
-- All code is written after 10:00 AM. Start from a new repository (the Capy page says to tick "Add a README").
+- Capy, Revyl and Convex are marked "Required to win". Capy writes the app, Revyl runs it on a device and checks it, Convex is the backend.
+- All code is written after 10:00 AM. The Capy page says to start from a new repository.
 - Whop, Supermemory, Keiki, OpenAI and Candle are optional extras.
-- No video, deck or deadline is stated on the site.
 
 ## Form fields, with drafted answers
 
 **Project name:** Called It
 
-**Tagline:** A prediction market for the people in the room.
+**Tagline:** Bet on your friends. In the group chat.
 
-**Short description (one line):** Bet points on what happens at the hackathon. Odds move like a market, results reveal like Wordle.
+**Short description:** A private betting game that looks like iMessage. Friends write bets about each other, the odds move, and the person it is about sees it as invisible ink until the reveal.
 
 **Long description:**
-Called It is a social prediction market. Players join with a username and an emoji and get 1,000 points. Every hour a Drop of six yes/no or over/under bets lands, all about the room. Players stake points, and the odds shown as percents move with every stake. Winners split the pot, and a streak multiplier adds 10% per consecutive Drop, up to 2x. Results come as a story-style reveal with Wordle-like CALLED tiles. A /tv view puts the odds and leaderboard on a projector, private groups let friends make and settle their own bets, and a finals live counter settles a bet from how many times someone says "agent". The host can paste a transcript into an admin screen and an AI model drafts six bets to edit and approve. It runs as one Expo codebase on iPhone and web, with Convex as the realtime backend.
+Called It is a private friend-group game that feels like a group chat. Friends write bets about each other and send them as messages. There are three formats: Yes/No, Over/Under and This or That. Everyone stakes points, the odds are pool-based and move live, and bettors show as emoji tapbacks. The person a bet is about sees it under invisible ink with only their name visible, until the 5:00 PM reveal. Then they rub it away, see everyone's positions, and call what happened (honor system) or veto it. Payouts post in the chat. Group details shows the leaderboard and a dinner pot, and the groups list shows your total points, best rank and nemesis. In the real-world version you choose to share chat screenshots, exports and photos, and Apple's on-device model drafts bets on the phone. Only the bet text goes to Convex. In the demo today the suggestions are staged and the app reads no real chats. Built with Expo and Convex, written by Capy agents, tested on a Revyl cloud iPhone.
 
 **Live link:** https://reliable-kookabura-33.convex.site
 
-**Repo:** https://github.com/mikunad/consumer-mobile-hackathon (TODO parent: confirm which branch or repo to submit, and make sure it is public if required)
+**Repo:** https://github.com/mikunad/consumer-mobile-hackathon (TODO parent: confirm the branch to submit, and that the repo is public if required)
 
-**Demo video:** TODO parent: the site does not ask for one, but record a 60 to 90 second screen recording as a backup anyway.
+**Demo video:** TODO parent: not asked for on the site. Record a 60 to 90 second screen recording as a backup anyway.
 
-**Team:** TODO parent: names, emails, GitHub handles. Known: mikunad (Mikun Adewole).
+**Team:** TODO parent: names, emails and GitHub handles. Known: mikunad (Mikun Adewole).
 
-**Tech used:** Expo, React Native, Expo Router, TypeScript, Convex (realtime queries, mutations, actions, cron, file storage), Anthropic or OpenAI API for bet drafts, Whop sandbox (in progress), Revyl, Capy.
+**Tech used:** Expo, React Native, Expo Router, TypeScript, Convex (realtime queries, mutations, actions, cron, file storage), Anthropic API for staged AI drafts, Revyl, Capy. Planned for the real version: Apple Foundation Models on device.
 
-**How we used Capy:** Capy agents wrote the app. A Captain thread ran parallel threads and subagents on cloud machines, each opening its own pull request, and built the iOS app through Revyl.
+**How we used Capy:** Capy agents wrote the app. A Captain thread ran parallel threads and subagents on cloud machines, each opening its own pull request, and ran the Revyl iOS builds.
 
-**How we used Revyl:** iOS build on Revyl cloud runners, run on a cloud iPhone, with plain-English tests in revyl/tests/. TODO parent: add the pass count and link results.md.
+**How we used Revyl:** iOS build on Revyl cloud runners, run on a cloud iPhone, plain-English tests in revyl/tests/. TODO parent: link revyl/results.md and add the pass count for the chat app.
 
-**How we used Convex:** The full backend. Realtime queries drive every screen and /tv, mutations handle stakes and settlement, an action calls the AI model, a cron prepares each Drop, and file storage serves the web build.
+**How we used Convex:** The whole backend. Realtime queries drive the chat and the odds, mutations handle stakes, declares and vetoes, an action calls the AI model, and file storage serves the web build.
 
-**Sponsor extras:** Whop sandbox checkout (in progress, TODO parent: confirm status). OpenAI credits, only if the OpenAI key is the one in use. Say which.
+**Sponsor extras:** None confirmed. TODO parent: Whop checkout is not in this version. Add OpenAI only if its key is in use (it is not).
 
-**Screenshots:** docs/screenshots/ (six images).
+**Screenshots:** docs/screenshots/ (seven images, 390 by 844).
+
+## Wording to keep honest
+
+- Say "staged" for the connect-your-context screen and the suggestion cards.
+- Say the on-device model is the real-world design, not what runs today.
+- Never say the app reads iMessage, SMS or calls. It does not.
+- Say "friendly roasts you opted into". Do not describe it as anything harsher.
+- The "Draft live with AI" button sends a staged sample chat to a hosted model. It is not on-device.
 
 ## Pre-submit checklist
 
 - [ ] Live link loads on a phone on cellular, not only on venue wifi.
-- [ ] /tv loads full screen on the projector laptop.
-- [ ] /qr scans and opens the live site. Scan it with a phone that is not ours.
-- [ ] Join with a fresh username works and gives 1,000 points.
-- [ ] Place one stake and see the odds move on /tv.
-- [ ] Reveal story opens for a settled Drop.
-- [ ] Admin passcode works, and it is not in the README, the docs, the repo, or the form.
+- [ ] The root link opens the new chat app, and /hackathon opens the old game.
+- [ ] An invite link opens the join screen and the join works.
+- [ ] Place one stake and see it post to the chat on a second phone.
+- [ ] A bet about a friend shows as invisible ink to that friend.
+- [ ] Reveal, rub, declare and veto work in the demo group (or use the replay).
+- [ ] Demo replay and Restore work, and the real 5 PM snapshot exists.
+- [ ] Admin passcode works. It is not in the README, docs, repo, results.md or the form.
 - [ ] No API keys in the repo. Run `git grep -i -E "sk-|api_key|passcode"` and check the hits are only variable names.
-- [ ] Test users and test bets removed from the live data (names like zz_, test-, revyl).
-- [ ] Finals counter bet exists, shows 0, and +1 works from admin.
-- [ ] Drop 5 (6 PM finals) is created and its bets are approved.
-- [ ] AI draft works with the key set (try one paste before stage).
-- [ ] README TODOs resolved: Whop status, Revyl pass count.
-- [ ] revyl/tests/ and results.md are committed.
-- [ ] Repo is public or shared as the form requires, and the PR with the final code is merged by Mikun.
-- [ ] Demo video recorded as a backup (even if not required).
-- [ ] Submit before the deadline. TODO parent: confirm the exact time. The brief said 5:15 PM PT for this pack and 6:00 PM for submission.
+- [ ] Test groups and test users (zz_ names) are not in the real demo group.
+- [ ] README TODOs resolved: Revyl pass count and results link, reveal screenshot.
+- [ ] revyl/tests/ and revyl/results.md are committed.
+- [ ] Repo is public or shared as the form requires, and the final PR is merged by Mikun.
+- [ ] Backup screen recording saved on the laptop.
+- [ ] Submit before the deadline. TODO parent: confirm the exact time.
