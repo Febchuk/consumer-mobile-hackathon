@@ -91,6 +91,36 @@ export const overview = query({
   },
 });
 
+export const settlePreview = query({
+  args: { passcode: v.string(), betId: v.id("bets"), winningOption: v.number() },
+  handler: async (ctx, { passcode, betId, winningOption }) => {
+    requireAdmin(passcode);
+    const bet = await ctx.db.get(betId);
+    if (!bet) return null;
+    const total = bet.pools.reduce((a, b) => a + b, 0);
+    const winPool = bet.pools[winningOption];
+    const stakes = await ctx.db
+      .query("stakes")
+      .withIndex("by_bet", (q) => q.eq("betId", betId))
+      .collect();
+    const winners = stakes.filter((s) => s.option === winningOption);
+    if (winPool === 0) return { refund: true, total, winners: 0, biggest: null };
+    let biggest: { name: string; emoji: string; amount: number } | null = null;
+    const byUser = new Map<string, number>();
+    for (const s of winners) {
+      const p = Math.floor(((total * s.amount) / winPool) * multiplier(s.streakAtBet));
+      byUser.set(s.userId, (byUser.get(s.userId) ?? 0) + p);
+    }
+    for (const [uid, amount] of byUser) {
+      if (!biggest || amount > biggest.amount) {
+        const u = await ctx.db.get(uid as Id<"users">);
+        if (u) biggest = { name: u.name, emoji: u.emoji, amount };
+      }
+    }
+    return { refund: false, total, winners: byUser.size, biggest };
+  },
+});
+
 export const addBet = mutation({
   args: {
     passcode: v.string(),

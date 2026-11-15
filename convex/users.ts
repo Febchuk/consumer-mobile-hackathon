@@ -8,6 +8,11 @@ export const join = mutation({
     const clean = name.trim().slice(0, 20);
     if (!clean) throw new ConvexError("Pick a name");
     const existing = await userByToken(ctx, token);
+    const lower = clean.toLowerCase();
+    const clash = (await ctx.db.query("users").collect()).find(
+      (u) => u.name.toLowerCase() === lower && u._id !== existing?._id,
+    );
+    if (clash) throw new ConvexError("Someone already took that name");
     if (existing) {
       await ctx.db.patch(existing._id, { name: clean, emoji, lastSeen: Date.now() });
       return existing._id;

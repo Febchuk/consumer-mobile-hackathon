@@ -134,6 +134,8 @@ function BetAdmin({ bet, passcode, run }: { bet: Bet; passcode: string; run: (f:
   const del = useMutation(api.admin.deleteBet);
   const edit = useMutation(api.admin.editBet);
   const [q, setQ] = useState(bet.question);
+  const [pending, setPending] = useState<number | null>(null);
+  const preview = useQuery(api.admin.settlePreview, pending === null ? "skip" : { passcode, betId: bet._id, winningOption: pending });
   const done = bet.status === "settled" || bet.status === "refunded";
   return (
     <View style={{ gap: 8, borderTopWidth: 1.5, borderTopColor: C.line, paddingTop: 10 }}>
@@ -149,22 +151,45 @@ function BetAdmin({ bet, passcode, run }: { bet: Bet; passcode: string; run: (f:
       <Text style={[s.sub, tnum]}>
         {bet.options.map((o, i) => o + ": " + fmt(bet.pools[i])).join(" · ")}
       </Text>
+      {pending !== null && !done ? (
+        <View style={{ backgroundColor: OPTION_COLORS[pending % 4].bg, borderRadius: 12, padding: 12, gap: 8 }}>
+          <Text style={[s.body, tnum, { fontFamily: F.bodyBold }]}>
+            {preview === undefined
+              ? "…"
+              : preview?.refund
+                ? "Nobody picked " + bet.options[pending] + " → everyone gets refunded"
+                : bet.options[pending] + " wins → " + preview?.winners + " players split " + fmt(preview?.total ?? 0) + " pts"}
+          </Text>
+          {preview?.biggest ? (
+            <Text style={[s.sub, tnum]}>
+              Biggest win: {preview.biggest.emoji} {preview.biggest.name} +{fmt(preview.biggest.amount)}
+            </Text>
+          ) : null}
+          <Button
+            small
+            color={OPTION_COLORS[pending % 4].fg}
+            label="Confirm & pay out"
+            onPress={() => run(async () => { await settle({ passcode, betId: bet._id, winningOption: pending }); setPending(null); })}
+          />
+        </View>
+      ) : null}
       {done ? (
         <Text style={[s.body, { fontFamily: F.bodyBold }]}>
           {bet.status === "refunded" ? "Refunded" : "Result: " + bet.options[bet.winningOption ?? 0]}
         </Text>
       ) : (
-        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <Text style={s.label}>What happened?</Text>
           {bet.options.map((o, i) => (
             <Button
               key={i}
               small
               color={OPTION_COLORS[i % 4].fg}
-              label={"✓ " + o + " happened"}
-              onPress={() => run(() => settle({ passcode, betId: bet._id, winningOption: i }))}
+              label={(pending === i ? "● " : "") + o}
+              onPress={() => setPending(pending === i ? null : i)}
             />
           ))}
-          <Button small color={C.tile} textColor={C.ink} label="Refund" onPress={() => run(() => settle({ passcode, betId: bet._id, winningOption: null }))} />
+          <Button small color={C.tile} textColor={C.ink} label="Refund everyone (void)" onPress={() => run(() => settle({ passcode, betId: bet._id, winningOption: null }))} />
           <Button
             small
             color={C.tile}

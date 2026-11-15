@@ -120,6 +120,7 @@ export function Sparkline({
   width = 120,
   height = 44,
   color = C.yes,
+  index = 0,
 }: {
   ticks: { t: number; pct: number[] }[];
   start: number;
@@ -128,6 +129,7 @@ export function Sparkline({
   width?: number;
   height?: number;
   color?: string;
+  index?: number;
 }) {
   const span = Math.max(1, end - start);
   const x = (t: number) => (Math.min(Math.max(t, start), end) - start) / span * width;
@@ -135,11 +137,11 @@ export function Sparkline({
   const pts: string[] = [];
   let last = 50;
   const sorted = [...ticks].sort((a, b) => a.t - b.t);
-  if (sorted.length) last = sorted[0].pct[0];
+  if (sorted.length) last = sorted[0].pct[index];
   pts.push(x(start) + "," + y(last));
   for (const t of sorted) {
     pts.push(x(t.t) + "," + y(last));
-    last = t.pct[0];
+    last = t.pct[index];
     pts.push(x(t.t) + "," + y(last));
   }
   pts.push(x(Math.min(now, end)) + "," + y(last));
@@ -208,31 +210,47 @@ export function Button({
   );
 }
 
-export function NavTabs() {
+export function BottomTabs() {
   const path = usePathname();
   const tabs = [
     { href: "/", label: "Today" },
     { href: "/board", label: "Board" },
+    { href: "/me", label: "Me" },
   ] as const;
   return (
-    <View style={{ flexDirection: "row", backgroundColor: C.tile, borderRadius: 12, padding: 3 }}>
-      {tabs.map((t) => {
-        const active = path === t.href;
-        return (
-          <Link key={t.href} href={t.href} asChild>
-            <Pressable
-              style={{
-                paddingVertical: 6,
-                paddingHorizontal: 14,
-                borderRadius: 9,
-                backgroundColor: active ? C.card : "transparent",
-              }}
-            >
-              <Text style={{ fontFamily: F.bodyBold, fontSize: 13, color: active ? C.ink : C.sub }}>{t.label}</Text>
-            </Pressable>
-          </Link>
-        );
-      })}
+    <View
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: C.paper,
+        borderTopWidth: 1.5,
+        borderTopColor: C.line,
+        paddingTop: 8,
+        paddingBottom: 22,
+        alignItems: "center",
+      }}
+    >
+      <View style={{ flexDirection: "row", backgroundColor: C.tile, borderRadius: 14, padding: 4, gap: 2 }}>
+        {tabs.map((t) => {
+          const active = path === t.href;
+          return (
+            <Link key={t.href} href={t.href} asChild replace>
+              <Pressable
+                style={{
+                  paddingVertical: 9,
+                  paddingHorizontal: 26,
+                  borderRadius: 11,
+                  backgroundColor: active ? C.card : "transparent",
+                }}
+              >
+                <Text style={{ fontFamily: F.bodyBold, fontSize: 14, color: active ? C.ink : C.sub }}>{t.label}</Text>
+              </Pressable>
+            </Link>
+          );
+        })}
+      </View>
     </View>
   );
 }

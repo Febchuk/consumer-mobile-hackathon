@@ -18,7 +18,7 @@ export const today = query({
     const user = await userByToken(ctx, token);
     const round = await currentRound(ctx, now);
     const upcoming = await nextRound(ctx, now);
-    if (!round) return { round: null, next: upcoming, bets: [] };
+    if (!round) return { round: null, next: upcoming, bets: [], players: (await ctx.db.query("users").collect()).length };
     const bets = (
       await ctx.db
         .query("bets")
@@ -56,7 +56,8 @@ export const today = query({
         };
       }),
     );
-    return { round, next: upcoming, bets: withTicks };
+    const players = (await ctx.db.query("users").collect()).length;
+    return { round, next: upcoming, bets: withTicks, players };
   },
 });
 
@@ -73,6 +74,13 @@ export const placeStake = mutation({
     if (betLocked(bet, round, now)) throw new ConvexError("Betting is locked");
     if (!Number.isInteger(option) || option < 0 || option >= bet.options.length)
       throw new ConvexError("Bad pick");
+    const prior = await ctx.db
+      .query("stakes")
+      .withIndex("by_bet", (q) => q.eq("betId", bet._id))
+      .filter((q) => q.eq(q.field("userId"), user._id))
+      .first();
+    if (prior && prior.option !== option)
+      throw new ConvexError("You already called " + bet.options[prior.option] + ". You can only add to that side.");
     const amt = Math.floor(amount);
     if (amt < 1) throw new ConvexError("Stake at least 1 point");
     if (amt > user.points) throw new ConvexError("Not enough points");

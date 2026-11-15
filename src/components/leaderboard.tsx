@@ -22,9 +22,9 @@ export function Leaderboard({ rows, highlight, big, limit }: { rows: Row[]; high
       <View style={{ flexDirection: "row", paddingHorizontal: 12 * k, gap: 10 * k }}>
         <Text style={[head(k), { width: 26 * k }]}>#</Text>
         <Text style={[head(k), { flex: 1 }]}>Player</Text>
-        <Text style={[head(k), { width: 44 * k, textAlign: "right" }]}>Strk</Text>
-        <Text style={[head(k), { width: 64 * k, textAlign: "right" }]}>Live</Text>
-        <Text style={[head(k), { width: 72 * k, textAlign: "right" }]}>Points</Text>
+        <Text style={[head(k), { width: 34 * k, textAlign: "right" }]}>Strk</Text>
+        <Text style={[head(k), { width: 50 * k, textAlign: "right" }]}>Live</Text>
+        <Text style={[head(k), { width: 62 * k, textAlign: "right" }]}>Points</Text>
       </View>
       {shown.map((r, i) => {
         const top = i < 3;
@@ -63,16 +63,16 @@ export function Leaderboard({ rows, highlight, big, limit }: { rows: Row[]; high
               </Text>
               {r.late ? <LateTag /> : null}
             </View>
-            <View style={{ width: 44 * k, alignItems: "flex-end" }}>
+            <View style={{ width: 34 * k, alignItems: "flex-end" }}>
               <Flame n={r.streak} size={13 * k} />
             </View>
-            <View style={{ width: 64 * k, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 4 }}>
+            <View style={{ width: 50 * k, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 4 }}>
               {r.live > 0 ? <View style={{ width: 6 * k, height: 6 * k, borderRadius: 6, backgroundColor: C.live }} /> : null}
               <Text style={[{ fontFamily: F.mono, fontSize: 13 * k, color: r.live > 0 ? C.live : C.faint }, tnum]}>
                 {r.live > 0 ? fmt(r.live) : "–"}
               </Text>
             </View>
-            <Text style={[{ width: 72 * k, textAlign: "right", fontFamily: F.monoBold, fontSize: 15 * k, color: C.ink }, tnum]}>
+            <Text style={[{ width: 62 * k, textAlign: "right", fontFamily: F.monoBold, fontSize: 15 * k, color: C.ink }, tnum]}>
               {fmt(r.points)}
             </Text>
           </View>

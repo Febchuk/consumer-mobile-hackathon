@@ -11,12 +11,12 @@ export function DropHeader({ round, next, now, big }: { round: Round | null; nex
     return (
       <Card style={{ gap: 6, backgroundColor: C.ink, borderColor: C.ink }}>
         <Text style={[s.label, { color: C.faint, fontSize: 11 * scale }]}>
-          {round ? round.title + " is locked" : "First drop"}
+          {round ? round.title + " locked · results at " + hourLabel(round.opensAt + 3600000) : "First drop"}
         </Text>
         {next ? (
           <>
             <Text style={{ fontFamily: F.displaySemi, color: "#fff", fontSize: 18 * scale }}>
-              Next drop at {hourLabel(next.opensAt)}
+              {round ? "Waiting on the room to find out… next drop at " : "Doors open at "}{hourLabel(next.opensAt)}
             </Text>
             <Text style={[{ fontFamily: F.monoBold, fontSize: 44 * scale, color: C.gold, letterSpacing: -1 }, tnum]}>
               {clock(next.opensAt - now)}
