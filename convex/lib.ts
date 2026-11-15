@@ -1,5 +1,5 @@
 import { QueryCtx, MutationCtx } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
 
 export const START_POINTS = 1000;
@@ -36,6 +36,50 @@ export function requireAdmin(passcode: string) {
   if (!expected || passcode !== expected) throw new ConvexError("Wrong passcode");
 }
 
+export const DEFAULT_GROUP = "YC Hackathon";
+
+export async function defaultGroupId(ctx: QueryCtx) {
+  const g = await ctx.db
+    .query("groups")
+    .withIndex("by_default", (q) => q.eq("isDefault", true))
+    .first();
+  return g?._id ?? null;
+}
+
+export async function ensureDefaultGroup(ctx: MutationCtx) {
+  return (await defaultGroupId(ctx)) ?? (await ctx.db.insert("groups", { name: DEFAULT_GROUP, isDefault: true }));
+}
+
+export async function isMember(ctx: QueryCtx, groupId: Id<"groups">, userId: Id<"users">) {
+  return !!(await ctx.db
+    .query("members")
+    .withIndex("by_group_user", (q) => q.eq("groupId", groupId).eq("userId", userId))
+    .first());
+}
+
+export function normalizeUsername(raw: string) {
+  return raw
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_.]/g, "")
+    .slice(0, 20);
+}
+
+export async function uniqueUsername(ctx: QueryCtx, base: string, selfId?: Id<"users">) {
+  const root = base.length >= 2 ? base : (base + "player").slice(0, 20);
+  for (let i = 0; i < 1000; i++) {
+    const candidate = i === 0 ? root : (root.slice(0, 17) + (i + 1)).slice(0, 20);
+    const taken = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", candidate))
+      .first();
+    if (!taken || taken._id === selfId) return candidate;
+  }
+  return root + Date.now().toString(36);
+}
+
 async function hasBets(ctx: QueryCtx, roundId: Doc<"rounds">["_id"]) {
   const bets = await ctx.db
     .query("bets")
@@ -47,7 +91,7 @@ async function hasBets(ctx: QueryCtx, roundId: Doc<"rounds">["_id"]) {
 export async function supersededAt(ctx: QueryCtx, round: Doc<"rounds">, now: number) {
   const later = await ctx.db
     .query("rounds")
-    .withIndex("by_opensAt", (q) => q.gt("opensAt", round.opensAt).lte("opensAt", now))
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", round.groupId).gt("opensAt", round.opensAt).lte("opensAt", now))
     .order("asc")
     .collect();
   for (const r of later) if (await hasBets(ctx, r._id)) return r.opensAt;
@@ -59,20 +103,20 @@ export async function betLocked(ctx: QueryCtx, bet: Doc<"bets">, round: Doc<"rou
   return (await supersededAt(ctx, round, now)) !== null;
 }
 
-export async function currentRound(ctx: QueryCtx, now: number) {
+export async function currentRound(ctx: QueryCtx, groupId: Id<"groups"> | null, now: number) {
   const opened = await ctx.db
     .query("rounds")
-    .withIndex("by_opensAt", (q) => q.lte("opensAt", now))
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", groupId ?? undefined).lte("opensAt", now))
     .order("desc")
     .take(24);
   for (const r of opened) if (await hasBets(ctx, r._id)) return r;
   return opened[0] ?? null;
 }
 
-export async function nextRound(ctx: QueryCtx, now: number) {
+export async function nextRound(ctx: QueryCtx, groupId: Id<"groups"> | null, now: number) {
   return await ctx.db
     .query("rounds")
-    .withIndex("by_opensAt", (q) => q.gt("opensAt", now))
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", groupId ?? undefined).gt("opensAt", now))
     .order("asc")
     .first();
 }
@@ -80,7 +124,7 @@ export async function nextRound(ctx: QueryCtx, now: number) {
 export async function previousRound(ctx: QueryCtx, round: Doc<"rounds">) {
   return await ctx.db
     .query("rounds")
-    .withIndex("by_opensAt", (q) => q.lt("opensAt", round.opensAt))
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", round.groupId).lt("opensAt", round.opensAt))
     .order("desc")
     .first();
 }
