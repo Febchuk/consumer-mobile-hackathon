@@ -38,7 +38,7 @@ type BetItem = {
 };
 type SealedItem = { type: "sealed"; _id: Id<"bets">; t: number; friends: number; total: number; author: Who; faces: Face[] };
 type StakeItem = { type: "stake"; _id: string; t: number; betId: Id<"bets">; who: Who; amount: number; option: string; question: string };
-type SettledItem = { type: "settled"; _id: string; t: number; betId: Id<"bets">; question: string; status: string; winner: string | null; subject: Who };
+type SettledItem = { type: "settled"; _id: string; t: number; betId: Id<"bets">; question: string; status: string; winner: string | null; subject: Who; payouts: { emoji: string; name: string; net: number }[] };
 type Item = BetItem | SealedItem | StakeItem | SettledItem;
 type Kind = "yesno" | "overunder" | "multi";
 
@@ -397,15 +397,13 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
                 {time}
                 {gap}
                 <Row who={it.author} mine={mine} showName={showName} last={last} faces={it.faces}>
-                  <Pressable onPress={() => setOpen(it._id)}>
-                    {inkedForMe ? (
-                      <InvisibleInk name={"@" + data.me.name} canRub hint="">
-                        {bubble}
-                      </InvisibleInk>
-                    ) : (
-                      bubble
-                    )}
-                  </Pressable>
+                  {inkedForMe ? (
+                    <InvisibleInk name={"@" + data.me.name} canRub hint="">
+                      <Pressable onPress={() => setOpen(it._id)}>{bubble}</Pressable>
+                    </InvisibleInk>
+                  ) : (
+                    <Pressable onPress={() => setOpen(it._id)}>{bubble}</Pressable>
+                  )}
                 </Row>
               </View>
             );
@@ -443,6 +441,11 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
                   <Text style={t(16, "400", mine ? "#fff" : I.label)}>
                     {it.status === "refunded" ? (it.winner ? "Nobody had it. Refunds all round." : "Vetoed. Refunds all round.") : "It was " + it.winner + ". " + it.question}
                   </Text>
+                  {it.payouts.length ? (
+                    <Text style={[t(14, "600", mine ? "rgba(255,255,255,0.9)" : I.green), { marginTop: 3, fontVariant: ["tabular-nums"] }]}>
+                      {it.payouts.map((p) => p.emoji + " " + p.name + " +" + fmt(p.net)).join("   ")}
+                    </Text>
+                  ) : null}
                 </Bubble>
               </Row>
             </View>

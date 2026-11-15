@@ -92,11 +92,11 @@ export function InvisibleInk({
         onPanResponderMove: () => {
           if (!canRub) return;
           moves.current += 1;
-          fade.setValue(Math.max(0.15, 1 - moves.current / 30));
-          if (moves.current > 24) uncover();
+          fade.setValue(Math.max(0.15, 1 - moves.current / 14));
+          if (moves.current > 10) uncover();
         },
         onPanResponderRelease: () => {
-          if (canRub && moves.current <= 24) Animated.timing(fade, { toValue: 1, duration: 300, useNativeDriver: true }).start(() => (moves.current = 0));
+          if (canRub && moves.current <= 10) Animated.timing(fade, { toValue: 1, duration: 300, useNativeDriver: true }).start(() => (moves.current = 0));
           setTimeout(() => setTip(false), 1600);
         },
       }),
@@ -105,6 +105,7 @@ export function InvisibleInk({
   if (gone && children) return <>{children}</>;
   return (
     <View>
+      <View>
       {children ? <View style={{ opacity: 0 }}>{children}</View> : <View style={{ width, height }} />}
       <Animated.View
         {...pan.panHandlers}
@@ -115,6 +116,7 @@ export function InvisibleInk({
           <Text style={t(15, "600")}>{name}</Text>
         </View>
       </Animated.View>
+      </View>
       {tip || canRub || hint ? (
         <Pressable onLongPress={canRub ? uncover : undefined}>
           <Text style={[t(11, "500", I.secondary), { marginTop: 4, marginLeft: 4 }]}>{canRub ? "Rub to reveal" : hint}</Text>

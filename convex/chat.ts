@@ -240,7 +240,14 @@ export const thread = query({
         items.push({ type: "stake", _id: s._id, t: s._creationTime, betId: b._id, who: p, amount: s.amount, option: b.options[s.option], question: b.question });
       }
       if (b.settledAt !== undefined) {
-        items.push({ type: "settled", _id: b._id + ":settled", t: b.settledAt, betId: b._id, question: b.question, status: b.status, winner: b.winningOption === undefined ? null : b.options[b.winningOption], subject: await who(b.subjectUserId) });
+        const won = new Map<string, number>();
+        for (const s of stakes) if ((s.payout ?? 0) > 0 && b.status === "settled") won.set(s.userId, (won.get(s.userId) ?? 0) + (s.payout ?? 0) - s.amount);
+        const payouts = [];
+        for (const [id, net] of won) {
+          const p = await who(id as Id<"users">);
+          if (p) payouts.push({ emoji: p.emoji, name: p.name, net });
+        }
+        items.push({ type: "settled", _id: b._id + ":settled", t: b.settledAt, betId: b._id, question: b.question, status: b.status, winner: b.winningOption === undefined ? null : b.options[b.winningOption], subject: await who(b.subjectUserId), payouts });
       }
     }
     items.sort((a, b) => (a as { t: number }).t - (b as { t: number }).t);
@@ -503,10 +510,11 @@ export const demoRestore = mutation({
 });
 
 export const demoRevealAt = mutation({
-  args: { passcode: v.string(), at: v.number() },
-  handler: async (ctx, { passcode, at }) => {
+  args: { passcode: v.string(), at: v.number(), groupId: v.optional(v.id("groups")) },
+  handler: async (ctx, { passcode, at, groupId }) => {
     requireAdmin(passcode);
-    const g = await crewOrThrow(ctx);
+    const g = groupId ? await ctx.db.get(groupId) : await crewOrThrow(ctx);
+    if (!g) throw new ConvexError("Group not found");
     await ctx.db.patch(g._id, { revealAt: at });
   },
 });
