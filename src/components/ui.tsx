@@ -420,14 +420,13 @@ export function BottomTabs() {
           return (
             <Link key={t.href} href={t.href} asChild replace>
               <Pressable
-                style={({ pressed }) => ({
+                style={{
                   flex: 1,
                   paddingVertical: 10,
                   borderRadius: 8,
                   alignItems: "center",
                   backgroundColor: active ? C.ink : "transparent",
-                  transform: [{ scale: pressed ? 0.96 : 1 }],
-                })}
+                }}
               >
                 <Text
                   style={{
