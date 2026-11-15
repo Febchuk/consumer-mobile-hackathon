@@ -1,4 +1,4 @@
-import { Text, View, useWindowDimensions } from "react-native";
+import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { api } from "@convex/_generated/api";
 import { useStableQuery } from "@/lib/use-stable-query";
 import { useNow, useQueryNow, fmt, hourLabel } from "@/lib/time";
@@ -39,7 +39,7 @@ function BigBet({ m, start, end, now, k }: { m: Market; start: number; end: numb
         colors={m.options.map((_, i) => OPTION_COLORS[i % 4].fg)}
         focus={lead}
         all
-        height={200 * k}
+        height={k > 1 ? 150 : 160}
         big={k * 1.2}
         startLabel={hourLabel(start)}
         endLabel={"next drop " + hourLabel(end)}
@@ -72,8 +72,8 @@ export default function TV() {
   const featured = bets.length ? Math.floor(now / 15000) % bets.length : 0;
   const rest = bets.filter((_, i) => i !== featured);
   return (
-    <View style={[s.screen, { padding: wide ? 40 : 16 }]}>
-      <View style={{ flex: 1, flexDirection: wide ? "row" : "column", gap: wide ? 44 : 24 }}>
+    <ScrollView style={s.screen} contentContainerStyle={{ flexGrow: 1, padding: wide ? 40 : 16 }}>
+      <View style={{ flexGrow: 1, flexDirection: wide ? "row" : "column", gap: wide ? 44 : 24 }}>
         <View style={{ flex: 3, gap: 20 }}>
           <Wordmark size={wide ? 46 : 26} />
           {today ? <DropHeader round={round} next={today.next} now={now} big={wide} /> : null}
@@ -114,6 +114,6 @@ export default function TV() {
           {rows ? <Leaderboard rows={rows} big={wide} limit={8} /> : null}
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
