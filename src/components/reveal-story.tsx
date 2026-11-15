@@ -158,7 +158,7 @@ export function StoryView({ data, revealed, onClose }: { data: Results; revealed
         </View>
         {bet ? (
           <View style={{ flex: 1 }}>
-            <BetScreen key={bet._id} bet={bet} flipped={flipped} start={data.round.opensAt} end={data.endsAt} />
+            <BetScreen key={bet._id} bet={bet} slot={data.bets.indexOf(bet)} flipped={flipped} start={data.round.opensAt} end={data.endsAt} />
             <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, flexDirection: "row" }}>
               <Pressable onPress={back} style={{ flex: 3 }} />
               <Pressable onPress={forward} style={{ flex: 7 }} />
@@ -187,9 +187,9 @@ function useEnter(on: boolean) {
   };
 }
 
-function BetScreen({ bet, flipped, start, end }: { bet: Bet; flipped: boolean; start: number; end: number }) {
+function BetScreen({ bet, slot, flipped, start, end }: { bet: Bet; slot: number; flipped: boolean; start: number; end: number }) {
   const enter = useEnter(flipped);
-  const letter = LETTER_AT[bet.order] ?? String(bet.order + 1);
+  const letter = LETTER_AT[slot] ?? String(slot + 1);
   return (
     <View style={{ flex: 1, paddingTop: 18, gap: 18 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
@@ -378,7 +378,7 @@ function CalledIt({ bet, color }: { bet: Bet; color: string }) {
             }}
           >
             <Text style={{ fontSize: 16 }}>{w.emoji}</Text>
-            <Text style={{ fontFamily: F.bodyBold, fontSize: 14, color: w.me ? "#fff" : C.ink }}>{w.me ? "You" : w.name}</Text>
+            <Text style={{ fontFamily: F.bodyBold, fontSize: 14, color: w.me ? "#fff" : C.ink }}>{w.me ? "You" : "@" + w.name}</Text>
           </View>
         ))}
         {more > 0 ? (
@@ -533,6 +533,7 @@ function Cards({ token }: { token: string }) {
           <View key={c.roundId} style={{ borderRadius: 18, borderWidth: 1.5, borderColor: C.line, padding: 14, gap: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
               <Text style={{ fontFamily: F.displaySemi, fontSize: 18, color: C.ink }}>{c.title}</Text>
+              {c.group ? <Text style={[s.label, { color: C.ink }]}>{c.group}</Text> : null}
               <Text style={[s.label, tnum]}>{hourLabel(c.opensAt)}</Text>
               <View style={{ flex: 1 }} />
               {pending ? null : <NetText net={c.net} size={18} />}

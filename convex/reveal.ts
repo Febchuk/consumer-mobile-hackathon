@@ -1,7 +1,7 @@
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { percents, userByToken } from "./lib";
+import { defaultGroupId, isMember, percents, userByToken } from "./lib";
 
 type Tile = "won" | "lost" | "skip" | "pending" | "void";
 
@@ -18,14 +18,14 @@ function netFor(bet: Doc<"bets">, mine: Doc<"stakes">[]) {
   return mine.reduce((a, s) => a + (s.payout ?? 0) - s.amount, 0);
 }
 
-async function visibleBets(ctx: QueryCtx, roundId: Id<"rounds">) {
+async function visibleBets(ctx: QueryCtx, roundId: Id<"rounds">, viewer: Id<"users"> | undefined) {
   return (
     await ctx.db
       .query("bets")
       .withIndex("by_round", (q) => q.eq("roundId", roundId))
       .collect()
   )
-    .filter((b) => !b.hidden)
+    .filter((b) => !b.hidden && b.subjectUserId !== viewer)
     .sort((a, b) => a.order - b.order);
 }
 
@@ -43,11 +43,11 @@ export const dropResults = query({
     const user = await userByToken(ctx, token);
     const next = await ctx.db
       .query("rounds")
-      .withIndex("by_opensAt", (q) => q.gt("opensAt", round.opensAt))
+      .withIndex("by_group_opensAt", (q) => q.eq("groupId", round.groupId).gt("opensAt", round.opensAt))
       .order("asc")
       .first();
     const bets = await Promise.all(
-      (await visibleBets(ctx, roundId)).map(async (bet) => {
+      (await visibleBets(ctx, roundId, user?._id)).map(async (bet) => {
         const stakes = await ctx.db
           .query("stakes")
           .withIndex("by_bet", (q) => q.eq("betId", bet._id))
@@ -118,12 +118,22 @@ export const myScorecards = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
     const rounds = await ctx.db.query("rounds").withIndex("by_opensAt").order("desc").take(48);
+    const defaultId = await defaultGroupId(ctx);
+    const groups = new Map<string, { visible: boolean; name: string | null }>();
     const cards = [];
     for (const round of rounds) {
-      const bets = await visibleBets(ctx, round._id);
+      const bets = await visibleBets(ctx, round._id, user._id);
       const mineInRound = myStakes.filter((s) => s.roundId === round._id);
       const resolved = bets.some((b) => b.status === "settled" || b.status === "refunded");
       if (mineInRound.length === 0 && !resolved) continue;
+      const groupId = round.groupId ?? defaultId;
+      if (groupId && !groups.has(groupId))
+        groups.set(groupId, {
+          visible: groupId === defaultId || (await isMember(ctx, groupId, user._id)),
+          name: groupId === defaultId ? null : ((await ctx.db.get(groupId))?.name ?? null),
+        });
+      const group = groupId ? groups.get(groupId) : undefined;
+      if (group && !group.visible && mineInRound.length === 0) continue;
       const tiles = bets.map((bet) => {
         const mine = mineInRound.filter((s) => s.betId === bet._id);
         return { betId: bet._id, status: bet.status, tile: tileFor(bet, mine), net: netFor(bet, mine) };
@@ -133,6 +143,7 @@ export const myScorecards = query({
         number: round.number,
         title: round.title,
         opensAt: round.opensAt,
+        group: group?.name ?? null,
         played: mineInRound.length > 0,
         tiles,
         net: tiles.reduce((a, t) => a + (t.net ?? 0), 0),
