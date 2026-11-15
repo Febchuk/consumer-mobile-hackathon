@@ -405,6 +405,13 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
             {data.group.revealed ? "The reveal is live. Rub the ink." : "Reveal at 5:00 PM · " + clock(left)}
           </Text>
           <Text style={t(11, "400", I.secondary)}>Bets about you are hidden in invisible ink until then.</Text>
+          {data.aboutMe.bets > 0 && !data.group.revealed ? (
+            <Pressable onPress={() => router.push({ pathname: "/c/g/[id]/info", params: { id: groupId } })} style={{ marginTop: 6, backgroundColor: I.fill, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 5 }}>
+              <Text style={[t(12, "600"), { fontVariant: ["tabular-nums"] }]}>
+                🔒 {data.aboutMe.bets} bet{data.aboutMe.bets === 1 ? "" : "s"} riding on you · {data.aboutMe.friends} friend{data.aboutMe.friends === 1 ? "" : "s"} · {fmt(data.aboutMe.points)} pts
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         {items.length === 0 ? <Text style={[t(13, "400", I.secondary), { textAlign: "center", marginTop: 30 }]}>No bets yet. Type one below. The person it's about won't see it.</Text> : null}
         {items.map((it, idx) => {
