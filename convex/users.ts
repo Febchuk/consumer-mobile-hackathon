@@ -1,31 +1,34 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { START_POINTS, userByToken, requireUser } from "./lib";
+import { START_POINTS, userByToken, requireUser, normalizeUsername, ensureDefaultGroup } from "./lib";
 
 export const join = mutation({
   args: { name: v.string(), emoji: v.string(), token: v.string() },
   handler: async (ctx, { name, emoji, token }) => {
-    const clean = name.trim().slice(0, 20);
-    if (!clean) throw new ConvexError("Pick a name");
+    const username = normalizeUsername(name);
+    if (username.length < 2) throw new ConvexError("Usernames need 2+ letters or numbers");
     if (!isSingleEmoji(emoji)) throw new ConvexError("Pick one emoji");
     const existing = await userByToken(ctx, token);
-    const lower = clean.toLowerCase();
-    const clash = (await ctx.db.query("users").collect()).find(
-      (u) => u.name.toLowerCase() === lower && u._id !== existing?._id,
-    );
-    if (clash) throw new ConvexError("Someone already took that name");
+    const clash = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .first();
+    if (clash && clash._id !== existing?._id) throw new ConvexError("@" + username + " is taken");
     if (existing) {
-      await ctx.db.patch(existing._id, { name: clean, emoji, lastSeen: Date.now() });
+      await ctx.db.patch(existing._id, { name: username, username, emoji, lastSeen: Date.now() });
       return existing._id;
     }
-    return await ctx.db.insert("users", {
-      name: clean,
+    const userId = await ctx.db.insert("users", {
+      name: username,
+      username,
       emoji,
       token,
       points: START_POINTS,
       streak: 0,
       lastSeen: Date.now(),
     });
+    await ctx.db.insert("members", { groupId: await ensureDefaultGroup(ctx), userId });
+    return userId;
   },
 });
 
@@ -36,6 +39,22 @@ export const me = query({
     if (!user) return null;
     const { token: _t, ...rest } = user;
     return rest;
+  },
+});
+
+export const setProfile = mutation({
+  args: { token: v.string(), username: v.string(), emoji: v.string() },
+  handler: async (ctx, { token, username: raw, emoji }) => {
+    const user = await requireUser(ctx, token);
+    const username = normalizeUsername(raw);
+    if (username.length < 2) throw new ConvexError("Usernames need 2+ letters or numbers");
+    if (!isSingleEmoji(emoji)) throw new ConvexError("Pick one emoji");
+    const clash = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .first();
+    if (clash && clash._id !== user._id) throw new ConvexError("@" + username + " is taken");
+    await ctx.db.patch(user._id, { name: username, username, emoji });
   },
 });
 

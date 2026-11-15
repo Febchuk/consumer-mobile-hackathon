@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as crons from "../crons.js";
 import type * as game from "../game.js";
+import type * as groups from "../groups.js";
 import type * as hosting from "../hosting.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   crons: typeof crons;
   game: typeof game;
+  groups: typeof groups;
   hosting: typeof hosting;
   http: typeof http;
   lib: typeof lib;

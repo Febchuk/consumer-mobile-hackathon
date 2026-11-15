@@ -17,7 +17,7 @@ export function Join() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const submit = async () => {
-    if (!name.trim() || busy) return;
+    if (name.trim().length < 2 || busy) return;
     if (!isSingleEmoji(emoji)) {
       setErr("Pick one emoji for your face");
       return;
@@ -45,24 +45,21 @@ export function Join() {
         </Text>
       </View>
       <Card style={{ gap: 16 }}>
-        <Text style={s.label}>Your name</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Mikun"
-          placeholderTextColor={C.faint}
-          maxLength={20}
-          onSubmitEditing={submit}
-          style={{
-            fontFamily: F.bodyMed,
-            fontSize: 20,
-            color: C.ink,
-            backgroundColor: C.paper,
-            borderRadius: 12,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-          }}
-        />
+        <Text style={s.label}>Pick a @username</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: C.paper, borderRadius: 12, paddingHorizontal: 14 }}>
+          <Text style={{ fontFamily: F.bodyBold, fontSize: 20, color: C.faint }}>@</Text>
+          <TextInput
+            value={name}
+            onChangeText={(t) => setName(t.replace(/^@+/, "").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_.]/g, "").slice(0, 20))}
+            placeholder="mikun"
+            placeholderTextColor={C.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={20}
+            onSubmitEditing={submit}
+            style={{ flex: 1, fontFamily: F.bodyMed, fontSize: 20, color: C.ink, paddingVertical: 12, paddingLeft: 2 }}
+          />
+        </View>
         <Text style={s.label}>Your face · any emoji</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <TextInput
@@ -102,7 +99,7 @@ export function Join() {
           ))}
         </View>
         {err ? <Text style={{ fontFamily: F.bodyMed, color: C.no, fontSize: 14 }}>{err}</Text> : null}
-        <Button label={busy ? "Joining…" : "Join with 1,000 points"} onPress={submit} disabled={!name.trim() || busy} color={C.yes} />
+        <Button label={busy ? "Joining…" : "Join with 1,000 points"} onPress={submit} disabled={name.trim().length < 2 || busy} color={C.yes} />
       </Card>
       <Text style={[s.sub, { textAlign: "center" }]}>No password. This device remembers you.</Text>
     </ScrollView>
