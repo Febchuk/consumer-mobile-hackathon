@@ -11,18 +11,34 @@ export default defineSchema({
     lastRoundNumber: v.optional(v.number()),
     lastRoundId: v.optional(v.id("rounds")),
     lastSeen: v.number(),
+    username: v.optional(v.string()),
   })
     .index("by_token", ["token"])
-    .index("by_points", ["points"]),
+    .index("by_points", ["points"])
+    .index("by_username", ["username"]),
+  groups: defineTable({
+    name: v.string(),
+    createdBy: v.optional(v.id("users")),
+    isDefault: v.optional(v.boolean()),
+  }).index("by_default", ["isDefault"]),
+  members: defineTable({
+    groupId: v.id("groups"),
+    userId: v.id("users"),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_user", ["userId"])
+    .index("by_group_user", ["groupId", "userId"]),
   rounds: defineTable({
     number: v.number(),
     title: v.string(),
     opensAt: v.number(),
     locksAt: v.number(),
     revealAt: v.optional(v.number()),
+    groupId: v.optional(v.id("groups")),
   })
     .index("by_number", ["number"])
-    .index("by_opensAt", ["opensAt"]),
+    .index("by_opensAt", ["opensAt"])
+    .index("by_group_opensAt", ["groupId", "opensAt"]),
   bets: defineTable({
     roundId: v.id("rounds"),
     question: v.string(),

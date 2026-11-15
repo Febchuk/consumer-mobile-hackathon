@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
+import { MyGroups, ProfileEditor } from "@/components/me-groups";
 import { useQuery } from "convex/react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@convex/_generated/api";
@@ -14,6 +16,7 @@ export default function Me() {
   const history = useQuery(api.game.myHistory, { token: token ?? undefined });
   const settled = (history ?? []).filter((h) => h.status === "settled");
   const called = settled.filter((h) => h.won).length;
+  const [editing, setEditing] = useState(false);
   return (
     <View style={s.screen}>
       <ScrollView contentContainerStyle={[s.column, { paddingTop: insets.top + 14, paddingBottom: 120, gap: 14 }]}>
@@ -21,7 +24,14 @@ export default function Me() {
         {me ? (
           <Card style={{ alignItems: "center", gap: 8 }}>
             <Text style={{ fontSize: 48 }}>{me.emoji}</Text>
-            <Text style={s.h1}>{me.name}</Text>
+            {editing && token ? (
+              <ProfileEditor token={token} name={me.name} emoji={me.emoji} onDone={() => setEditing(false)} />
+            ) : (
+              <Pressable onPress={() => setEditing(true)}>
+                <Text style={s.h1}>@{me.name}</Text>
+                <Text style={[s.sub, { textAlign: "center" }]}>tap to edit</Text>
+              </Pressable>
+            )}
             <View style={{ flexDirection: "row", gap: 24, marginTop: 6 }}>
               <Stat label="points" value={fmt(me.points)} />
               <View style={{ alignItems: "center", gap: 2 }}>
@@ -32,6 +42,7 @@ export default function Me() {
             </View>
           </Card>
         ) : null}
+        {token ? <MyGroups token={token} /> : null}
         <Text style={[s.label, { marginTop: 6 }]}>Your bets</Text>
         {(history ?? []).length === 0 ? <Text style={s.sub}>No bets yet. Go call something.</Text> : null}
         {(history ?? []).map((h) => {

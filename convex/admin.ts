@@ -1,8 +1,8 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { MutationCtx } from "./_generated/server";
-import { HOUR, LOCK_AFTER_MS, multiplier, percents, requireAdmin } from "./lib";
+import { MutationCtx, QueryCtx } from "./_generated/server";
+import { HOUR, LOCK_AFTER_MS, multiplier, percents, requireAdmin, ensureDefaultGroup, normalizeUsername, uniqueUsername } from "./lib";
 
 const kind = v.union(v.literal("yesno"), v.literal("overunder"), v.literal("multi"));
 
@@ -24,6 +24,7 @@ export async function insertBet(
   k: "yesno" | "overunder" | "multi",
   line?: number,
   options?: string[],
+  subjectUserId?: Id<"users">,
 ) {
   const opts = optionsFor(k, line, options);
   const existing = await ctx.db
@@ -39,25 +40,64 @@ export async function insertBet(
     pools: opts.map(() => 0),
     status: "open",
     order: existing.length,
+    subjectUserId,
   });
   await ctx.db.insert("ticks", { betId, t: Date.now(), pct: percents(opts.map(() => 0)) });
   return betId;
 }
 
-export async function ensureRound(ctx: MutationCtx, opensAt: number) {
+export async function ensureRound(ctx: MutationCtx, opensAt: number, group?: Id<"groups">) {
+  const groupId = group ?? (await ensureDefaultGroup(ctx));
   const existing = await ctx.db
     .query("rounds")
-    .withIndex("by_opensAt", (q) => q.eq("opensAt", opensAt))
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", groupId).eq("opensAt", opensAt))
     .first();
   if (existing) return existing._id;
-  const last = await ctx.db.query("rounds").withIndex("by_number").order("desc").first();
+  const last = await ctx.db
+    .query("rounds")
+    .withIndex("by_group_opensAt", (q) => q.eq("groupId", groupId))
+    .order("desc")
+    .first();
   const number = (last?.number ?? 0) + 1;
   return await ctx.db.insert("rounds", {
     number,
     title: "Drop " + number,
     opensAt,
     locksAt: opensAt + LOCK_AFTER_MS,
+    groupId,
   });
+}
+
+export const migrateGroups = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const groupId = await ensureDefaultGroup(ctx);
+    let rounds = 0;
+    for (const r of await ctx.db.query("rounds").collect()) {
+      if (!r.groupId) {
+        await ctx.db.patch(r._id, { groupId });
+        rounds++;
+      }
+    }
+    let users = 0;
+    for (const u of await ctx.db.query("users").collect()) {
+      if (!u.username) {
+        const username = await uniqueUsername(ctx, normalizeUsername(u.name), u._id);
+        await ctx.db.patch(u._id, { username, name: username });
+        users++;
+      }
+      const m = await ctx.db
+        .query("members")
+        .withIndex("by_group_user", (q) => q.eq("groupId", groupId).eq("userId", u._id))
+        .first();
+      if (!m) await ctx.db.insert("members", { groupId, userId: u._id });
+    }
+    return { groupId, rounds, users };
+  },
+});
+
+async function ensureDefaultGroupId(ctx: QueryCtx) {
+  return (await ctx.db.query("groups").withIndex("by_default", (q) => q.eq("isDefault", true)).first())?._id ?? null;
 }
 
 export const check = query({
@@ -76,7 +116,12 @@ export const overview = query({
   args: { passcode: v.string() },
   handler: async (ctx, { passcode }) => {
     requireAdmin(passcode);
-    const rounds = await ctx.db.query("rounds").withIndex("by_number").order("desc").take(6);
+    const groupId = await ensureDefaultGroupId(ctx);
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_group_opensAt", (q) => q.eq("groupId", groupId ?? undefined))
+      .order("desc")
+      .take(6);
     return await Promise.all(
       rounds.map(async (r) => ({
         ...r,
@@ -178,36 +223,40 @@ async function refundAll(ctx: MutationCtx, betId: Id<"bets">) {
   }
 }
 
+export async function settleBet(ctx: MutationCtx, betId: Id<"bets">, winningOption: number | null) {
+  const bet = await ctx.db.get(betId);
+  if (!bet) throw new ConvexError("Bet not found");
+  if (bet.status === "settled" || bet.status === "refunded") throw new ConvexError("Already settled");
+  const winPool = winningOption === null ? 0 : bet.pools[winningOption];
+  if (winningOption === null || winPool === 0) {
+    await refundAll(ctx, betId);
+    await ctx.db.patch(betId, { status: "refunded", winningOption: winningOption ?? undefined });
+    return { refunded: true };
+  }
+  const total = bet.pools.reduce((a, b) => a + b, 0);
+  const stakes = await ctx.db
+    .query("stakes")
+    .withIndex("by_bet", (q) => q.eq("betId", betId))
+    .collect();
+  for (const s of stakes) {
+    if (s.option !== winningOption) {
+      await ctx.db.patch(s._id, { payout: 0 });
+      continue;
+    }
+    const payout = Math.floor(((total * s.amount) / winPool) * multiplier(s.streakAtBet));
+    const u = await ctx.db.get(s.userId);
+    if (u) await ctx.db.patch(u._id, { points: u.points + payout });
+    await ctx.db.patch(s._id, { payout });
+  }
+  await ctx.db.patch(betId, { status: "settled", winningOption });
+  return { refunded: false };
+}
+
 export const settle = mutation({
   args: { passcode: v.string(), betId: v.id("bets"), winningOption: v.union(v.number(), v.null()) },
   handler: async (ctx, { passcode, betId, winningOption }) => {
     requireAdmin(passcode);
-    const bet = await ctx.db.get(betId);
-    if (!bet) throw new ConvexError("Bet not found");
-    if (bet.status === "settled" || bet.status === "refunded") throw new ConvexError("Already settled");
-    const winPool = winningOption === null ? 0 : bet.pools[winningOption];
-    if (winningOption === null || winPool === 0) {
-      await refundAll(ctx, betId);
-      await ctx.db.patch(betId, { status: "refunded", winningOption: winningOption ?? undefined });
-      return { refunded: true };
-    }
-    const total = bet.pools.reduce((a, b) => a + b, 0);
-    const stakes = await ctx.db
-      .query("stakes")
-      .withIndex("by_bet", (q) => q.eq("betId", betId))
-      .collect();
-    for (const s of stakes) {
-      if (s.option !== winningOption) {
-        await ctx.db.patch(s._id, { payout: 0 });
-        continue;
-      }
-      const payout = Math.floor(((total * s.amount) / winPool) * multiplier(s.streakAtBet));
-      const u = await ctx.db.get(s.userId);
-      if (u) await ctx.db.patch(u._id, { points: u.points + payout });
-      await ctx.db.patch(s._id, { payout });
-    }
-    await ctx.db.patch(betId, { status: "settled", winningOption });
-    return { refunded: false };
+    return await settleBet(ctx, betId, winningOption);
   },
 });
 
@@ -301,6 +350,35 @@ export const wipeRound = internalMutation({
       await ctx.db.delete(b._id);
     }
     await ctx.db.delete(roundId);
+  },
+});
+
+export const purgeTestUsers = internalMutation({
+  args: { prefix: v.string() },
+  handler: async (ctx, { prefix }) => {
+    const users = (await ctx.db.query("users").collect()).filter((u) => (u.username ?? u.name).startsWith(prefix));
+    for (const u of users) {
+      for (const g of (await ctx.db.query("groups").collect()).filter((g) => g.createdBy === u._id)) {
+        for (const r of await ctx.db.query("rounds").withIndex("by_group_opensAt", (q) => q.eq("groupId", g._id)).collect()) {
+          for (const b of await ctx.db.query("bets").withIndex("by_round", (q) => q.eq("roundId", r._id)).collect()) {
+            for (const s of await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", b._id)).collect()) await ctx.db.delete(s._id);
+            for (const t of await ctx.db.query("ticks").withIndex("by_bet", (q) => q.eq("betId", b._id)).collect()) await ctx.db.delete(t._id);
+            await ctx.db.delete(b._id);
+          }
+          await ctx.db.delete(r._id);
+        }
+        for (const m of await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", g._id)).collect()) await ctx.db.delete(m._id);
+        await ctx.db.delete(g._id);
+      }
+      for (const m of await ctx.db.query("members").withIndex("by_user", (q) => q.eq("userId", u._id)).collect()) await ctx.db.delete(m._id);
+      for (const s of await ctx.db.query("stakes").withIndex("by_user", (q) => q.eq("userId", u._id)).collect()) {
+        const b = await ctx.db.get(s.betId);
+        if (b && s.payout === undefined) await ctx.db.patch(b._id, { pools: b.pools.map((p, i) => (i === s.option ? p - s.amount : p)) });
+        await ctx.db.delete(s._id);
+      }
+      await ctx.db.delete(u._id);
+    }
+    return users.length;
   },
 });
 

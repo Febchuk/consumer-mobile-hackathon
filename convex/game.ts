@@ -12,25 +12,37 @@ import {
   multiplier,
   streakFor,
   previousRound,
+  defaultGroupId,
+  isMember,
 } from "./lib";
 
 export const today = query({
-  args: { token: v.optional(v.string()), now: v.number() },
-  handler: async (ctx, { token, now }) => {
+  args: { token: v.optional(v.string()), now: v.number(), groupId: v.optional(v.id("groups")) },
+  handler: async (ctx, { token, now, groupId: requested }) => {
     const user = await userByToken(ctx, token);
-    const round = await currentRound(ctx, now);
-    const upcoming = await nextRound(ctx, now);
-    const players = (await ctx.db.query("users").collect()).length;
-    const streak = user ? await streakFor(ctx, user, round) : { shown: 0, next: 1 };
-    if (!round) return { round: null, next: upcoming, bets: [], players, streak, waiting: [] };
+    const defaultId = await defaultGroupId(ctx);
+    const groupId = requested ?? defaultId;
+    const isDefault = groupId === defaultId;
+    const round = await currentRound(ctx, groupId, now);
+    const upcoming = await nextRound(ctx, groupId, now);
+    const players = groupId
+      ? (await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()).length
+      : (await ctx.db.query("users").collect()).length;
+    const streak = user && isDefault ? await streakFor(ctx, user, round) : { shown: user?.streak ?? 0, next: 1 };
+    if (!round) return { round: null, next: upcoming, bets: [], players, streak, waiting: [], aboutMe: 0 };
     const bets = (
       await ctx.db
         .query("bets")
         .withIndex("by_round", (q) => q.eq("roundId", round._id))
         .collect()
     )
-      .filter((b) => !b.hidden)
+      .filter((b) => !b.hidden && (!user || b.subjectUserId !== user._id))
       .sort((a, b) => a.order - b.order);
+    const aboutMe = user
+      ? (await ctx.db.query("bets").withIndex("by_round", (q) => q.eq("roundId", round._id)).collect()).filter(
+          (b) => b.subjectUserId === user._id && b.status === "open",
+        ).length
+      : 0;
     const myStakes = user
       ? await ctx.db
           .query("stakes")
@@ -47,8 +59,10 @@ export const today = query({
           .query("stakes")
           .withIndex("by_bet", (q) => q.eq("betId", bet._id))
           .collect();
+        const subject = bet.subjectUserId ? await ctx.db.get(bet.subjectUserId) : null;
         return {
           ...bet,
+          subject: subject ? { name: subject.name, emoji: subject.emoji } : null,
           locked: bet.status !== "open",
           pct: percents(bet.pools),
           total: bet.pools.reduce((a, b) => a + b, 0),
@@ -68,13 +82,15 @@ export const today = query({
               .withIndex("by_user", (q) => q.eq("userId", user._id))
               .filter((q) => q.and(q.eq(q.field("payout"), undefined), q.neq(q.field("roundId"), round._id)))
               .collect()
-          ).map(async (s) => {
+          )
+          .filter(() => isDefault)
+          .map(async (s) => {
             const bet = await ctx.db.get(s.betId);
             return { _id: s._id, question: bet?.question ?? "", pick: bet?.options[s.option] ?? "", amount: s.amount, late: s.late };
           }),
         )
       : [];
-    return { round, next: upcoming, bets: withTicks, players, streak, waiting };
+    return { round, next: upcoming, bets: withTicks, players, streak, waiting, aboutMe };
   },
 });
 
@@ -86,6 +102,11 @@ export const placeStake = mutation({
     if (!bet) throw new ConvexError("Bet not found");
     const round = await ctx.db.get(bet.roundId);
     if (!round) throw new ConvexError("Round not found");
+    if (bet.subjectUserId === user._id) throw new ConvexError("This bet is about you");
+    const defaultId = await defaultGroupId(ctx);
+    const isDefault = !round.groupId || round.groupId === defaultId;
+    if (round.groupId && !isDefault && !(await isMember(ctx, round.groupId, user._id)))
+      throw new ConvexError("Join this group to bet");
     const now = Date.now();
     if (now < round.opensAt) throw new ConvexError("Not open yet");
     if (await betLocked(ctx, bet, round, now)) throw new ConvexError("Betting is locked");
@@ -102,14 +123,13 @@ export const placeStake = mutation({
     if (!Number.isFinite(amt) || amt < 1) throw new ConvexError("Stake at least 1 point");
     if (amt > user.points) throw new ConvexError("Not enough points");
 
-    const streak = (await streakFor(ctx, user, round)).next;
-    await ctx.db.patch(user._id, {
-      points: user.points - amt,
-      streak,
-      lastRoundNumber: round.number,
-      lastRoundId: round._id,
-      lastSeen: now,
-    });
+    const streak = isDefault ? (await streakFor(ctx, user, round)).next : 0;
+    await ctx.db.patch(
+      user._id,
+      isDefault
+        ? { points: user.points - amt, streak, lastRoundNumber: round.number, lastRoundId: round._id, lastSeen: now }
+        : { points: user.points - amt, lastSeen: now },
+    );
     const pools = bet.pools.map((p, i) => (i === option ? p + amt : p));
     await ctx.db.patch(bet._id, { pools });
     await ctx.db.insert("ticks", { betId: bet._id, t: now, pct: percents(pools) });
@@ -126,14 +146,22 @@ export const placeStake = mutation({
 });
 
 export const leaderboard = query({
-  args: { now: v.number() },
-  handler: async (ctx, { now }) => {
-    const users = await ctx.db.query("users").withIndex("by_points").order("desc").take(200);
-    const round = await currentRound(ctx, now);
+  args: { now: v.number(), groupId: v.optional(v.id("groups")) },
+  handler: async (ctx, { now, groupId: requested }) => {
+    const defaultId = await defaultGroupId(ctx);
+    const groupId = requested ?? defaultId;
+    let users = await ctx.db.query("users").withIndex("by_points").order("desc").take(500);
+    if (groupId && groupId !== defaultId) {
+      const memberIds = new Set(
+        (await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()).map((m) => m.userId),
+      );
+      users = users.filter((u) => memberIds.has(u._id));
+    }
+    const round = await currentRound(ctx, groupId, now);
     const roundStakes = round
       ? await ctx.db
           .query("stakes")
-          .filter((q) => q.eq(q.field("roundId"), round._id))
+          .withIndex("by_round_user", (q) => q.eq("roundId", round._id))
           .collect()
       : [];
     const open = roundStakes.filter((s) => s.payout === undefined);
