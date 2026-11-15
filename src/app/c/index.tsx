@@ -8,6 +8,8 @@ import { useIdentity } from "@/lib/identity";
 import { fmt } from "@/lib/time";
 import { Wordmark } from "@/components/ui";
 import { ChatJoin } from "@/components/chat/join";
+import { ConnectContext } from "@/components/chat/connect-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack } from "@/components/chat/thread";
 import { I, t } from "@/components/chat/ios";
 
@@ -30,6 +32,10 @@ export default function ChatList() {
   const [mode, setMode] = useState<null | "new" | "join">(null);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [ctx, setCtx] = useState<"unknown" | "show" | "done">("unknown");
+  useEffect(() => {
+    AsyncStorage.getItem("calledit.context").then((v) => setCtx(v ? "done" : "show"));
+  }, []);
   useEffect(() => {
     if (!token || !home?.user || tried) return;
     setTried(true);
@@ -38,6 +44,15 @@ export default function ChatList() {
   }, [token, home, tried, params.invite, enter, join]);
   if (!ready || home === undefined) return <View style={{ flex: 1, backgroundColor: I.bg }} />;
   if (!home.user || !token) return <ChatJoin />;
+  if (ctx === "show")
+    return (
+      <ConnectContext
+        onDone={() => {
+          AsyncStorage.setItem("calledit.context", "1");
+          setCtx("done");
+        }}
+      />
+    );
   const stats = home.stats;
   const submit = async () => {
     setErr(null);

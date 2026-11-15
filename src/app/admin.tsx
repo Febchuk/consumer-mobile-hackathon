@@ -76,6 +76,7 @@ function AdminPanel({ passcode }: { passcode: string }) {
     <ScrollView style={s.screen} contentContainerStyle={[s.column, { paddingTop: 24, paddingBottom: 80, gap: 14 }]}>
       <Text style={s.h1}>Admin</Text>
       {msg ? <Text style={{ color: C.no, fontFamily: F.bodyMed }}>{msg}</Text> : null}
+      <ChatDemo passcode={passcode} run={run} />
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
         <Button small label={"+ Round at " + hourLabel(nextHour)} onPress={() => run(() => createRound({ passcode, opensAt: nextHour }))} />
         <Button
@@ -352,5 +353,35 @@ function AiDrafts({ roundId, passcode }: { roundId: Id<"rounds">; passcode: stri
       ) : null}
       {msg ? <Text style={s.sub}>{msg}</Text> : null}
     </View>
+  );
+}
+
+function ChatDemo({ passcode, run }: { passcode: string; run: (f: () => Promise<unknown>) => Promise<void> }) {
+  const st = useQuery(api.chat.demoStatus, { passcode });
+  const replay = useMutation(api.chat.demoReplay);
+  const restore = useMutation(api.chat.demoRestore);
+  const revealAt = useMutation(api.chat.demoRevealAt);
+  if (!st) return null;
+  return (
+    <Card style={{ gap: 10, backgroundColor: C.goldSoft }}>
+      <Text style={s.h2}>Friend-group demo · {st.group.name}</Text>
+      <Text style={[s.sub, tnum]}>
+        Reveal {new Date(st.group.revealAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })} · {st.bets} bets · {st.settled} called · {st.members} people
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        <Button small label="Replay: reveal in 60s" onPress={() => run(() => replay({ passcode, inSeconds: 60 }))} />
+        <Button small color={C.tile} textColor={C.ink} label="Replay: reveal now" onPress={() => run(() => replay({ passcode, inSeconds: 0 }))} />
+        <Button small color={C.tile} textColor={C.ink} label="Reveal now (no reset)" onPress={() => run(() => revealAt({ passcode, at: Date.now() }))} />
+        <Button small color={C.tile} textColor={C.ink} label="Reveal back to 5:00 PM" onPress={() => run(() => revealAt({ passcode, at: Date.UTC(2026, 10, 16, 1, 0, 0) }))} />
+      </View>
+      {st.snapshots.map((sn) => (
+        <View key={sn._id} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[s.sub, { flex: 1 }]}>
+            {new Date(sn.t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {sn.label}
+          </Text>
+          <Button small color={C.tile} textColor={C.ink} label="Restore" onPress={() => run(() => restore({ passcode, snapshotId: sn._id }))} />
+        </View>
+      ))}
+    </Card>
   );
 }

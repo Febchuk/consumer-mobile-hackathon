@@ -1,7 +1,7 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { START_POINTS, percents, requireUser, userByToken } from "./lib";
+import { START_POINTS, percents, requireAdmin, requireUser, userByToken } from "./lib";
 import { insertBet } from "./admin";
 import { sidesFor } from "./market";
 
@@ -397,5 +397,116 @@ export const declare = mutation({
       await ctx.db.patch(s._id, { payout });
     }
     await ctx.db.patch(betId, { status: winPool === 0 ? "refunded" : "settled", winningOption, settledAt: Date.now() });
+  },
+});
+
+export const veto = mutation({
+  args: { token: v.string(), betId: v.id("bets") },
+  handler: async (ctx, { token, betId }) => {
+    const user = await requireUser(ctx, token);
+    const bet = await ctx.db.get(betId);
+    if (!bet || bet.subjectUserId !== user._id) throw new ConvexError("Only the person it's about can veto");
+    const round = await ctx.db.get(bet.roundId);
+    const group = round?.groupId ? await ctx.db.get(round.groupId) : null;
+    if (!group || !isRevealed(group, Date.now())) throw new ConvexError("Wait for the reveal");
+    if (bet.status !== "open") throw new ConvexError("Already called");
+    for (const s of await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", betId)).collect()) {
+      const m = await memberRow(ctx, group._id, s.userId);
+      if (m) await ctx.db.patch(m._id, { points: (m.points ?? START_POINTS) + s.amount });
+      await ctx.db.patch(s._id, { payout: s.amount });
+    }
+    await ctx.db.patch(betId, { status: "refunded", winningOption: undefined, settledAt: Date.now() });
+  },
+});
+
+async function crewOrThrow(ctx: QueryCtx) {
+  const g = await ctx.db.query("groups").withIndex("by_invite", (q) => q.eq("inviteCode", CREW_INVITE)).first();
+  if (!g) throw new ConvexError("No crew group yet");
+  return g;
+}
+
+async function groupState(ctx: QueryCtx, groupId: Id<"groups">) {
+  const round = await roundOf(ctx, groupId);
+  const bets = round ? await ctx.db.query("bets").withIndex("by_round", (q) => q.eq("roundId", round._id)).collect() : [];
+  const stakes = [];
+  for (const b of bets) stakes.push(...(await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", b._id)).collect()));
+  const members = await ctx.db.query("members").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect();
+  return { bets, stakes, members };
+}
+
+export const demoStatus = query({
+  args: { passcode: v.string() },
+  handler: async (ctx, { passcode }) => {
+    requireAdmin(passcode);
+    const g = await ctx.db.query("groups").withIndex("by_invite", (q) => q.eq("inviteCode", CREW_INVITE)).first();
+    if (!g) return null;
+    const { bets, members } = await groupState(ctx, g._id);
+    const snaps = await ctx.db.query("snapshots").withIndex("by_group", (q) => q.eq("groupId", g._id)).order("desc").take(10);
+    return {
+      group: { _id: g._id, name: g.name, revealAt: g.revealAt ?? REVEAL_AT },
+      bets: bets.length,
+      settled: bets.filter((b) => b.status !== "open").length,
+      members: members.length,
+      snapshots: snaps.map((s) => ({ _id: s._id, label: s.label, t: s._creationTime })),
+    };
+  },
+});
+
+export const demoReplay = mutation({
+  args: { passcode: v.string(), inSeconds: v.number() },
+  handler: async (ctx, { passcode, inSeconds }) => {
+    requireAdmin(passcode);
+    const g = await crewOrThrow(ctx);
+    const state = await groupState(ctx, g._id);
+    await ctx.db.insert("snapshots", {
+      groupId: g._id,
+      label: "Before replay · " + state.bets.filter((b) => b.status !== "open").length + " of " + state.bets.length + " called",
+      data: JSON.stringify({
+        revealAt: g.revealAt ?? REVEAL_AT,
+        bets: state.bets.map((b) => ({ _id: b._id, status: b.status, winningOption: b.winningOption ?? null, settledAt: b.settledAt ?? null })),
+        stakes: state.stakes.map((s) => ({ _id: s._id, payout: s.payout ?? null })),
+        members: state.members.map((m) => ({ _id: m._id, points: m.points ?? START_POINTS })),
+      }),
+    });
+    const owed = new Map<string, number>();
+    for (const s of state.stakes) {
+      if (s.payout === undefined) continue;
+      owed.set(s.userId, (owed.get(s.userId) ?? 0) + s.payout);
+      await ctx.db.patch(s._id, { payout: undefined });
+    }
+    for (const m of state.members) {
+      const back = owed.get(m.userId) ?? 0;
+      if (back) await ctx.db.patch(m._id, { points: (m.points ?? START_POINTS) - back });
+    }
+    for (const b of state.bets) if (b.status !== "open") await ctx.db.patch(b._id, { status: "open", winningOption: undefined, settledAt: undefined });
+    await ctx.db.patch(g._id, { revealAt: Date.now() + Math.max(0, inSeconds) * 1000 });
+  },
+});
+
+export const demoRestore = mutation({
+  args: { passcode: v.string(), snapshotId: v.id("snapshots") },
+  handler: async (ctx, { passcode, snapshotId }) => {
+    requireAdmin(passcode);
+    const snap = await ctx.db.get(snapshotId);
+    if (!snap) throw new ConvexError("Snapshot not found");
+    const d = JSON.parse(snap.data) as {
+      revealAt: number;
+      bets: { _id: Id<"bets">; status: Doc<"bets">["status"]; winningOption: number | null; settledAt: number | null }[];
+      stakes: { _id: Id<"stakes">; payout: number | null }[];
+      members: { _id: Id<"members">; points: number }[];
+    };
+    for (const b of d.bets) if (await ctx.db.get(b._id)) await ctx.db.patch(b._id, { status: b.status, winningOption: b.winningOption ?? undefined, settledAt: b.settledAt ?? undefined });
+    for (const s of d.stakes) if (await ctx.db.get(s._id)) await ctx.db.patch(s._id, { payout: s.payout ?? undefined });
+    for (const m of d.members) if (await ctx.db.get(m._id)) await ctx.db.patch(m._id, { points: m.points });
+    await ctx.db.patch(snap.groupId, { revealAt: d.revealAt });
+  },
+});
+
+export const demoRevealAt = mutation({
+  args: { passcode: v.string(), at: v.number() },
+  handler: async (ctx, { passcode, at }) => {
+    requireAdmin(passcode);
+    const g = await crewOrThrow(ctx);
+    await ctx.db.patch(g._id, { revealAt: at });
   },
 });

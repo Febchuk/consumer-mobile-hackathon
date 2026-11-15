@@ -115,7 +115,7 @@ export function InvisibleInk({
           <Text style={t(15, "600")}>{name}</Text>
         </View>
       </Animated.View>
-      {tip || canRub ? (
+      {tip || canRub || hint ? (
         <Pressable onLongPress={canRub ? uncover : undefined}>
           <Text style={[t(11, "500", I.secondary), { marginTop: 4, marginLeft: 4 }]}>{canRub ? "Rub to reveal" : hint}</Text>
         </Pressable>

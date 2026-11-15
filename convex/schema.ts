@@ -63,6 +63,11 @@ export default defineSchema({
     byAI: v.optional(v.boolean()),
     settledAt: v.optional(v.number()),
   }).index("by_round", ["roundId"]),
+  snapshots: defineTable({
+    groupId: v.id("groups"),
+    label: v.string(),
+    data: v.string(),
+  }).index("by_group", ["groupId"]),
   reactions: defineTable({
     betId: v.id("bets"),
     userId: v.id("users"),

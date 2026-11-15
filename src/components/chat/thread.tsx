@@ -10,6 +10,7 @@ import { useStableQuery } from "@/lib/use-stable-query";
 import { clock, fmt, useNow, useQueryNow } from "@/lib/time";
 import { MarketSheet } from "./market-sheet";
 import { InvisibleInk } from "./ink";
+import { Suggestions, Draft } from "./suggestions";
 import { I, SYS, optColor, t } from "./ios";
 
 type Data = NonNullable<FunctionReturnType<typeof api.chat.thread>>;
@@ -184,7 +185,23 @@ function Composer({ data, token }: { data: Data; token: string }) {
   const [amount, setAmount] = useState(100);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [ai, setAi] = useState(false);
+  const [ideas, setIdeas] = useState(false);
   const closed = data.group.revealed;
+  const pickIdea = (d: Draft) => {
+    setText(d.question);
+    setKind(d.kind);
+    if (d.line !== undefined) setLine(Math.floor(d.line) + 0.5);
+    if (d.options) {
+      setA(d.options[0] ?? "");
+      setB(d.options[1] ?? "");
+    }
+    setSubject(d.subjectId as Id<"users">);
+    setSide(0);
+    setAi(true);
+    setIdeas(false);
+    setTray(true);
+  };
   const options = kind === "yesno" ? ["Yes", "No"] : kind === "overunder" ? ["Over " + line, "Under " + line] : [a.trim() || "This", b.trim() || "That"];
   const ready = !!subject && text.trim().length >= 5 && (kind !== "multi" || (a.trim() && b.trim()));
   const open = tray || text.length > 0;
@@ -197,7 +214,8 @@ function Composer({ data, token }: { data: Data; token: string }) {
     setBusy(true);
     setErr(null);
     try {
-      await create({ token, groupId: data.group._id, subjectUserId: subject, kind, question: text, line: kind === "overunder" ? line : undefined, options: kind === "multi" ? [a, b] : undefined, option: side, amount: Math.min(amount, data.me.points) });
+      await create({ token, groupId: data.group._id, subjectUserId: subject, kind, question: text, line: kind === "overunder" ? line : undefined, options: kind === "multi" ? [a, b] : undefined, option: side, amount: Math.min(amount, data.me.points), ai: ai || undefined });
+      setAi(false);
       setText("");
       setA("");
       setB("");
@@ -215,6 +233,17 @@ function Composer({ data, token }: { data: Data; token: string }) {
     <View style={{ backgroundColor: I.bar, borderTopWidth: 0.5, borderTopColor: I.sep, paddingBottom: Math.max(insets.bottom, 8) }}>
       {open && !closed ? (
         <View style={{ paddingHorizontal: 12, paddingTop: 10, gap: 9, maxWidth: 620, width: "100%", alignSelf: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Pressable onPress={() => setIdeas(!ideas)} style={[chip(ideas), { flexDirection: "row", gap: 5, alignItems: "center" }]}>
+              <Text style={t(14, "600", ideas ? "#fff" : I.purple)}>✦ Ideas from your chats</Text>
+            </Pressable>
+            {ai ? <Text style={t(12, "500", I.secondary)}>Created by AI · edit anything</Text> : null}
+          </View>
+          {ideas ? (
+            <ScrollView style={{ maxHeight: 330 }} keyboardShouldPersistTaps="handled">
+              <Suggestions members={data.members} meId={data.me._id} onPick={pickIdea} />
+            </ScrollView>
+          ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }} keyboardShouldPersistTaps="handled">
             <Text style={t(13, "600", I.secondary)}>About</Text>
             {friends.map((f) => (
@@ -412,7 +441,7 @@ export function Thread({ token, groupId }: { token: string; groupId: Id<"groups"
               <Row who={it.subject} mine={mine} showName={showName} last={last}>
                 <Bubble mine={mine} color={mine ? I.blue : I.gray} tail={last}>
                   <Text style={t(16, "400", mine ? "#fff" : I.label)}>
-                    {it.status === "refunded" ? "Nobody had it. Refunds all round." : "It was " + it.winner + ". Called it."}
+                    {it.status === "refunded" ? (it.winner ? "Nobody had it. Refunds all round." : "Vetoed. Refunds all round.") : "It was " + it.winner + ". " + it.question}
                   </Text>
                 </Bubble>
               </Row>

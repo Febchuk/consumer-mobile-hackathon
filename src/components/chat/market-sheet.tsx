@@ -22,6 +22,7 @@ export function MarketSheet({ betId, token, onClose }: { betId: Id<"bets">; toke
   const m = useStableQuery(api.chat.market, { token, betId, now });
   const stake = useMutation(api.chat.stake);
   const declare = useMutation(api.chat.declare);
+  const veto = useMutation(api.chat.veto);
   const [side, setSide] = useState<number | null>(null);
   const [amount, setAmount] = useState("100");
   const [busy, setBusy] = useState(false);
@@ -103,6 +104,11 @@ export function MarketSheet({ betId, token, onClose }: { betId: Id<"bets">; toke
                     <Button key={i} small style={{ flex: 1 }} color={optionColor(m.kind, i).fg} label={m.kind === "yesno" ? (i === 0 ? "True" : "False") : o} disabled={busy} onPress={() => run(() => declare({ token, betId, winningOption: i }))} />
                   ))}
                 </View>
+                {m.isSubject ? (
+                  <Pressable onPress={() => run(() => veto({ token, betId }))} disabled={busy} style={{ alignSelf: "center", paddingVertical: 4 }}>
+                    <Text style={t(13, "500", I.secondary)}>Too far? Veto it and everyone gets refunded</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
             {!m.locked && !m.isSubject ? (
