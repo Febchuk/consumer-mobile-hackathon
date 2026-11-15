@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { MyGroups, ProfileEditor } from "@/components/me-groups";
+import { DropScorecards } from "@/components/reveal-story";
 import { useQuery } from "convex/react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@convex/_generated/api";
@@ -42,6 +43,7 @@ export default function Me() {
             </View>
           </Card>
         ) : null}
+        {token ? <DropScorecards token={token} /> : null}
         {token ? <MyGroups token={token} /> : null}
         <Text style={[s.label, { marginTop: 6 }]}>Your bets</Text>
         {(history ?? []).length === 0 ? <Text style={s.sub}>No bets yet. Go call something.</Text> : null}
