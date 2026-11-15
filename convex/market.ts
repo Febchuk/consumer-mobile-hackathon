@@ -1,7 +1,7 @@
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { HOUR, betLocked, multiplier, nextRound, percents, streakFor, supersededAt, userByToken } from "./lib";
+import { HOUR, betLocked, defaultGroupId, multiplier, nextRound, percents, streakFor, supersededAt, userByToken } from "./lib";
 
 type Staker = {
   id: Id<"users">;
@@ -56,6 +56,7 @@ export const people = query({
     const bet = await ctx.db.get(betId);
     if (!bet || bet.hidden) return null;
     const user = await userByToken(ctx, token);
+    if (user && bet.subjectUserId === user._id) return null;
     return { sides: await sidesFor(ctx, bet, user?._id ?? null) };
   },
 });
@@ -69,6 +70,9 @@ export const market = query({
     if (!round) return null;
     const now = nowArg ?? Date.now();
     const user = await userByToken(ctx, token);
+    if (user && bet.subjectUserId === user._id) return null;
+    const isDefault = !round.groupId || round.groupId === (await defaultGroupId(ctx));
+    const subject = bet.subjectUserId ? await ctx.db.get(bet.subjectUserId) : null;
     const ticks = await ctx.db
       .query("ticks")
       .withIndex("by_bet", (q) => q.eq("betId", bet._id))
@@ -79,7 +83,7 @@ export const market = query({
         .withIndex("by_round", (q) => q.eq("roundId", round._id))
         .collect()
     )
-      .filter((b) => !b.hidden)
+      .filter((b) => !b.hidden && (!user || b.subjectUserId !== user._id))
       .sort((a, b) => a.order - b.order);
     const mine = user
       ? (
@@ -91,9 +95,9 @@ export const market = query({
         ).map((s) => ({ option: s.option, amount: s.amount, late: s.late, payout: s.payout }))
       : [];
     const sides = await sidesFor(ctx, bet, user?._id ?? null);
-    const streak = user ? (await streakFor(ctx, user, round)).next : 1;
+    const streak = user && isDefault ? (await streakFor(ctx, user, round)).next : 1;
     const closedAt = await supersededAt(ctx, round, now);
-    const upcoming = closedAt === null ? await nextRound(ctx, now) : null;
+    const upcoming = closedAt === null ? await nextRound(ctx, round.groupId ?? null, now) : null;
     return {
       bet: {
         _id: bet._id,
@@ -104,6 +108,7 @@ export const market = query({
         pools: bet.pools,
         status: bet.status,
         winningOption: bet.winningOption,
+        subject: subject ? { name: subject.name, emoji: subject.emoji } : null,
         locked: await betLocked(ctx, bet, round, now),
         pct: percents(bet.pools),
         total: bet.pools.reduce((a, b) => a + b, 0),
@@ -111,7 +116,7 @@ export const market = query({
         ticks: ticks.sort((a, b) => a.t - b.t).map((t) => ({ t: t.t, pct: t.pct })),
         mine,
       },
-      round: { _id: round._id, number: round.number, title: round.title, opensAt: round.opensAt },
+      round: { _id: round._id, number: round.number, title: round.title, opensAt: round.opensAt, groupId: round.groupId ?? null },
       endsAt: closedAt ?? upcoming?.opensAt ?? round.opensAt + HOUR,
       position: siblings.findIndex((b) => b._id === bet._id) + 1,
       count: siblings.length,

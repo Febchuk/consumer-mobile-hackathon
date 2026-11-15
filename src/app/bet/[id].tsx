@@ -15,6 +15,7 @@ import {
   StakePanel,
   Staker,
   StatusTag,
+  SubjectLine,
   kindLabel,
   leadOf,
   myPosition,
@@ -123,6 +124,7 @@ function Body({ d, token, now }: { d: Detail; token: string | null; now: number 
           <Text style={s.label}>{kindLabel(m.kind)}</Text>
           <StatusTag m={m} />
         </View>
+        <SubjectLine subject={m.subject} />
         <Text style={[s.h1, { fontSize: 32, lineHeight: 36 }]}>{m.question}</Text>
         {everyone.length ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -209,7 +211,7 @@ function Body({ d, token, now }: { d: Detail; token: string | null; now: number 
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[s.label, { color: C.goldDeep }]}>Biggest backer</Text>
             <Text style={[{ fontFamily: F.displaySemi, fontSize: 19, color: C.ink, lineHeight: 24 }, tnum]}>
-              {backer.me ? "You" : backer.name} put <Text style={{ fontFamily: F.monoBold }}>{fmt(backer.amount)}</Text> on{" "}
+              {backer.me ? "You" : "@" + backer.name} put <Text style={{ fontFamily: F.monoBold }}>{fmt(backer.amount)}</Text> on{" "}
               <Text style={{ color: OPTION_COLORS[backerSide % 4]?.deep ?? C.ink }}>{m.options[backerSide]}</Text>
             </Text>
           </View>
@@ -252,7 +254,7 @@ function SideBlock({ label, side, i, won, total }: { label: string; side: Staker
           <View key={p.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }}>
             <Text style={{ fontSize: 20, width: 26 }}>{p.emoji}</Text>
             <Text numberOfLines={1} style={{ fontFamily: p.me ? F.bodyBold : F.bodyMed, fontSize: 15, color: C.ink, flexShrink: 1 }}>
-              {p.me ? p.name + " (you)" : p.name}
+              {"@" + p.name}{p.me ? " (you)" : ""}
             </Text>
             {p.late ? <LateTag /> : null}
             <View style={{ flex: 1 }} />

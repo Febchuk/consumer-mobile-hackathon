@@ -23,6 +23,7 @@ export type Market = {
   locked: boolean;
   status: "open" | "locked" | "settled" | "refunded";
   winningOption?: number;
+  subject?: { name: string; emoji: string } | null;
   ticks: { t: number; pct: number[] }[];
   mine: { option: number; amount: number; late: boolean; payout?: number }[];
 };
@@ -70,6 +71,16 @@ export function myPosition(m: Market) {
   return { staked, option, late, payout };
 }
 
+export function SubjectLine({ subject }: { subject?: { name: string; emoji: string } | null }) {
+  if (!subject) return null;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -4 }}>
+      <Text style={{ fontSize: 15 }}>{subject.emoji}</Text>
+      <Text style={[s.label, { color: C.blue }]}>about @{subject.name}</Text>
+    </View>
+  );
+}
+
 export function StatusTag({ m }: { m: Pick<Market, "status" | "locked"> }) {
   if (m.status === "settled") return <Tag label="called" color="#fff" bg={C.ink} />;
   if (m.status === "refunded") return <Tag label="void" color="#fff" bg={C.sub} />;
@@ -105,6 +116,7 @@ export function MarketCard({ m, ctx }: { m: Market; ctx: Ctx }) {
       </View>
 
       <Pressable onPress={open} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, gap: 10 })}>
+        <SubjectLine subject={m.subject} />
         <Text style={[s.h2, { fontSize: 23, lineHeight: 28 }]}>{m.question}</Text>
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
           {settled ? (
