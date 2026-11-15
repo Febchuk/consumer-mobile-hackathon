@@ -1,0 +1,228 @@
+import { useEffect, useState } from "react";
+import { ScrollView, Text, TextInput, View, Pressable } from "react-native";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
+import { Id } from "@convex/_generated/dataModel";
+import { loadPasscode, savePasscode } from "@/lib/identity";
+import { C, F, OPTION_COLORS, tnum } from "@/lib/theme";
+import { fmt, hourLabel } from "@/lib/time";
+import { Button, Card, Tag, s } from "@/components/ui";
+
+const HOUR = 3600 * 1000;
+
+const input = {
+  fontFamily: F.bodyMed,
+  fontSize: 16,
+  color: C.ink,
+  backgroundColor: C.paper,
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+};
+
+export default function Admin() {
+  const [passcode, setPasscode] = useState("");
+  const [draft, setDraft] = useState("");
+  useEffect(() => {
+    loadPasscode().then(setPasscode);
+  }, []);
+  const ok = useQuery(api.admin.check, { passcode });
+  if (!ok) {
+    return (
+      <View style={[s.screen, s.column, { paddingTop: 80, gap: 12 }]}>
+        <Text style={s.h1}>Admin</Text>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Passcode"
+          placeholderTextColor={C.faint}
+          secureTextEntry
+          autoCapitalize="none"
+          style={input}
+          onSubmitEditing={() => {
+            setPasscode(draft);
+            savePasscode(draft);
+          }}
+        />
+        <Button
+          label="Enter"
+          onPress={() => {
+            setPasscode(draft);
+            savePasscode(draft);
+          }}
+        />
+        {passcode && ok === false ? <Text style={{ color: C.no, fontFamily: F.bodyMed }}>Wrong passcode</Text> : null}
+      </View>
+    );
+  }
+  return <AdminPanel passcode={passcode} />;
+}
+
+function AdminPanel({ passcode }: { passcode: string }) {
+  const rounds = useQuery(api.admin.overview, { passcode });
+  const createRound = useMutation(api.admin.createRound);
+  const setTimes = useMutation(api.admin.setRoundTimes);
+  const [msg, setMsg] = useState<string | null>(null);
+  const run = async (f: () => Promise<unknown>) => {
+    setMsg(null);
+    try {
+      await f();
+    } catch (e) {
+      setMsg(String((e as { data?: string }).data ?? (e as Error).message));
+    }
+  };
+  const nextHour = Math.ceil((Date.now() + 1) / HOUR) * HOUR;
+  return (
+    <ScrollView style={s.screen} contentContainerStyle={[s.column, { paddingTop: 24, paddingBottom: 80, gap: 14 }]}>
+      <Text style={s.h1}>Admin</Text>
+      {msg ? <Text style={{ color: C.no, fontFamily: F.bodyMed }}>{msg}</Text> : null}
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        <Button small label={"+ Round at " + hourLabel(nextHour)} onPress={() => run(() => createRound({ passcode, opensAt: nextHour }))} />
+        <Button
+          small
+          color={C.tile}
+          textColor={C.ink}
+          label={"+ Round at " + hourLabel(nextHour + HOUR)}
+          onPress={() => run(() => createRound({ passcode, opensAt: nextHour + HOUR }))}
+        />
+      </View>
+      {rounds?.map((r) => (
+        <Card key={r._id} style={{ gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Text style={s.h2}>{r.title}</Text>
+            <Text style={[s.sub, tnum]}>
+              opens {hourLabel(r.opensAt)} · locks {hourLabel(r.locksAt)}
+            </Text>
+            <View style={{ flex: 1 }} />
+            <Button
+              small
+              color={C.tile}
+              textColor={C.ink}
+              label="Open now"
+              onPress={() => run(() => setTimes({ passcode, roundId: r._id, opensAt: Date.now(), locksAt: Date.now() + 50 * 60 * 1000 }))}
+            />
+            <Button
+              small
+              color={C.noSoft}
+              textColor={C.no}
+              label="Lock now"
+              onPress={() => run(() => setTimes({ passcode, roundId: r._id, opensAt: r.opensAt, locksAt: Date.now() }))}
+            />
+          </View>
+          {r.bets.map((b) => (
+            <BetAdmin key={b._id} bet={b} passcode={passcode} run={run} />
+          ))}
+          <AddBet roundId={r._id} passcode={passcode} run={run} />
+        </Card>
+      ))}
+    </ScrollView>
+  );
+}
+
+type Bet = {
+  _id: Id<"bets">;
+  question: string;
+  options: string[];
+  pools: number[];
+  status: "open" | "locked" | "settled" | "refunded";
+  winningOption?: number;
+};
+
+function BetAdmin({ bet, passcode, run }: { bet: Bet; passcode: string; run: (f: () => Promise<unknown>) => Promise<void> }) {
+  const settle = useMutation(api.admin.settle);
+  const lock = useMutation(api.admin.lockBet);
+  const del = useMutation(api.admin.deleteBet);
+  const edit = useMutation(api.admin.editBet);
+  const [q, setQ] = useState(bet.question);
+  const done = bet.status === "settled" || bet.status === "refunded";
+  return (
+    <View style={{ gap: 8, borderTopWidth: 1.5, borderTopColor: C.line, paddingTop: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          onBlur={() => q !== bet.question && run(() => edit({ passcode, betId: bet._id, question: q }))}
+          style={[input, { flex: 1, paddingVertical: 6 }]}
+        />
+        <Tag label={bet.status} />
+      </View>
+      <Text style={[s.sub, tnum]}>
+        {bet.options.map((o, i) => o + ": " + fmt(bet.pools[i])).join(" · ")}
+      </Text>
+      {done ? (
+        <Text style={[s.body, { fontFamily: F.bodyBold }]}>
+          {bet.status === "refunded" ? "Refunded" : "Result: " + bet.options[bet.winningOption ?? 0]}
+        </Text>
+      ) : (
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {bet.options.map((o, i) => (
+            <Button
+              key={i}
+              small
+              color={OPTION_COLORS[i % 4].fg}
+              label={"✓ " + o + " happened"}
+              onPress={() => run(() => settle({ passcode, betId: bet._id, winningOption: i }))}
+            />
+          ))}
+          <Button small color={C.tile} textColor={C.ink} label="Refund" onPress={() => run(() => settle({ passcode, betId: bet._id, winningOption: null }))} />
+          <Button
+            small
+            color={C.tile}
+            textColor={C.ink}
+            label={bet.status === "locked" ? "Unlock" : "Lock"}
+            onPress={() => run(() => lock({ passcode, betId: bet._id, locked: bet.status !== "locked" }))}
+          />
+          <Pressable onLongPress={() => run(() => del({ passcode, betId: bet._id }))}>
+            <Text style={[s.sub, { padding: 8 }]}>hold to delete</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function AddBet({ roundId, passcode, run }: { roundId: Id<"rounds">; passcode: string; run: (f: () => Promise<unknown>) => Promise<void> }) {
+  const add = useMutation(api.admin.addBet);
+  const [question, setQuestion] = useState("");
+  const [kind, setKind] = useState<"yesno" | "overunder" | "multi">("yesno");
+  const [line, setLine] = useState("3.5");
+  const [opts, setOpts] = useState("");
+  const submit = () =>
+    run(async () => {
+      await add({
+        passcode,
+        roundId,
+        question,
+        kind,
+        line: kind === "overunder" ? Number(line) : undefined,
+        options: kind === "multi" ? opts.split(",") : undefined,
+      });
+      setQuestion("");
+      setOpts("");
+    });
+  return (
+    <View style={{ gap: 8, borderTopWidth: 1.5, borderTopColor: C.line, paddingTop: 10 }}>
+      <Text style={s.label}>Add a bet</Text>
+      <TextInput value={question} onChangeText={setQuestion} placeholder="Question" placeholderTextColor={C.faint} style={input} />
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {(["yesno", "overunder", "multi"] as const).map((k) => (
+          <Button
+            key={k}
+            small
+            color={kind === k ? C.ink : C.tile}
+            textColor={kind === k ? "#fff" : C.ink}
+            label={k === "yesno" ? "Yes/No" : k === "overunder" ? "Over/Under" : "Multiple"}
+            onPress={() => setKind(k)}
+          />
+        ))}
+      </View>
+      {kind === "overunder" ? (
+        <TextInput value={line} onChangeText={setLine} placeholder="Line, e.g. 3.5" keyboardType="decimal-pad" style={input} />
+      ) : null}
+      {kind === "multi" ? (
+        <TextInput value={opts} onChangeText={setOpts} placeholder="Options, comma separated" placeholderTextColor={C.faint} style={input} />
+      ) : null}
+      <Button small label="Add bet" color={C.yes} onPress={submit} disabled={!question.trim()} />
+    </View>
+  );
+}
