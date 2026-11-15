@@ -14,13 +14,18 @@ export function Join() {
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState(EMOJIS[0]);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const submit = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || busy) return;
     setBusy(true);
-    const token = newToken();
+    setErr(null);
     try {
+      const token = newToken();
       await join({ name, emoji, token });
       setToken(token);
+    } catch (e) {
+      const data = (e as { data?: unknown }).data;
+      setErr(typeof data === "string" ? data : "Couldn't join. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -76,6 +81,7 @@ export function Join() {
             </Pressable>
           ))}
         </View>
+        {err ? <Text style={{ fontFamily: F.bodyMed, color: C.no, fontSize: 14 }}>{err}</Text> : null}
         <Button label={busy ? "Joining…" : "Join with 1,000 points"} onPress={submit} disabled={!name.trim() || busy} color={C.yes} />
       </Card>
       <Text style={[s.sub, { textAlign: "center" }]}>No password. This device remembers you.</Text>

@@ -28,7 +28,7 @@ async function walk(d) {
 
 const deployId = String(Date.now());
 const files = await walk(dir);
-await Promise.all(files.map(async (f) => {
+const upload = async (f) => {
   const path = "/" + f.slice(dir.length).replace(/^\/+/, "");
   const contentType = types[extname(f)] ?? "application/octet-stream";
   const uploadUrl = await client.mutation("hosting:generateUploadUrl", {});
@@ -36,5 +36,7 @@ await Promise.all(files.map(async (f) => {
   const { storageId } = await res.json();
   await client.mutation("hosting:record", { path, storageId, contentType, deployId });
   console.log("uploaded", path);
-}));
+};
+await Promise.all(files.filter((f) => !f.endsWith(".html")).map(upload));
+await Promise.all(files.filter((f) => f.endsWith(".html")).map(upload));
 console.log("done", files.length, "files ->", url.replace(".convex.cloud", ".convex.site"));

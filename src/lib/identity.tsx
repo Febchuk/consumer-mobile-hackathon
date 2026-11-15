@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 type Identity = { token: string | null; ready: boolean; setToken: (t: string | null) => void };
@@ -6,9 +7,7 @@ const Ctx = createContext<Identity>({ token: null, ready: false, setToken: () =>
 const KEY = "calledit.token";
 
 export function newToken() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return Crypto.randomUUID().replace(/-/g, "");
 }
 
 export function IdentityProvider({ children }: { children: ReactNode }) {
