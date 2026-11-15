@@ -11,7 +11,7 @@
 | 1 | called-it-join | PASS | Picked @revyl_qa_1 and 🦖, tapped Join, saw the "Time to call it." drop announcement, then landed on Today with 1,000 points. |
 | 2 | called-it-place-bet | PASS, with workaround | The market page opens. Staking from it is **blocked by a bug**: the amount resets to 100 every 10 s (details below). Staked 10 on YES for "Is dinner pizza tonight?" from the Today card's stake sheet instead. The card shows "You called YES · 10 · LATE, wins 19" and points went 1,000 → 990. |
 | 3 | called-it-board | PASS | "The Board" shows summary tiles and a ranked table (@febe, @mikunad, @febe_c35). The revyl user is hidden as designed. |
-| 4 | called-it-admin-and-group-settle | PASS | Opened `calledit://admin`, entered passcode `hotdrop26`, and saw drops and their bets listed. Nothing was settled there. Then Me → created group "Revyl QA" → added "Revyl QA: does this test pass?" → staked 50 on Yes → tapped "Yes happened". The bet shows CALLED · YES · "You called YES · 50 +0". |
+| 4 | called-it-admin-and-group-settle | PASS | Opened `calledit://admin`, entered the admin passcode, and saw drops and their bets listed. Nothing was settled there. Then Me → created group "Revyl QA" → added "Revyl QA: does this test pass?" → staked 50 on Yes → tapped "Yes happened". The bet shows CALLED · YES · "You called YES · 50 +0". |
 | 5 | called-it-reveal | PASS | Today showed "Drop 1 results are in. Tap to reveal". The story went through 3 cards: the room's call, what happened, and the CALLED tiles card ("Clean sweep.", 1/1 called, "Copy my drop"). Done returned to Today and the banner was gone. |
 
 ## Bugs found

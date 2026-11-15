@@ -120,6 +120,7 @@ export const home = query({
         name: g.name,
         inviteCode: g.inviteCode ?? null,
         faces: users.filter((u) => u._id !== user._id).map((u) => u.emoji),
+        people: users.filter((u) => u._id !== user._id).map((u) => ({ name: u.name, emoji: u.emoji })),
         members: users.length,
         last,
         rank,

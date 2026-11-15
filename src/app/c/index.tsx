@@ -47,6 +47,7 @@ export default function ChatList() {
   if (ctx === "show")
     return (
       <ConnectContext
+        friends={[...new Map(home.groups.flatMap((g) => g.people).map((p) => [p.name, p])).values()]}
         onDone={() => {
           AsyncStorage.setItem("calledit.context", "1");
           setCtx("done");
