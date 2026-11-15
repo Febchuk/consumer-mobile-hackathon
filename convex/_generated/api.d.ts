@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
+import type * as ext from "../ext.js";
 import type * as game from "../game.js";
 import type * as groups from "../groups.js";
 import type * as hosting from "../hosting.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   chat: typeof chat;
   crons: typeof crons;
+  ext: typeof ext;
   game: typeof game;
   groups: typeof groups;
   hosting: typeof hosting;

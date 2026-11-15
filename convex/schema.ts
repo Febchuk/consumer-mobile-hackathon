@@ -61,8 +61,20 @@ export default defineSchema({
     counter: v.optional(v.number()),
     createdBy: v.optional(v.id("users")),
     byAI: v.optional(v.boolean()),
+    revealAt: v.optional(v.number()),
     settledAt: v.optional(v.number()),
   }).index("by_round", ["roundId"]),
+  sessions: defineTable({
+    userId: v.id("users"),
+    token: v.string(),
+    device: v.string(),
+  }).index("by_token", ["token"]),
+  pairs: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index("by_code", ["code"]),
   snapshots: defineTable({
     groupId: v.id("groups"),
     label: v.string(),

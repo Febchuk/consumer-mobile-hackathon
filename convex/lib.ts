@@ -19,10 +19,16 @@ export function percents(pools: number[]) {
 
 export async function userByToken(ctx: QueryCtx, token: string | undefined) {
   if (!token) return null;
-  return await ctx.db
+  const direct = await ctx.db
     .query("users")
     .withIndex("by_token", (q) => q.eq("token", token))
     .unique();
+  if (direct) return direct;
+  const session = await ctx.db
+    .query("sessions")
+    .withIndex("by_token", (q) => q.eq("token", token))
+    .unique();
+  return session ? await ctx.db.get(session.userId) : null;
 }
 
 export async function requireUser(ctx: MutationCtx, token: string) {

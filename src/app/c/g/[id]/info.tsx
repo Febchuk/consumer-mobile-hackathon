@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useMutation } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@convex/_generated/api";
@@ -15,6 +17,8 @@ export default function GroupInfo() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useIdentity();
   const qnow = useQueryNow();
+  const pair = useMutation(api.ext.createPair);
+  const [code, setCode] = useState<{ code: string; expiresAt: number } | null>(null);
   const data = useStableQuery(api.chat.thread, token ? { token, groupId: id as Id<"groups">, now: qnow } : ("skip" as never));
   if (!data) return <View style={{ flex: 1, backgroundColor: I.fill }} />;
   const items = data.items as { type: string; total?: number; status?: string }[];
@@ -59,6 +63,16 @@ export default function GroupInfo() {
             </View>
           </View>
         ))}
+      </View>
+      <View style={[section, { padding: 16, gap: 8 }]}>
+        <Text style={t(15, "600")}>Play inside iMessage</Text>
+        <Text style={t(14, "400", I.secondary)}>Open Called It from the apps drawer in your group chat, then enter this one-time code to sign in there. It works once and expires in 10 minutes.</Text>
+        {code ? (
+          <Text selectable style={[t(34, "700", I.blue), { letterSpacing: 6, textAlign: "center", fontVariant: ["tabular-nums"] }]}>{code.code}</Text>
+        ) : null}
+        <Pressable onPress={async () => token && setCode(await pair({ token }))} style={{ alignSelf: "flex-start", backgroundColor: I.blue, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
+          <Text style={t(15, "600", "#fff")}>{code ? "New code" : "Pair iMessage app"}</Text>
+        </Pressable>
       </View>
       {data.aboutMe.bets > 0 ? (
         <View style={[section, { padding: 16, gap: 4 }]}>

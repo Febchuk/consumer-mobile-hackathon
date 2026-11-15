@@ -54,6 +54,14 @@ function isRevealed(group: Doc<"groups">, now: number) {
   return now >= (group.revealAt ?? REVEAL_AT);
 }
 
+export function betRevealAt(bet: Doc<"bets">, group: Doc<"groups">) {
+  return bet.revealAt ?? group.revealAt ?? REVEAL_AT;
+}
+
+function betRevealed(bet: Doc<"bets">, group: Doc<"groups">, now: number) {
+  return now >= betRevealAt(bet, group);
+}
+
 export const enter = mutation({
   args: { token: v.string(), invite: v.optional(v.string()) },
   handler: async (ctx, { token, invite }) => {
@@ -209,7 +217,7 @@ export const thread = query({
       const stakes = await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", b._id)).collect();
       const total = b.pools.reduce((a, c) => a + c, 0);
       const stakers = new Set(stakes.map((s) => s.userId));
-      const sealed = b.subjectUserId === user._id && !revealed;
+      const sealed = b.subjectUserId === user._id && !betRevealed(b, group, now);
       if (b.subjectUserId === user._id) {
         aboutMe.bets++;
         for (const s of stakers) aboutMe.friends.add(s);
@@ -278,7 +286,7 @@ export const market = query({
     if (!round || !group) return null;
     const me = await memberRow(ctx, group._id, user._id);
     if (!me) return null;
-    const revealed = isRevealed(group, now);
+    const revealed = betRevealed(bet, group, now);
     if (bet.subjectUserId === user._id && !revealed) return null;
     const ticks = await ctx.db.query("ticks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect();
     const subject = bet.subjectUserId ? await ctx.db.get(bet.subjectUserId) : null;
@@ -298,7 +306,7 @@ export const market = query({
       locked: bet.status !== "open" || revealed,
       revealed,
       opensAt: round.opensAt,
-      revealAt: group.revealAt ?? REVEAL_AT,
+      revealAt: betRevealAt(bet, group),
       subject: subject ? { _id: subject._id, name: subject.name, emoji: subject.emoji } : null,
       author: author ? { name: author.name, emoji: author.emoji } : null,
       isSubject: bet.subjectUserId === user._id,
@@ -319,7 +327,7 @@ async function stakeOn(ctx: MutationCtx, user: Doc<"users">, bet: Doc<"bets">, o
   if (!me) throw new ConvexError("You're not in this group");
   if (bet.subjectUserId === user._id) throw new ConvexError("This bet is about you");
   const now = Date.now();
-  if (bet.status !== "open" || isRevealed(group, now)) throw new ConvexError("Betting is closed");
+  if (bet.status !== "open" || betRevealed(bet, group, now)) throw new ConvexError("Betting is closed");
   if (!Number.isInteger(option) || option < 0 || option >= bet.options.length) throw new ConvexError("Bad pick");
   const prior = (await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()).find((s) => s.userId === user._id);
   if (prior && prior.option !== option) throw new ConvexError("You're already on " + bet.options[prior.option] + ". You can only add to that side.");
@@ -356,6 +364,7 @@ export const createBet = mutation({
     option: v.number(),
     amount: v.number(),
     ai: v.optional(v.boolean()),
+    revealAt: v.optional(v.number()),
   },
   handler: async (ctx, a) => {
     const user = await requireUser(ctx, a.token);
@@ -364,7 +373,8 @@ export const createBet = mutation({
     if (!(await memberRow(ctx, a.groupId, user._id))) throw new ConvexError("You're not in this group");
     if (!(await memberRow(ctx, a.groupId, a.subjectUserId))) throw new ConvexError("Pick a friend from the group");
     if (a.subjectUserId === user._id) throw new ConvexError("You can't bet about yourself");
-    if (isRevealed(group, Date.now())) throw new ConvexError("This drop is closed");
+    const reveal = a.revealAt ?? group.revealAt ?? REVEAL_AT;
+    if (reveal <= Date.now()) throw new ConvexError(a.revealAt ? "Pick a reveal time in the future" : "This drop is closed");
     const question = a.question.trim().slice(0, 140);
     if (question.length < 5) throw new ConvexError("Write the question");
     let line: number | undefined;
@@ -380,7 +390,7 @@ export const createBet = mutation({
     }
     const round = (await roundOf(ctx, a.groupId))?._id ?? (await ensureCrew(ctx), (await roundOf(ctx, a.groupId))!._id);
     const betId = await insertBet(ctx, round, question, a.kind, line, options, a.subjectUserId);
-    await ctx.db.patch(betId, { createdBy: user._id, byAI: a.ai || undefined });
+    await ctx.db.patch(betId, { createdBy: user._id, byAI: a.ai || undefined, revealAt: a.revealAt !== undefined && a.revealAt !== (group.revealAt ?? REVEAL_AT) ? a.revealAt : undefined });
     if (a.amount > 0) await stakeOn(ctx, user, (await ctx.db.get(betId))!, a.option, a.amount);
     return betId;
   },
@@ -397,7 +407,7 @@ export const declare = mutation({
     if (!group || group.kind !== "chat") throw new ConvexError("Bet not found");
     const allowed = bet.subjectUserId ? bet.subjectUserId === user._id : bet.createdBy === user._id;
     if (!allowed) throw new ConvexError("Only the person it's about can call it");
-    if (!isRevealed(group, Date.now())) throw new ConvexError("Wait for the reveal");
+    if (!betRevealed(bet, group, Date.now())) throw new ConvexError("Wait for the reveal");
     if (bet.status !== "open") throw new ConvexError("Already called");
     if (!Number.isInteger(winningOption) || winningOption < 0 || winningOption >= bet.options.length) throw new ConvexError("Bad pick");
     const stakes = await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", betId)).collect();
@@ -421,7 +431,7 @@ export const veto = mutation({
     if (!bet || bet.subjectUserId !== user._id) throw new ConvexError("Only the person it's about can veto");
     const round = await ctx.db.get(bet.roundId);
     const group = round?.groupId ? await ctx.db.get(round.groupId) : null;
-    if (!group || !isRevealed(group, Date.now())) throw new ConvexError("Wait for the reveal");
+    if (!group || !betRevealed(bet, group, Date.now())) throw new ConvexError("Wait for the reveal");
     if (bet.status !== "open") throw new ConvexError("Already called");
     for (const s of await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", betId)).collect()) {
       const m = await memberRow(ctx, group._id, s.userId);
