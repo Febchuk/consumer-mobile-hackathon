@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { C, F, tnum } from "@/lib/theme";
@@ -77,8 +77,9 @@ export function MyGroups({ token }: { token: string }) {
     <View style={{ gap: 8 }}>
       <Text style={[s.label, { marginTop: 6 }]}>Your groups</Text>
       {(groups ?? []).map((g) => (
-        <Link key={g._id} href={{ pathname: "/group/[id]", params: { id: g._id } }} asChild>
           <Pressable
+            key={g._id}
+            onPress={() => router.push({ pathname: "/group/[id]", params: { id: g._id } })}
             style={({ pressed }) => ({
               flexDirection: "row",
               alignItems: "center",
@@ -95,7 +96,6 @@ export function MyGroups({ token }: { token: string }) {
             <Text style={[s.sub, tnum]}>{g.members} in</Text>
             <Text style={{ fontFamily: F.bodyBold, color: C.sub }}>›</Text>
           </Pressable>
-        </Link>
       ))}
       <View style={{ flexDirection: "row", gap: 8 }}>
         <TextInput
