@@ -14,7 +14,7 @@ type Staker = {
   me: boolean;
 };
 
-async function sidesFor(ctx: QueryCtx, bet: Doc<"bets">, meId: Id<"users"> | null) {
+export async function sidesFor(ctx: QueryCtx, bet: Doc<"bets">, meId: Id<"users"> | null) {
   const stakes = await ctx.db
     .query("stakes")
     .withIndex("by_bet", (q) => q.eq("betId", bet._id))

@@ -21,10 +21,16 @@ export default defineSchema({
     name: v.string(),
     createdBy: v.optional(v.id("users")),
     isDefault: v.optional(v.boolean()),
-  }).index("by_default", ["isDefault"]),
+    kind: v.optional(v.literal("chat")),
+    inviteCode: v.optional(v.string()),
+    revealAt: v.optional(v.number()),
+  })
+    .index("by_default", ["isDefault"])
+    .index("by_invite", ["inviteCode"]),
   members: defineTable({
     groupId: v.id("groups"),
     userId: v.id("users"),
+    points: v.optional(v.number()),
   })
     .index("by_group", ["groupId"])
     .index("by_user", ["userId"])
@@ -53,7 +59,15 @@ export default defineSchema({
     hidden: v.optional(v.boolean()),
     order: v.number(),
     counter: v.optional(v.number()),
+    createdBy: v.optional(v.id("users")),
+    byAI: v.optional(v.boolean()),
+    settledAt: v.optional(v.number()),
   }).index("by_round", ["roundId"]),
+  reactions: defineTable({
+    betId: v.id("bets"),
+    userId: v.id("users"),
+    emoji: v.string(),
+  }).index("by_bet", ["betId"]),
   stakes: defineTable({
     betId: v.id("bets"),
     roundId: v.id("rounds"),
