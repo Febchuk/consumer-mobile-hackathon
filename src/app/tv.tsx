@@ -20,12 +20,18 @@ function BigBet({ m, start, end, now, k }: { m: Market; start: number; end: numb
       <Text style={[s.h2, { fontSize: 24 * k, lineHeight: 30 * k }]}>{m.question}</Text>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
         <View>
-          <TickingNumber value={m.pct[lead]} suffix="%" style={{ fontFamily: F.monoBold, fontSize: 64 * k, color: col, letterSpacing: -3 }} />
-          <Text style={[s.label, { fontSize: 12 * k }]}>
+          {settled ? (
+            <Text style={{ fontFamily: F.display, fontSize: 60 * k, color: m.status === "refunded" ? C.sub : col, textTransform: "uppercase" }}>
+              {m.status === "refunded" ? "Void" : m.options[lead]}
+            </Text>
+          ) : (
+            <TickingNumber value={m.pct[lead]} suffix="%" style={{ fontFamily: F.monoBold, fontSize: 64 * k, color: col, letterSpacing: -3 }} />
+          )}
+          <Text style={[s.label, tnum, { fontSize: 12 * k }]}>
             {settled
               ? m.status === "refunded"
-                ? "refunded"
-                : "result: " + m.options[m.winningOption ?? 0]
+                ? "refunded · nobody called it"
+                : "what happened · " + Math.round(m.pct[lead]) + "% called it"
               : "say " + m.options[lead]}
           </Text>
         </View>
@@ -61,14 +67,15 @@ export default function TV() {
           ) : null}
           <View style={{ flexDirection: "row", gap: 14, flexWrap: "wrap" }}>
             {rest.map((m) => {
-              const lead = m.pct.indexOf(Math.max(...m.pct));
+              const lead = m.status === "settled" && m.winningOption !== undefined ? m.winningOption : m.pct.indexOf(Math.max(...m.pct));
               return (
                 <Card key={m._id} style={{ flexBasis: wide ? "30%" : "100%", flexGrow: 1, gap: 4 }}>
                   <Text numberOfLines={2} style={[s.body, { fontFamily: F.bodyBold, fontSize: 15 * k }]}>
                     {m.question}
                   </Text>
                   <Text style={[{ fontFamily: F.monoBold, fontSize: 30 * k, color: OPTION_COLORS[lead % 4].fg }, tnum]}>
-                    {Math.round(m.pct[lead])}% <Text style={[s.label, { fontSize: 12 * k }]}>{m.options[lead]}</Text>
+                    {m.status === "settled" ? m.options[m.winningOption ?? 0].toUpperCase() : m.status === "refunded" ? "VOID" : Math.round(m.pct[lead]) + "%"}{" "}
+                    <Text style={[s.label, { fontSize: 12 * k }]}>{m.status === "settled" || m.status === "refunded" ? "result" : m.options[lead]}</Text>
                   </Text>
                 </Card>
               );

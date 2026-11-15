@@ -71,18 +71,27 @@ export function MarketCard({ m, ctx }: { m: Market; ctx: Ctx }) {
 
       <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
         <View>
-          <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-            <TickingNumber
-              value={m.pct[lead]}
-              style={{ fontFamily: F.monoBold, fontSize: 54, color: leadColor, letterSpacing: -2, lineHeight: 58 }}
-            />
-            <Text style={{ fontFamily: F.monoBold, fontSize: 22, color: leadColor, marginTop: 6 }}>%</Text>
-          </View>
-          <Text style={[s.label, { marginTop: 2 }]}>
+          {settled ? (
+            <Text
+              numberOfLines={1}
+              style={{ fontFamily: F.display, fontSize: 48, color: m.status === "refunded" ? C.sub : leadColor, lineHeight: 56, textTransform: "uppercase" }}
+            >
+              {m.status === "refunded" ? "Void" : m.options[lead]}
+            </Text>
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+              <TickingNumber
+                value={m.pct[lead]}
+                style={{ fontFamily: F.monoBold, fontSize: 54, color: leadColor, letterSpacing: -2, lineHeight: 58 }}
+              />
+              <Text style={{ fontFamily: F.monoBold, fontSize: 22, color: leadColor, marginTop: 6 }}>%</Text>
+            </View>
+          )}
+          <Text style={[s.label, tnum, { marginTop: 2 }]}>
             {settled
               ? m.status === "refunded"
-                ? "nobody called it · refunded"
-                : "result: " + m.options[m.winningOption ?? 0]
+                ? "refunded · nobody called it"
+                : "what happened · " + Math.round(m.pct[lead]) + "% called it"
               : m.options[lead]}
           </Text>
         </View>
