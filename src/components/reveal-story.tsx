@@ -62,7 +62,7 @@ function Story({ token, roundId, onClose }: { token: string; roundId: Id<"rounds
   const data = useQuery(api.reveal.dropResults, { token, roundId });
   const revealed = useRevealed();
   if (data === null) return <StoryMessage text="That drop is gone." onClose={onClose} />;
-  if (data === undefined || revealed === null) return <StoryMessage text="Tallying the room\u2026" onClose={onClose} loading />;
+  if (data === undefined || revealed === null) return <StoryMessage text="Tallying the room…" onClose={onClose} loading />;
   return <StoryView data={data} revealed={revealed} onClose={onClose} />;
 }
 
@@ -142,7 +142,7 @@ export function StoryView({ data, revealed, onClose }: { data: Results; revealed
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 8 }}>
           <Text style={[s.label, { color: C.ink, letterSpacing: 1.4 }]}>
-            {data.round.title} \u00B7 {bet ? "results" : "your card"}
+            {data.round.title} · {bet ? "results" : "your card"}
           </Text>
           <View style={{ flex: 1 }} />
           {bet ? (
@@ -196,7 +196,7 @@ function BetScreen({ bet, slot, flipped, start, end }: { bet: Bet; slot: number;
         <Tile letter={letter} state={flipped ? bet.tile : "hidden"} size={52} />
         <Text style={[s.label, { flex: 1, lineHeight: 16 }]}>
           {bet.kind === "yesno" ? "Yes or no" : bet.kind === "overunder" ? "Over or under" : "Pick one"} {"\n"}
-          <Text style={{ color: C.ink }}>{bet.bettors} {bet.bettors === 1 ? "player" : "players"} \u00B7 {fmt(bet.total)} pts</Text>
+          <Text style={{ color: C.ink }}>{bet.bettors} {bet.bettors === 1 ? "player" : "players"} · {fmt(bet.total)} pts</Text>
         </Text>
       </View>
       <Text style={[s.h1, flipped ? { fontSize: 19, lineHeight: 25, fontFamily: F.displaySemi, color: C.sub } : { fontSize: 34, lineHeight: 40 }]}>
@@ -305,7 +305,7 @@ function OddsChart({
       </Svg>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Text style={[s.label, tnum, { fontSize: 10 }]}>Opened {hourLabel(start)}</Text>
-        <Text style={[s.label, tnum, { fontSize: 10 }]}>{ticks.length} {ticks.length === 1 ? "bet" : "bets"} placed \u00B7 closed {hourLabel(stop)}</Text>
+        <Text style={[s.label, tnum, { fontSize: 10 }]}>{ticks.length} {ticks.length === 1 ? "bet" : "bets"} placed · closed {hourLabel(stop)}</Text>
       </View>
     </View>
   );
@@ -344,10 +344,10 @@ function Outcome({ bet }: { bet: Bet }) {
         </View>
         {bet.mine && bet.net !== null ? (
           <Text style={[{ fontFamily: F.monoBold, fontSize: 40, letterSpacing: -2, color: bet.net > 0 ? C.yes : bet.net < 0 ? C.no : C.sub }, tnum]}>
-            {refunded ? "\u00B10" : signed(bet.net)}
+            {refunded ? "±0" : signed(bet.net)}
           </Text>
         ) : (
-          <Text style={{ fontFamily: F.monoBold, fontSize: 28, color: C.faint }}>\u2014</Text>
+          <Text style={{ fontFamily: F.monoBold, fontSize: 28, color: C.faint }}>—</Text>
         )}
       </View>
       {refunded ? null : <CalledIt bet={bet} color={col.fg} />}
@@ -359,10 +359,10 @@ function CalledIt({ bet, color }: { bet: Bet; color: string }) {
   if (bet.winnerCount === 0) return <Text style={[s.sub, { fontSize: 15 }]}>Nobody called it.</Text>;
   const shown = bet.winners.slice(0, 5);
   const more = bet.winnerCount - shown.length;
-  const others = bet.winners.filter((w) => !w.me).length;
+  const label = bet.tile !== "won" ? "Called it" : bet.winnerCount === 1 ? "Only you called it" : "You and " + (bet.winnerCount - 1) + " more called it";
   return (
     <View style={{ gap: 10 }}>
-      <Text style={s.label}>{bet.winnerCount === 1 && bet.winners[0]?.me ? "Only you called it" : others === bet.winnerCount ? "Called it" : "You and " + others + " more called it"}</Text>
+      <Text style={s.label}>{label}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {shown.map((w, k) => (
           <View
@@ -412,7 +412,7 @@ function FinalCard({ data, onBack, onClose }: { data: Results; onBack?: () => vo
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", gap: 26, paddingVertical: 16 }}>
       <Animated.View style={[{ gap: 6 }, enter]}>
         <Text style={[s.label, { color: C.flame }]}>
-          {data.round.title} \u00B7 {hourLabel(data.round.opensAt)}
+          {data.round.title} · {hourLabel(data.round.opensAt)}
         </Text>
         <Text style={[s.h1, { fontSize: 44, lineHeight: 48, letterSpacing: -1 }]}>{headline(tiles)}</Text>
       </Animated.View>
@@ -554,7 +554,7 @@ function Cards({ token }: { token: string }) {
                 ? "Results are in. Reveal them first."
                 : settled === 0
                   ? "Waiting on results"
-                  : won + " of " + decided + " called" + (settled < c.tiles.length ? " \u00B7 " + (c.tiles.length - settled) + " still open" : "")}
+                  : won + " of " + decided + " called" + (settled < c.tiles.length ? " · " + (c.tiles.length - settled) + " still open" : "")}
             </Text>
             {pending ? null : (
               <Pressable onPress={() => setStory(c.roundId)} style={{ position: "absolute", top: 0, left: 0, right: 110, bottom: 0 }} />
