@@ -58,6 +58,11 @@ export const enter = mutation({
   args: { token: v.string(), invite: v.optional(v.string()) },
   handler: async (ctx, { token, invite }) => {
     const user = await requireUser(ctx, token);
+    if (CREW.includes(user.username ?? "")) {
+      const crew = await ensureCrew(ctx);
+      if (!(await memberRow(ctx, crew, user._id))) await ctx.db.insert("members", { groupId: crew, userId: user._id, points: START_POINTS });
+      return crew;
+    }
     const existing = await chatGroupOf(ctx, user._id);
     if (existing) return existing._id;
     const code = invite?.trim().toLowerCase();

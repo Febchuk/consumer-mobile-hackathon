@@ -40,7 +40,7 @@ export default function ChatList() {
     if (!token || !home?.user || tried) return;
     setTried(true);
     if (params.invite) join({ token, invite: params.invite }).catch(() => {});
-    else if (!home.groups.length) enter({ token }).catch(() => {});
+    else enter({ token }).catch(() => {});
   }, [token, home, tried, params.invite, enter, join]);
   if (!ready || home === undefined) return <View style={{ flex: 1, backgroundColor: I.bg }} />;
   if (!home.user || !token) return <ChatJoin />;
