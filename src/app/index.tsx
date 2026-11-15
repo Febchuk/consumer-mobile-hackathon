@@ -1,12 +1,14 @@
-import { ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fmt } from "@/lib/time";
 import { LateTag } from "@/components/ui";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { Id } from "@convex/_generated/dataModel";
 import { useStableQuery } from "@/lib/use-stable-query";
 import { useIdentity } from "@/lib/identity";
-import { C, F } from "@/lib/theme";
+import { C, F, tnum } from "@/lib/theme";
 import { useNow, useQueryNow } from "@/lib/time";
 import { multiplier } from "@/lib/odds";
 import { Join } from "@/components/join";
@@ -14,6 +16,8 @@ import { DropHeader } from "@/components/drop-header";
 import { DropLands, useDropSeen } from "@/components/drop-lands";
 import { MarketCard } from "@/components/market-card";
 import { BottomTabs, Card, Flame, TickingNumber, Wordmark, s } from "@/components/ui";
+import { NetText, Scorecard, TileState, isResolved, tileOf, useRevealed } from "@/components/scorecard";
+import { RevealBanner, RevealStory } from "@/components/reveal-story";
 
 export default function Today() {
   const { token, ready } = useIdentity();
@@ -25,6 +29,7 @@ export default function Today() {
   const round = today?.round ?? null;
   const live = !!round && now >= round.opensAt;
   const drop = useDropSeen(live && today && today.bets.length > 0 ? round?._id : undefined);
+  const [story, setStory] = useState<Id<"rounds"> | null>(null);
 
   if (!ready || (token && me === undefined)) return <View style={s.screen} />;
   if (!token || me === null) return <Join />;
@@ -52,7 +57,7 @@ export default function Today() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
           <Text style={{ fontSize: 30 }}>{me.emoji}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: F.displaySemi, fontSize: 20, color: C.ink }}>{me.name}</Text>
+            <Text style={{ fontFamily: F.displaySemi, fontSize: 20, color: C.ink }}>@{me.name}</Text>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Flame n={streakShown} />
               <Text style={s.sub}>{mult > 1 ? "+" + Math.round((mult - 1) * 100) + "% on wins this drop" : "bet every drop to build a streak"}</Text>
@@ -64,7 +69,12 @@ export default function Today() {
           </View>
         </View>
 
+        <RevealBanner token={token} onOpen={setStory} />
+
         {today ? <DropHeader round={round} next={today.next} now={now} /> : null}
+        {live && round && today && today.bets.length > 0 ? (
+          <DropCard title={round.title} bets={today.bets} onOpen={() => setStory(round._id)} />
+        ) : null}
 
         {round && now >= round.opensAt ? today?.bets.map((m) => <MarketCard key={m._id} m={m} ctx={ctx} />) : null}
         {today && today.waiting.length > 0 ? (
@@ -100,6 +110,61 @@ export default function Today() {
         ) : null}
       </ScrollView>
       <BottomTabs />
+      {story ? <RevealStory token={token} roundId={story} onClose={() => setStory(null)} /> : null}
     </View>
+  );
+}
+
+type DropBet = {
+  _id: string;
+  status: string;
+  winningOption?: number;
+  mine: { option: number; amount: number; payout?: number }[];
+};
+
+function DropCard({ title, bets, onOpen }: { title: string; bets: DropBet[]; onOpen: () => void }) {
+  const revealed = useRevealed();
+  const shown = bets.map((b) => isResolved(b.status) && !!revealed?.has(b._id));
+  const tiles: TileState[] = bets.map((b, i) =>
+    isResolved(b.status) && !shown[i] ? "hidden" : tileOf(b.status, b.winningOption, b.mine[0]?.option),
+  );
+  const settled = bets.filter((b) => isResolved(b.status)).length;
+  const waiting = shown.filter((v, i) => !v && isResolved(bets[i].status)).length;
+  const counted = bets.filter((b, i) => shown[i] && b.mine.length > 0 && b.mine.every((m) => m.payout !== undefined));
+  const net = counted.reduce(
+    (a, b) => a + (b.status === "refunded" ? 0 : b.mine.reduce((x, m) => x + (m.payout ?? 0) - m.amount, 0)),
+    0,
+  );
+  return (
+    <Pressable
+      disabled={settled === 0}
+      onPress={onOpen}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 18,
+        borderWidth: 1.5,
+        borderColor: C.line,
+        transform: [{ scale: pressed ? 0.98 : 1 }],
+      })}
+    >
+      <Scorecard tiles={tiles} size={32} gap={5} />
+      <View style={{ flex: 1, alignItems: "flex-end", gap: 1 }}>
+        {counted.length > 0 ? (
+          <NetText net={net} size={20} />
+        ) : (
+          <Text style={[{ fontFamily: F.monoBold, fontSize: 20, color: C.ink }, tnum]}>
+            {settled}
+            <Text style={{ color: C.faint }}>/{bets.length}</Text>
+          </Text>
+        )}
+        <Text style={[s.label, { fontSize: 10, color: waiting > 0 ? "#9A6B12" : C.sub }]} numberOfLines={1}>
+          {waiting > 0 ? "tap to reveal" : counted.length > 0 ? title + " so far" : "settled"}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
