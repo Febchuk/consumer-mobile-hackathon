@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@convex/_generated/api";
@@ -186,6 +186,9 @@ function Composer({ data, token }: { data: Data; token: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ai, setAi] = useState(false);
+  const suggest = useAction(api.ai.suggest);
+  const [live, setLive] = useState<{ subject: string; kind: Kind; question: string; line?: number; options?: string[]; why: string }[] | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [ideas, setIdeas] = useState(false);
   const closed = data.group.revealed;
   const pickIdea = (d: Draft) => {
@@ -240,8 +243,41 @@ function Composer({ data, token }: { data: Data; token: string }) {
             {ai ? <Text style={t(12, "500", I.secondary)}>Created by AI · edit anything</Text> : null}
           </View>
           {ideas ? (
-            <ScrollView style={{ maxHeight: 330 }} keyboardShouldPersistTaps="handled">
-              <Suggestions members={data.members} meId={data.me._id} onPick={pickIdea} />
+            <ScrollView style={{ maxHeight: 330 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 6 }}>
+              <Pressable
+                disabled={drafting}
+                onPress={async () => {
+                  setDrafting(true);
+                  setErr(null);
+                  try {
+                    setLive(await suggest({ token, groupId: data.group._id }));
+                  } catch (e) {
+                    setErr(String((e as { data?: string }).data ?? (e as Error).message));
+                  } finally {
+                    setDrafting(false);
+                  }
+                }}
+                style={{ alignSelf: "flex-start", paddingHorizontal: 11, paddingVertical: 6, borderRadius: 99, backgroundColor: "#F3E8FA" }}
+              >
+                <Text style={t(13, "600", I.purple)}>{drafting ? "Reading what you shared…" : live ? "✦ Draft fresh ones" : "✦ Draft live with AI from the shared chat"}</Text>
+              </Pressable>
+              {live?.map((d, i) => {
+                const who = data.members.find((m) => m.name === d.subject);
+                return (
+                  <Pressable
+                    key={i}
+                    onPress={() => who && pickIdea({ subjectId: who._id, kind: d.kind, question: d.question, line: d.line, options: d.options })}
+                    style={{ backgroundColor: "#fff", borderRadius: 12, borderWidth: 0.5, borderColor: I.sep, padding: 10, gap: 3 }}
+                  >
+                    <Text style={t(12, "600", I.secondary)}>
+                      {who?.emoji} {d.subject} · {d.kind === "yesno" ? "Yes / No" : d.kind === "overunder" ? "Over / Under " + d.line : d.options?.join(" vs ")}
+                    </Text>
+                    <Text style={t(15, "600")}>{d.question}</Text>
+                    <Text style={t(12, "400", I.purple)}>Why this bet? {d.why}</Text>
+                  </Pressable>
+                );
+              })}
+              {live ? null : <Suggestions members={data.members} meId={data.me._id} onPick={pickIdea} />}
             </ScrollView>
           ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }} keyboardShouldPersistTaps="handled">
