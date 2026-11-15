@@ -55,3 +55,19 @@ export async function nextRound(ctx: QueryCtx, now: number) {
     .order("asc")
     .first();
 }
+
+export async function previousRound(ctx: QueryCtx, round: Doc<"rounds">) {
+  return await ctx.db
+    .query("rounds")
+    .withIndex("by_opensAt", (q) => q.lt("opensAt", round.opensAt))
+    .order("desc")
+    .first();
+}
+
+export async function streakFor(ctx: QueryCtx, user: Doc<"users">, round: Doc<"rounds"> | null) {
+  if (!round || !user.lastRoundId) return { shown: 0, next: 1 };
+  if (user.lastRoundId === round._id) return { shown: user.streak, next: user.streak };
+  const prev = await previousRound(ctx, round);
+  if (prev && user.lastRoundId === prev._id) return { shown: user.streak, next: user.streak + 1 };
+  return { shown: 0, next: 1 };
+}

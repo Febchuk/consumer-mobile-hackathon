@@ -27,14 +27,8 @@ export default function Today() {
   if (!me) return <View style={s.screen} />;
   if (live && round && drop.show) return <DropLands round={round} count={today?.bets.length ?? 0} now={now} onDone={drop.markSeen} />;
 
-  const nextStreak =
-    round && me.lastRoundNumber === round.number
-      ? me.streak
-      : round && me.lastRoundNumber === round.number - 1
-        ? me.streak + 1
-        : 1;
-  const mult = multiplier(nextStreak);
-  const streakShown = round && me.lastRoundNumber !== undefined && me.lastRoundNumber >= round.number - 1 ? me.streak : 0;
+  const mult = multiplier(today?.streak.next ?? 1);
+  const streakShown = today?.streak.shown ?? 0;
   const ctx = {
     token,
     points: me.points,

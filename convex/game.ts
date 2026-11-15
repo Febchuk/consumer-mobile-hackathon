@@ -10,6 +10,8 @@ import {
   requireUser,
   userByToken,
   multiplier,
+  streakFor,
+  previousRound,
 } from "./lib";
 
 export const today = query({
@@ -18,7 +20,9 @@ export const today = query({
     const user = await userByToken(ctx, token);
     const round = await currentRound(ctx, now);
     const upcoming = await nextRound(ctx, now);
-    if (!round) return { round: null, next: upcoming, bets: [], players: (await ctx.db.query("users").collect()).length };
+    const players = (await ctx.db.query("users").collect()).length;
+    const streak = user ? await streakFor(ctx, user, round) : { shown: 0, next: 1 };
+    if (!round) return { round: null, next: upcoming, bets: [], players, streak };
     const bets = (
       await ctx.db
         .query("bets")
@@ -56,8 +60,7 @@ export const today = query({
         };
       }),
     );
-    const players = (await ctx.db.query("users").collect()).length;
-    return { round, next: upcoming, bets: withTicks, players };
+    return { round, next: upcoming, bets: withTicks, players, streak };
   },
 });
 
@@ -82,17 +85,15 @@ export const placeStake = mutation({
     if (prior && prior.option !== option)
       throw new ConvexError("You already called " + bet.options[prior.option] + ". You can only add to that side.");
     const amt = Math.floor(amount);
-    if (amt < 1) throw new ConvexError("Stake at least 1 point");
+    if (!Number.isFinite(amt) || amt < 1) throw new ConvexError("Stake at least 1 point");
     if (amt > user.points) throw new ConvexError("Not enough points");
 
-    let streak = user.streak;
-    if (user.lastRoundNumber !== round.number) {
-      streak = user.lastRoundNumber === round.number - 1 ? user.streak + 1 : 1;
-    }
+    const streak = (await streakFor(ctx, user, round)).next;
     await ctx.db.patch(user._id, {
       points: user.points - amt,
       streak,
       lastRoundNumber: round.number,
+      lastRoundId: round._id,
       lastSeen: now,
     });
     const pools = bet.pools.map((p, i) => (i === option ? p + amt : p));
@@ -122,13 +123,12 @@ export const leaderboard = query({
           .collect()
       : [];
     const open = roundStakes.filter((s) => s.payout === undefined);
+    const prev = round ? await previousRound(ctx, round) : null;
     return users.map((u) => {
       const mine = roundStakes.filter((s) => s.userId === u._id);
       const live = open.filter((s) => s.userId === u._id).reduce((a, s) => a + s.amount, 0);
       const streakAlive =
-        u.lastRoundNumber !== undefined &&
-        round !== null &&
-        u.lastRoundNumber >= round.number - 1;
+        round !== null && u.lastRoundId !== undefined && (u.lastRoundId === round._id || u.lastRoundId === prev?._id);
       return {
         _id: u._id,
         name: u.name,

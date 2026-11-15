@@ -9,6 +9,7 @@ export default defineSchema({
     points: v.number(),
     streak: v.number(),
     lastRoundNumber: v.optional(v.number()),
+    lastRoundId: v.optional(v.id("rounds")),
     lastSeen: v.number(),
   })
     .index("by_token", ["token"])
