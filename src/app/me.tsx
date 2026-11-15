@@ -1,5 +1,6 @@
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { useQuery } from "convex/react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@convex/_generated/api";
 import { useIdentity } from "@/lib/identity";
 import { fmt } from "@/lib/time";
@@ -7,6 +8,7 @@ import { BottomTabs, Card, Flame, LateTag, Wordmark, s } from "@/components/ui";
 import { C, F, tnum } from "@/lib/theme";
 
 export default function Me() {
+  const insets = useSafeAreaInsets();
   const { token, setToken } = useIdentity();
   const me = useQuery(api.users.me, { token: token ?? undefined });
   const history = useQuery(api.game.myHistory, { token: token ?? undefined });
@@ -14,7 +16,7 @@ export default function Me() {
   const called = settled.filter((h) => h.won).length;
   return (
     <View style={s.screen}>
-      <ScrollView contentContainerStyle={[s.column, { paddingTop: 20, paddingBottom: 120, gap: 14 }]}>
+      <ScrollView contentContainerStyle={[s.column, { paddingTop: insets.top + 14, paddingBottom: 120, gap: 14 }]}>
         <Wordmark size={22} />
         {me ? (
           <Card style={{ alignItems: "center", gap: 8 }}>

@@ -1,4 +1,7 @@
-import { ScrollView, Text, View, Pressable } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { fmt } from "@/lib/time";
+import { LateTag } from "@/components/ui";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStableQuery } from "@/lib/use-stable-query";
@@ -14,12 +17,13 @@ import { BottomTabs, Card, Flame, TickingNumber, Wordmark, s } from "@/component
 
 export default function Today() {
   const { token, ready } = useIdentity();
+  const insets = useSafeAreaInsets();
   const qnow = useQueryNow();
   const now = useNow();
   const me = useQuery(api.users.me, { token: token ?? undefined });
   const today = useStableQuery(api.game.today, { token: token ?? undefined, now: qnow });
   const round = today?.round ?? null;
-  const live = !!round && now >= round.opensAt && now < round.locksAt;
+  const live = !!round && now >= round.opensAt;
   const drop = useDropSeen(live && today && today.bets.length > 0 ? round?._id : undefined);
 
   if (!ready || (token && me === undefined)) return <View style={s.screen} />;
@@ -34,14 +38,14 @@ export default function Today() {
     points: me.points,
     mult,
     roundStart: round?.opensAt ?? 0,
-    roundLock: round?.locksAt ?? 0,
+    roundLock: today?.next?.opensAt ?? (round ? round.opensAt + 3600000 : 0),
     now,
     late: !!round && now - round.opensAt > 10 * 60 * 1000,
   };
 
   return (
     <View style={s.screen}>
-      <ScrollView contentContainerStyle={[s.column, { paddingTop: 20, paddingBottom: 120, gap: 14 }]}>
+      <ScrollView contentContainerStyle={[s.column, { paddingTop: insets.top + 14, paddingBottom: 120, gap: 14 }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Wordmark size={22} />
         </View>
@@ -63,6 +67,22 @@ export default function Today() {
         {today ? <DropHeader round={round} next={today.next} now={now} /> : null}
 
         {round && now >= round.opensAt ? today?.bets.map((m) => <MarketCard key={m._id} m={m} ctx={ctx} />) : null}
+        {today && today.waiting.length > 0 ? (
+          <Card style={{ gap: 8 }}>
+            <Text style={s.label}>Waiting on results</Text>
+            {today.waiting.map((w) => (
+              <View key={w._id} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={[s.body, { flex: 1 }]} numberOfLines={1}>
+                  {w.question}
+                </Text>
+                {w.late ? <LateTag /> : null}
+                <Text style={[s.sub, { fontFamily: F.mono }]}>
+                  {fmt(w.amount)} on {w.pick}
+                </Text>
+              </View>
+            ))}
+          </Card>
+        ) : null}
         {live && today?.bets.length === 0 ? (
           <Card>
             <Text style={s.body}>Bets for this drop are on their way.</Text>
@@ -74,7 +94,7 @@ export default function Today() {
             <Text style={[s.body, { color: C.sub, lineHeight: 22 }]}>
               Every hour a drop of bets lands for everyone at once. Pick a side and stake points. Winners split the whole pot by
               stake, so the long shot pays the most. Bet every drop to grow your streak: +10% on wins per drop in a row, up to 2x.
-              Picks after the first 10 minutes are tagged late. Betting locks at :50.
+              Picks after the first 10 minutes are tagged late. Bets stay open until the next drop.
             </Text>
           </Card>
         ) : null}

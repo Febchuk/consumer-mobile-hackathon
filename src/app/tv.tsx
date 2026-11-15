@@ -63,7 +63,7 @@ export default function TV() {
           <Wordmark size={wide ? 44 : 26} />
           {today ? <DropHeader round={round} next={today.next} now={now} big={wide} /> : null}
           {bets.length ? (
-            <BigBet m={bets[featured]} start={round!.opensAt} end={round!.locksAt} now={now} k={k} />
+            <BigBet m={bets[featured]} start={round!.opensAt} end={today?.next?.opensAt ?? round!.opensAt + 3600000} now={now} k={k} />
           ) : null}
           <View style={{ flexDirection: "row", gap: 14, flexWrap: "wrap" }}>
             {rest.map((m) => {

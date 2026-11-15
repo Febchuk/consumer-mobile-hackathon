@@ -22,7 +22,7 @@ export const today = query({
     const upcoming = await nextRound(ctx, now);
     const players = (await ctx.db.query("users").collect()).length;
     const streak = user ? await streakFor(ctx, user, round) : { shown: 0, next: 1 };
-    if (!round) return { round: null, next: upcoming, bets: [], players, streak };
+    if (!round) return { round: null, next: upcoming, bets: [], players, streak, waiting: [] };
     const bets = (
       await ctx.db
         .query("bets")
@@ -49,7 +49,7 @@ export const today = query({
           .collect();
         return {
           ...bet,
-          locked: betLocked(bet, round, now),
+          locked: bet.status !== "open",
           pct: percents(bet.pools),
           total: bet.pools.reduce((a, b) => a + b, 0),
           bettors: new Set(stakes.map((s) => s.userId)).size,
@@ -60,7 +60,21 @@ export const today = query({
         };
       }),
     );
-    return { round, next: upcoming, bets: withTicks, players, streak };
+    const waiting = user
+      ? await Promise.all(
+          (
+            await ctx.db
+              .query("stakes")
+              .withIndex("by_user", (q) => q.eq("userId", user._id))
+              .filter((q) => q.and(q.eq(q.field("payout"), undefined), q.neq(q.field("roundId"), round._id)))
+              .collect()
+          ).map(async (s) => {
+            const bet = await ctx.db.get(s.betId);
+            return { _id: s._id, question: bet?.question ?? "", pick: bet?.options[s.option] ?? "", amount: s.amount, late: s.late };
+          }),
+        )
+      : [];
+    return { round, next: upcoming, bets: withTicks, players, streak, waiting };
   },
 });
 
@@ -74,7 +88,7 @@ export const placeStake = mutation({
     if (!round) throw new ConvexError("Round not found");
     const now = Date.now();
     if (now < round.opensAt) throw new ConvexError("Not open yet");
-    if (betLocked(bet, round, now)) throw new ConvexError("Betting is locked");
+    if (await betLocked(ctx, bet, round, now)) throw new ConvexError("Betting is locked");
     if (!Number.isInteger(option) || option < 0 || option >= bet.options.length)
       throw new ConvexError("Bad pick");
     const prior = await ctx.db

@@ -251,6 +251,25 @@ export const seed = internalMutation({
   },
 });
 
+export const seedBets = internalMutation({
+  args: {
+    opensAt: v.number(),
+    bets: v.array(v.object({ question: v.string(), kind, line: v.optional(v.number()) })),
+  },
+  handler: async (ctx, { opensAt, bets }) => {
+    const roundId = await ensureRound(ctx, opensAt);
+    const existing = await ctx.db
+      .query("bets")
+      .withIndex("by_round", (q) => q.eq("roundId", roundId))
+      .collect();
+    for (const b of bets) {
+      if (existing.some((e) => e.question === b.question)) continue;
+      await insertBet(ctx, roundId, b.question, b.kind, b.line);
+    }
+    return roundId;
+  },
+});
+
 export const testRound = internalMutation({
   args: {},
   handler: async (ctx) => {

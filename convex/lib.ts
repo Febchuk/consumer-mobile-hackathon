@@ -36,16 +36,37 @@ export function requireAdmin(passcode: string) {
   if (!expected || passcode !== expected) throw new ConvexError("Wrong passcode");
 }
 
-export function betLocked(bet: Doc<"bets">, round: Doc<"rounds">, now: number) {
-  return bet.status !== "open" || now >= round.locksAt;
+async function hasBets(ctx: QueryCtx, roundId: Doc<"rounds">["_id"]) {
+  const bets = await ctx.db
+    .query("bets")
+    .withIndex("by_round", (q) => q.eq("roundId", roundId))
+    .collect();
+  return bets.some((b) => !b.hidden);
+}
+
+export async function supersededAt(ctx: QueryCtx, round: Doc<"rounds">, now: number) {
+  const later = await ctx.db
+    .query("rounds")
+    .withIndex("by_opensAt", (q) => q.gt("opensAt", round.opensAt).lte("opensAt", now))
+    .order("asc")
+    .collect();
+  for (const r of later) if (await hasBets(ctx, r._id)) return r.opensAt;
+  return null;
+}
+
+export async function betLocked(ctx: QueryCtx, bet: Doc<"bets">, round: Doc<"rounds">, now: number) {
+  if (bet.status !== "open") return true;
+  return (await supersededAt(ctx, round, now)) !== null;
 }
 
 export async function currentRound(ctx: QueryCtx, now: number) {
-  return await ctx.db
+  const opened = await ctx.db
     .query("rounds")
     .withIndex("by_opensAt", (q) => q.lte("opensAt", now))
     .order("desc")
-    .first();
+    .take(24);
+  for (const r of opened) if (await hasBets(ctx, r._id)) return r;
+  return opened[0] ?? null;
 }
 
 export async function nextRound(ctx: QueryCtx, now: number) {

@@ -5,7 +5,7 @@ import { C, F, tnum } from "@/lib/theme";
 import { clock, hourLabel } from "@/lib/time";
 import { Button, Wordmark, s } from "./ui";
 
-type Round = { _id: string; title: string; opensAt: number; locksAt: number };
+type Round = { _id: string; title: string; opensAt: number };
 
 export function useDropSeen(roundId: string | undefined) {
   const [seen, setSeen] = useState<string | null | undefined>(undefined);
@@ -21,6 +21,7 @@ export function useDropSeen(roundId: string | undefined) {
 }
 
 export function DropLands({ round, count, now, onDone }: { round: Round; count: number; now: number; onDone: () => void }) {
+  const nextAt = round.opensAt + 60 * 60 * 1000;
   const onTimeLeft = round.opensAt + 10 * 60 * 1000 - now;
   const late = onTimeLeft <= 0;
   return (
@@ -49,10 +50,10 @@ export function DropLands({ round, count, now, onDone }: { round: Round; count: 
         }}
       >
         <Text style={[{ fontFamily: F.monoBold, fontSize: 64, color: late ? "#9A6B12" : C.yes, letterSpacing: -2 }, tnum]}>
-          {late ? clock(round.locksAt - now) : clock(onTimeLeft)}
+          {late ? clock(Math.max(0, nextAt - now)) : clock(onTimeLeft)}
         </Text>
         <Text style={[s.sub, { color: late ? "#9A6B12" : C.yes, fontFamily: F.bodyBold }]}>
-          {late ? "left before lock · picks now tagged LATE" : "left to bet on time · locks at " + hourLabel(round.locksAt)}
+          {late ? "until the next drop · picks now tagged LATE" : "left to bet on time · open until the next drop"}
         </Text>
       </View>
       <Button label="See the bets" onPress={onDone} color={C.ink} style={{ alignSelf: "center", paddingHorizontal: 40 }} />

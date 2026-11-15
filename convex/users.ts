@@ -7,6 +7,7 @@ export const join = mutation({
   handler: async (ctx, { name, emoji, token }) => {
     const clean = name.trim().slice(0, 20);
     if (!clean) throw new ConvexError("Pick a name");
+    if (!isSingleEmoji(emoji)) throw new ConvexError("Pick one emoji");
     const existing = await userByToken(ctx, token);
     const lower = clean.toLowerCase();
     const clash = (await ctx.db.query("users").collect()).find(
@@ -45,3 +46,11 @@ export const ping = mutation({
     await ctx.db.patch(user._id, { lastSeen: Date.now() });
   },
 });
+
+export function isSingleEmoji(s: string) {
+  const t = s.trim();
+  if (!t) return false;
+  const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  if ([...seg.segment(t)].length !== 1) return false;
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(t);
+}

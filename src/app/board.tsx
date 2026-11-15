@@ -1,5 +1,6 @@
 import { ScrollView, Text, View } from "react-native";
 import { useQuery } from "convex/react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@convex/_generated/api";
 import { useStableQuery } from "@/lib/use-stable-query";
 import { useIdentity } from "@/lib/identity";
@@ -9,6 +10,7 @@ import { BottomTabs, Wordmark, s } from "@/components/ui";
 import { C, F, tnum } from "@/lib/theme";
 
 export default function Board() {
+  const insets = useSafeAreaInsets();
   const { token } = useIdentity();
   const qnow = useQueryNow();
   const rows = useStableQuery(api.game.leaderboard, { now: qnow });
@@ -16,7 +18,7 @@ export default function Board() {
   const idx = rows && me ? rows.findIndex((r) => r._id === me._id) : -1;
   return (
     <View style={s.screen}>
-      <ScrollView contentContainerStyle={[s.column, { paddingTop: 20, paddingBottom: 180, gap: 14 }]}>
+      <ScrollView contentContainerStyle={[s.column, { paddingTop: insets.top + 14, paddingBottom: 180, gap: 14 }]}>
         <Wordmark size={22} />
         <Text style={s.h1}>Board</Text>
         <Text style={[s.sub, { marginTop: -8 }]}>Live = points riding on this drop. Late = picked after the first 10 minutes.</Text>

@@ -3,10 +3,11 @@ import { Pressable, Text, TextInput, View, ScrollView } from "react-native";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { newToken, useIdentity } from "@/lib/identity";
+import { isSingleEmoji, lastGrapheme } from "@/lib/emoji";
 import { C, F } from "@/lib/theme";
 import { Button, Card, Wordmark, s } from "./ui";
 
-const EMOJIS = ["🦊", "🐸", "🦄", "🐙", "🦖", "🐝", "🍕", "🌶️", "🎲", "🛸", "🧃", "🪩", "🐢", "🦩", "👾", "🥨"];
+const EMOJIS = ["🦊", "🐸", "🦖", "🍕", "🛸", "🪩", "👾", "🥨"];
 
 export function Join() {
   const join = useMutation(api.users.join);
@@ -17,6 +18,10 @@ export function Join() {
   const [err, setErr] = useState<string | null>(null);
   const submit = async () => {
     if (!name.trim() || busy) return;
+    if (!isSingleEmoji(emoji)) {
+      setErr("Pick one emoji for your face");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -47,7 +52,6 @@ export function Join() {
           placeholder="e.g. Mikun"
           placeholderTextColor={C.faint}
           maxLength={20}
-          autoFocus
           onSubmitEditing={submit}
           style={{
             fontFamily: F.bodyMed,
@@ -59,25 +63,41 @@ export function Join() {
             paddingVertical: 12,
           }}
         />
-        <Text style={s.label}>Pick your face</Text>
+        <Text style={s.label}>Your face · any emoji</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <TextInput
+            value={emoji}
+            onChangeText={(t) => setEmoji(t ? lastGrapheme(t) : "")}
+            placeholder="🙂"
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              textAlign: "center",
+              fontSize: 34,
+              backgroundColor: isSingleEmoji(emoji) ? C.goldSoft : C.paper,
+              borderWidth: 2,
+              borderColor: isSingleEmoji(emoji) ? C.gold : C.line,
+            }}
+          />
+          <Text style={[s.sub, { flex: 1 }]}>Tap the box and pick anything from your emoji keyboard, or grab one:</Text>
+        </View>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {EMOJIS.map((e) => (
             <Pressable
               key={e}
               onPress={() => setEmoji(e)}
               style={({ pressed }) => ({
-                width: 48,
-                height: 48,
-                borderRadius: 12,
+                width: 40,
+                height: 40,
+                borderRadius: 10,
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: emoji === e ? C.goldSoft : C.paper,
-                borderWidth: 2,
-                borderColor: emoji === e ? C.gold : "transparent",
-                transform: [{ scale: pressed ? 0.9 : emoji === e ? 1.06 : 1 }],
+                transform: [{ scale: pressed ? 0.9 : 1 }],
               })}
             >
-              <Text style={{ fontSize: 24 }}>{e}</Text>
+              <Text style={{ fontSize: 20 }}>{e}</Text>
             </Pressable>
           ))}
         </View>

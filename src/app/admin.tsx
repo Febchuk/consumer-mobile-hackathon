@@ -91,7 +91,7 @@ function AdminPanel({ passcode }: { passcode: string }) {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Text style={s.h2}>{r.title}</Text>
             <Text style={[s.sub, tnum]}>
-              opens {hourLabel(r.opensAt)} · locks {hourLabel(r.locksAt)}
+              opens {hourLabel(r.opensAt)}
             </Text>
             <View style={{ flex: 1 }} />
             <Button
@@ -101,13 +101,7 @@ function AdminPanel({ passcode }: { passcode: string }) {
               label="Open now"
               onPress={() => run(() => setTimes({ passcode, roundId: r._id, opensAt: Date.now(), locksAt: Date.now() + 50 * 60 * 1000 }))}
             />
-            <Button
-              small
-              color={C.noSoft}
-              textColor={C.no}
-              label="Lock now"
-              onPress={() => run(() => setTimes({ passcode, roundId: r._id, opensAt: r.opensAt, locksAt: Date.now() }))}
-            />
+
           </View>
           {r.bets.map((b) => (
             <BetAdmin key={b._id} bet={b} passcode={passcode} run={run} />

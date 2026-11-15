@@ -40,7 +40,7 @@ function multipleText(pools: number[], i: number, mult: number) {
 
 export function MarketCard({ m, ctx }: { m: Market; ctx: Ctx }) {
   const [sheet, setSheet] = useState<number | null>(null);
-  const locked = m.locked || ctx.now >= ctx.roundLock;
+  const locked = m.locked;
   const settled = m.status === "settled" || m.status === "refunded";
   const lead = m.status === "settled" && m.winningOption !== undefined ? m.winningOption : m.pct.indexOf(Math.max(...m.pct));
   const leadColor = locked && !settled ? C.sub : OPTION_COLORS[lead % 4].fg;
