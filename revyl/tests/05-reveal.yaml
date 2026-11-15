@@ -1,0 +1,26 @@
+test:
+  metadata:
+    name: called-it-reveal
+    platform: ios
+    tags:
+      - reveal
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  blocks:
+  # Precondition: a joined user with at least one settled bet (run called-it-admin-and-group-settle first).
+    - type: instructions
+      step_description: "Tap the \"Today\" tab."
+    - type: validation
+      step_description: "A \"results are in\" banner is visible on Today."
+    - type: instructions
+      step_description: "Tap the \"results are in\" banner."
+    - type: while
+      condition: "The reveal story is showing and the CALLED tiles scorecard is not yet visible"
+      body:
+        - type: instructions
+          step_description: "Tap the right side of the screen to advance the story."
+    - type: validation
+      step_description: "The CALLED tiles scorecard card is visible, summarising the player's calls."
