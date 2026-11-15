@@ -1,0 +1,32 @@
+test:
+  metadata:
+    name: called-it-chat-write-bet
+    platform: ios
+    tags:
+      - betting
+      - compose
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Precondition: inside the QA Pair chat before the reveal. Tip: tap the delete key once before typing into a field the keyboard covers.
+  blocks:
+    - type: instructions
+      step_description: "Tap the compose bar and type \"Will zz_qa_a finish the boba today?\"."
+    - type: validation
+      step_description: "The tray above the compose bar shows an About row of group members, the type switch (Yes / No, Over / Under, This or That), the \"I'm on\" row and stake chips."
+    - type: instructions
+      step_description: "In the About row, tap zz_qa_a."
+    - type: instructions
+      step_description: "Tap \"This or That\"."
+    - type: instructions
+      step_description: "Type \"Finishes it\" in the first label field and \"Leaves some\" in the second."
+    - type: instructions
+      step_description: "Tap the first side chip and the 50 stake chip."
+    - type: instructions
+      step_description: "Tap the blue send arrow."
+    - type: validation
+      step_description: "A blue bubble \"About zz_qa_a · Will zz_qa_a finish the boba today?\" appears with the stake \"1 in · 50 pts\"."
+    - type: validation
+      step_description: "A blue stake message \"50 on Finishes it · Will zz_qa_a finish the boba toda…\" appears under it, and the header points drop by 50."

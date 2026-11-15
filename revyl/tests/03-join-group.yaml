@@ -1,0 +1,24 @@
+test:
+  metadata:
+    name: called-it-chat-join-group
+    platform: ios
+    tags:
+      - smoke
+      - groups
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Test group: QA Pair, invite code qapair282.
+  blocks:
+    - type: instructions
+      step_description: "Tap \"Join\" at the top left."
+    - type: validation
+      step_description: "An \"Invite code\" field and a Join button appear."
+    - type: instructions
+      step_description: "Tap the invite code field and type \"qapair282\"."
+    - type: instructions
+      step_description: "Tap the Join button."
+    - type: validation
+      step_description: "The QA Pair group chat opens with the header \"QA Pair\", the player's points, and a compose bar reading \"Bet on someone…\"."

@@ -1,0 +1,30 @@
+test:
+  metadata:
+    name: called-it-chat-ai-idea
+    platform: ios
+    tags:
+      - ai
+      - compose
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Precondition: inside the QA Pair chat before the reveal.
+  blocks:
+    - type: instructions
+      step_description: "Tap the + button in the compose bar to open the tray."
+    - type: instructions
+      step_description: "Tap \"✦ Ideas from your chats\"."
+    - type: validation
+      step_description: "Idea cards appear under \"Suggested from what you shared · on-device\", each with a friend, a question and a \"Why this bet?\" reason."
+    - type: instructions
+      step_description: "Tap the first idea card."
+    - type: validation
+      step_description: "The compose bar is filled with the idea's question and the tray shows \"Created by AI · edit anything\"."
+    - type: instructions
+      step_description: "Tap the blue send arrow."
+    - type: validation
+      step_description: "The sent bet bubble is labelled \"AI · Created by AI\" above it (not the player's own name) and has a ✦ avatar."
+    - type: validation
+      step_description: "A blue stake message for the idea appears under the bubble."

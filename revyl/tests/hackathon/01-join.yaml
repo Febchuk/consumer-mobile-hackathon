@@ -1,0 +1,31 @@
+test:
+  metadata:
+    name: called-it-join
+    platform: ios
+    tags:
+      - smoke
+      - join
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # {{username}} must be unique per run, e.g. revyl_qa_1. Usernames starting with "revyl" are hidden from boards.
+  blocks:
+    - type: validation
+      step_description: "The Join screen shows the tiled CALLED IT wordmark, a PICK A @USERNAME field and a YOUR FACE emoji picker."
+    - type: instructions
+      step_description: "Tap the @username field and type \"{{username}}\"."
+    - type: instructions
+      step_description: "Tap an empty area above the card to dismiss the keyboard."
+    - type: instructions
+      step_description: "Tap the 🦖 emoji in the quick-pick row."
+    - type: instructions
+      step_description: "Tap the green \"Join with 1,000 points\" button."
+    - type: if
+      condition: "A full-screen \"Time to call it.\" drop announcement is showing"
+      then:
+        - type: instructions
+          step_description: "Tap \"SEE THE BETS\"."
+    - type: validation
+      step_description: "The Today screen is visible with @{{username}} in the header and 1,000 POINTS."

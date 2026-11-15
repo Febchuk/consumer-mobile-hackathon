@@ -1,6 +1,6 @@
 test:
   metadata:
-    name: called-it-join
+    name: called-it-chat-join
     platform: ios
     tags:
       - smoke
@@ -10,22 +10,19 @@ test:
   device:
     model: iPhone 16
     orientation: portrait
-  # {{username}} must be unique per run, e.g. revyl_qa_1. Usernames starting with "revyl" are hidden from boards.
+  # {{username}} must be unique per run, e.g. revyl_qa_2.
   blocks:
     - type: validation
-      step_description: "The Join screen shows the tiled CALLED IT wordmark, a PICK A @USERNAME field and a YOUR FACE emoji picker."
+      step_description: "The Join screen shows the CALLED IT wordmark, \"Your friends are already talking about you.\", a @username field and a dashed square emoji box."
     - type: instructions
       step_description: "Tap the @username field and type \"{{username}}\"."
     - type: instructions
-      step_description: "Tap an empty area above the card to dismiss the keyboard."
+      step_description: "Tap the dashed square emoji box, switch to the emoji keyboard and tap the 😎 emoji."
     - type: instructions
-      step_description: "Tap the 🦖 emoji in the quick-pick row."
-    - type: instructions
-      step_description: "Tap the green \"Join with 1,000 points\" button."
-    - type: if
-      condition: "A full-screen \"Time to call it.\" drop announcement is showing"
-      then:
-        - type: instructions
-          step_description: "Tap \"SEE THE BETS\"."
+      step_description: "Tap an empty area above the form to dismiss the keyboard."
     - type: validation
-      step_description: "The Today screen is visible with @{{username}} in the header and 1,000 POINTS."
+      step_description: "The \"I'm in\" button is enabled."
+    - type: instructions
+      step_description: "Tap \"I'm in\"."
+    - type: validation
+      step_description: "The \"Let Called It read the room.\" context screen is visible."

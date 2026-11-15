@@ -1,0 +1,32 @@
+test:
+  metadata:
+    name: called-it-chat-stake-sheet
+    platform: ios
+    tags:
+      - betting
+      - market
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Precondition: inside the QA Pair chat, with a bet bubble from another member.
+  blocks:
+    - type: instructions
+      step_description: "Tap another member's bet bubble (for example \"Does pack order dessert?\")."
+    - type: validation
+      step_description: "A market sheet opens with \"ABOUT … · FROM …\", the question, both side percentages, a price chart and a stake picker."
+    - type: instructions
+      step_description: "Tap the \"No\" side."
+    - type: instructions
+      step_description: "Make sure the 100 stake chip is selected."
+    - type: validation
+      step_description: "The main button reads \"Call it · 100 on No\"."
+    - type: instructions
+      step_description: "Tap \"Call it · 100 on No\"."
+    - type: validation
+      step_description: "The sheet's \"Who's on what\" list shows the player under No with 100."
+    - type: instructions
+      step_description: "Close the sheet by swiping it down."
+    - type: validation
+      step_description: "A blue stake message \"100 on No · Does pack order dessert?\" is in the chat and the header points dropped by 100."

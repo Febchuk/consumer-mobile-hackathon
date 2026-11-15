@@ -1,47 +1,64 @@
-# Revyl test run: Called It on iOS
+# Revyl test run v2: Called It friend-group chat app on iOS
 
-- **Date:** 2026-11-15, 2:48–3:01 PM PT
-- **Build:** 01M7GNX00SBHHDZD8ZR4Q6PDSF (Revyl version a0fbe8d0-e86d-4f58-b727-7c2598356548, commit a61ef74, Release simulator build)
+- **Date:** 2026-11-15, 3:35–3:47 PM PT
+- **Build:** 01M7GRRNEX1RSRDVYYJR0M39D2 (Revyl version 572d8008-5ece-4d5f-b5cd-f498b2e446cc, commit b2bd010, Release simulator build)
 - **Device:** Revyl cloud iPhone 16 (iOS simulator), portrait
-- **Test user:** `@revyl_qa_1` (🦖). Usernames starting with "revyl" are hidden from boards.
-- **Runner:** The tests below use Revyl's YAML format (`revyl/tests/*.yaml`). We had no Revyl API key, so `revyl test run` couldn't be used. Instead, each step was run by hand on the Revyl cloud iPhone through Capy's phone control, with a screenshot at every assertion.
+- **Test user:** `@revyl_qa_2` 😎, group "QA Pair" (invite code `qapair282`). The real group "Mikun, Febe & Jill" was not touched.
+- **Runner:** Revyl YAML tests in `revyl/tests/*.yaml`. We had no Revyl API key, so `revyl test run` was not used. Each step was run by hand on the Revyl cloud iPhone with Capy's phone control, with a screenshot at each assertion.
+- **Seeding:** Only Convex CLI calls against QA Pair: `chat:demoRevealAt` (reset the reveal 1 h ahead before the run, then to "now" for journey 8), `chat:createBet` from zz_qa_a about revyl_qa_2 (60 on Yes) and `chat:stake` from zz_qa_b (40 on No). No dev, deploy or publish.
 
 | # | Test | Result | Notes |
 |---|------|--------|-------|
-| 1 | called-it-join | PASS | Picked @revyl_qa_1 and 🦖, tapped Join, saw the "Time to call it." drop announcement, then landed on Today with 1,000 points. |
-| 2 | called-it-place-bet | PASS, with workaround | The market page opens. Staking from it is **blocked by a bug**: the amount resets to 100 every 10 s (details below). Staked 10 on YES for "Is dinner pizza tonight?" from the Today card's stake sheet instead. The card shows "You called YES · 10 · LATE, wins 19" and points went 1,000 → 990. |
-| 3 | called-it-board | PASS | "The Board" shows summary tiles and a ranked table (@febe, @mikunad, @febe_c35). The revyl user is hidden as designed. |
-| 4 | called-it-admin-and-group-settle | PASS | Opened `calledit://admin`, entered the admin passcode, and saw drops and their bets listed. Nothing was settled there. Then Me → created group "Revyl QA" → added "Revyl QA: does this test pass?" → staked 50 on Yes → tapped "Yes happened". The bet shows CALLED · YES · "You called YES · 50 +0". |
-| 5 | called-it-reveal | PASS | Today showed "Drop 1 results are in. Tap to reveal". The story went through 3 cards: the room's call, what happened, and the CALLED tiles card ("Clean sweep.", 1/1 called, "Copy my drop"). Done returned to Today and the banner was gone. |
+| 1 | called-it-chat-join | PASS | Typed revyl_qa_2, picked 😎 through the emoji keyboard, tapped "I'm in", landed on "Let Called It read the room." |
+| 2 | called-it-chat-context | PASS | Allowed Photos & screenshots, Continue → "Reading what you shared, on your phone…" → "Found 2 friends · 9 bet ideas" → See the bets → Groups list. |
+| 3 | called-it-chat-join-group | PASS | Join → qapair282 → QA Pair chat opened. |
+| 4 | called-it-chat-write-bet | PASS | Typed the question, picked zz_qa_a, "This or That", labels, the first side and 50, sent. Blue bubble plus "50 on Finishes i · Will zz_qa_a finish the boba toda…". Points 1,000 → 950. |
+| 5 | called-it-chat-ai-idea | PASS | "✦ Ideas from your chats" → picked the first card → tray showed "Created by AI · edit anything" → sent. The bubble is labelled **"AI · Created by AI"** with a ✦ avatar, not the player's name. |
+| 6 | called-it-chat-stake-sheet | PASS | Tapped another member's bubble → market sheet → No → "Call it · 100 on No". The sheet lists @you under No with 100, and the chat has the stake message. Points 900 → 800. |
+| 7 | called-it-chat-sealed-bet | PASS | Ink bubble showed only the "@revyl_qa_2" pill, the 🐙 🦊 bettor reactions, and "Unlocks at 5:00 · 2 friends are in". Tapping it did nothing. |
+| 8 | called-it-chat-reveal | PASS, with a gesture bug | Reveal set to now → header "The reveal is live. Rub the ink." → rubbed → bubble shows "About you" with 60% / 40% → tap → True / False sheet → True → chat shows "It was Yes. … 🦊 zz_qa_a +40". Rubbing with several quick swipes in a row popped back to the Groups list twice (bug 1). |
+| 9 | called-it-chat-group-details | PASS | Header tap → sheet with "6 people · invite code qapair282", dinner pot 830, ranked leaderboard (revyl_qa_2 (you) 800), "Riding on you: 1 bet · 2 friends in · 100 pts". |
 
-## Bugs found
+## Bugs and rough edges (iOS)
 
-1. **The market page stake amount resets every 10 s** (`src/app/bet/[id].tsx`). `useQueryNow()` changes the `now` arg every 10 s. `useQueries` then returns `undefined` while it refetches, so `{d ? <Body/> : null}` unmounts and remounts Body. That resets StakePanel's amount and side and closes the keyboard. You can't type a custom amount and confirm on the market page.
-2. **The iOS number pad covers the stake input and the "Call it" button** in the market page panel and the Today stake sheet. The number pad has no Done key, so the only way out is tapping the sheet title.
-3. **The Me screen keyboard covers the "New group" field and the Create button.** There's no keyboard avoidance, so you can't see what you type.
-4. **Admin screen:** the "Admin" title sits under the status bar (no top safe-area inset), and there's no way to navigate back to the app.
-5. **Reveal card copy mismatch:** it says "1 PLAYER · 50 PTS" but also "2 BETS PLACED" for a bet with a single stake.
+1. **Rub-to-reveal fights the native swipe-back gesture** (journey 8). Chained left-to-right swipes on the ink bubble triggered the stack's interactive pop and dropped me back to the Groups list twice. One swipe at a time worked. Disabling `gestureEnabled` on the chat route while the ink is rubbed would fix it.
+2. **Context screen: the "Apple on-device model · only bet text leaves your phone" pill runs off the right edge** on iPhone 16 (393 pt) on both the read and "All read." screens. The text is cut after "leaves your".
+3. **The market sheet stays open after "Call it"**. The stake lands (message and points update) but the sheet only closes by swiping it down.
+4. **Market sheet chart still says "reveal 5:00"** after the reveal has happened, and "Unlocks at 5:00" stays in the ink caption. These are fixed strings, not the group's real reveal time.
+5. **Tray typing:** the keyboard covers fields in the "This or That" tray. In my run, tapping the second label field after the first one's keyboard was up typed into the first field (layout shifts under the tap).
+6. "Found 2 friends" on the context screen names @mikunad and @febe, who are not in the test group (it looks like mocked demo data).
 
-## Screenshots (Capy file ids)
+No crashes. Fonts, ink texture, blue/grey bubbles and the AI ✦ avatar render correctly.
 
-The phone screenshots came back as Capy thread file ids, not files on disk. They're attached to the CONS-2 report.
+## Screenshots (Capy file ids; the phone only returns file ids)
 
-| Step | File id |
-|------|---------|
-| Join screen | file_01M7GPC3RVVMFAR5QTRGF6C1D3 |
-| Join filled in | file_01M7GPCNNFAM9EPV7MWHENDCZX |
-| Drop announcement | file_01M7GPCXKYCBG228S1VCXGT90B |
-| Today | file_01M7GPD8NM6A7WARMR8P4VGP1X |
-| Market page | file_01M7GPDN357DPNAZWWJA9JBBHK |
-| Stake sheet at 10 | file_01M7GPNACGFSYWPAJFYP16XFKT |
-| Position after stake | file_01M7GPP1RRFM8H826EZ3WYTNNB |
-| Board | file_01M7GPPCRJWNS86D73PT1PAZ2A |
-| Admin list | file_01M7GPQAKMCZM1F3VX62TW5EVW |
-| Me | file_01M7GPQRB47QT5VV0HASSGYX0C |
-| Group with bet | file_01M7GPZXAQJ0P0DXEB7JB1XHDB |
-| Group stake placed | file_01M7GQ0M4AE5PX05RJRHAT9H51 |
-| Group bet settled | file_01M7GQ0Z6S0YHDTX7ZGYEYZABW |
-| Results-are-in banner | file_01M7GQ1ZV2R4V17KS33NTWDTAB |
-| Reveal 1 | file_01M7GQ2DCD966XKH10DHJXRN01 |
-| Reveal 2 | file_01M7GQ2KV02C9HKRPNR4E5RK44 |
-| CALLED card | file_01M7GQ2TXYA8NSTFYE3FZAEP3E |
+| Journey | Step | File id |
+|---|---|---|
+| 1 | Join screen | file_01M7GS25ESE9P5Q1YV4V9AG97F |
+| 1 | Username and emoji filled | file_01M7GS3JJEW8816TMYW5S5CCG8 |
+| 1 | Context screen | file_01M7GS3ZWMY4BVQ6FEYWXQQ90G |
+| 2 | Photos allowed | file_01M7GS4JGBWE9QDPCBQBBSW5XK |
+| 2 | Reading… | file_01M7GS4W32KZCSSFJ4ZZKZJMNE |
+| 2 | Found 2 friends · 9 bet ideas | file_01M7GS52PVZFEVQY3Y36MF3ZY6 |
+| 2 | Groups list (empty) | file_01M7GS5E7HNQQEA9J5GE010FXX |
+| 3 | Invite code typed | file_01M7GS689V41ZJFKWC37RBSZKX |
+| 3 | QA Pair chat | file_01M7GS6EF0DTZRA8NWRZY7PJZ0 |
+| 4 | Tray open | file_01M7GS6XAAKVYT0FRGM694BD4N |
+| 4 | Bet composed | file_01M7GSAPZS3HHW6RB4E342EVJG |
+| 4 | Bet and stake sent | file_01M7GSAZWVK4D0AYJMFSFGMTYB |
+| 5 | Ideas cards | file_01M7GSBHFKEG4EGM158871GRQM |
+| 5 | Idea picked | file_01M7GSBSNQ6ZAJQXE2BFCQ4EWW |
+| 5 | AI bubble sent | file_01M7GSC6BV5FV3VC63W7P70MKX |
+| 6 | Market sheet | file_01M7GSCRVYPDJERAN3R2QVSTVJ |
+| 6 | No picked | file_01M7GSD2JP3CX1DJENNYZ3ANAR |
+| 6 | Staked | file_01M7GSD9PR6H5X3B5HKZSKMMNM |
+| 6 | Stake message in chat | file_01M7GSDRQYGMWHGPC726CZ22N5 |
+| 7 | Sealed ink bubble | file_01M7GSEZTTE2XYHJGWD498A9EF |
+| 7 | After tapping the ink | file_01M7GSFAS4AM82ZPD6291D7BE5 |
+| 8 | Reveal is live | file_01M7GSFQJ1B47AS02JRZZB51E3 |
+| 8 | Swipe-back bug (Groups list) | file_01M7GSGS1RFWV1WP5F3Q800J57 |
+| 8 | Ink rubbed away | file_01M7GSNWPWTRFAP3D5P0SKDMBY |
+| 8 | True / False sheet | file_01M7GSP5ET3M2FR6Q0AWYRYFYV |
+| 8 | True picked | file_01M7GSPK96JHS1MWDTY3RQMHYG |
+| 8 | "It was Yes" message | file_01M7GSPVW9JZ9D9VB0T07TSHCT |
+| 9 | Group details | file_01M7GSQ58MTQ6QPR116BQH12V6 |
