@@ -1,4 +1,5 @@
 import { makeFunctionReference } from "convex/server";
+import { makePng } from "../fixtures/png.mjs";
 import { CUTOFF, REVEAL } from "./fixture";
 import type { v0Fixture } from "./v0-fixture";
 
@@ -7,7 +8,7 @@ type Kind = "query" | "mutation" | "action";
 type Input = (f: V0Fixture, token: string) => Record<string, unknown>;
 type Case = { kind: Kind; args: Input };
 const request = (f: V0Fixture) => `${f.runId}_request`;
-export const pngBytes = () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]).buffer;
+export const pngBytes = () => makePng();
 
 export const contractCases: Record<string, Case> = {
   "v0Auth:requestCode": { kind: "action", args: (f) => ({ phone: f.actors.friend.phone, requestId: request(f) }) },

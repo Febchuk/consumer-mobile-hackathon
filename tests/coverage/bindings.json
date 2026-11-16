@@ -944,5 +944,128 @@
   "N3.leave-delete-suppression.B": [
     "N3.suppress-after-leave",
     "N3.suppress-after-delete"
+  ],
+  "SEC3.authenticated-media.B": [
+    "V0.proof.subject-upload-private-roundtrip",
+    "V0.proof.read-role.subject",
+    "V0.proof.read-role.alias",
+    "V0.proof.read-role.creator",
+    "V0.proof.read-role.friend",
+    "V0.proof.read-denied.outsider",
+    "V0.proof.read-denied.unadmittedAlias",
+    "V0.proof.read-denied.new",
+    "V0.proof.read-denied.left",
+    "V0.proof.read-denied.revoked",
+    "V0.proof.before-reveal.-600000",
+    "V0.proof.before-reveal.-1",
+    "V0.proof.voided-denied",
+    "V0.proof.revocation",
+    "V0.proof.leave.friend",
+    "V0.proof.leave.subject"
+  ],
+  "SEC5.bounded-suggest.B": [
+    "V0.suggestions.quota-reset"
+  ],
+  "J5.4.upload-owner.B": [
+    "V0.proof.subject-upload-private-roundtrip",
+    "V0.proof.idempotent-private-storage",
+    "V0.proof.upload-role.creator",
+    "V0.proof.upload-role.friend",
+    "V0.proof.upload-role.outsider",
+    "V0.proof.upload-role.unadmittedAlias",
+    "V0.proof.upload-role.new",
+    "V0.proof.upload-role.left",
+    "V0.proof.upload-role.revoked"
+  ],
+  "J5.4.read-auth.B": [
+    "V0.proof.subject-upload-private-roundtrip",
+    "V0.proof.read-role.subject",
+    "V0.proof.read-role.alias",
+    "V0.proof.read-role.creator",
+    "V0.proof.read-role.friend",
+    "V0.proof.read-denied.outsider",
+    "V0.proof.read-denied.unadmittedAlias",
+    "V0.proof.read-denied.new",
+    "V0.proof.read-denied.left",
+    "V0.proof.read-denied.revoked",
+    "V0.proof.revocation"
+  ],
+  "J5.4.delete-revoke.B": [
+    "V0.proof.delete-cascade",
+    "V0.proof.revocation",
+    "V0.proof.leave.friend",
+    "V0.proof.leave.subject"
+  ],
+  "J6.1.three-to-five.B": [
+    "V0.suggestions.safe-template-shape"
+  ],
+  "J6.1.subject-source.B": [
+    "V0.suggestions.safe-template-shape",
+    "V0.suggestions.history-scope-provenance",
+    "V0.suggestions.context-ranking"
+  ],
+  "J6.1.context-private.B": [
+    "V0.suggestions.safe-template-shape"
+  ],
+  "J6.3.blocked-topic.B": [
+    "V0.suggestions.blocked-topics.subject",
+    "V0.suggestions.blocked-topics.creator",
+    "V0.suggestions.no-safe-template",
+    "V0.manual.preferences"
+  ],
+  "J6.3.nonmember.B": [
+    "V0.suggestions.denied-role.outsider",
+    "V0.suggestions.denied-role.unadmittedAlias",
+    "V0.suggestions.denied-role.left",
+    "V0.suggestions.denied-role.new",
+    "V0.suggestions.cross-group-subject"
+  ],
+  "J6.3.manual-edit-filter.B": [
+    "V0.manual.safety.health",
+    "V0.manual.safety.appearance",
+    "V0.manual.safety.money",
+    "V0.manual.safety.relationship",
+    "V0.manual.safety.harassment",
+    "V0.manual.safety.fake-chat-source",
+    "V0.manual.safety.unsafe-context",
+    "V0.manual.safety.unsafe-option",
+    "V0.manual.safety.html",
+    "V0.manual.safety.contact",
+    "V0.manual.safety.control-character",
+    "V0.manual.safety.unicode-topic",
+    "V0.manual.safety.three-options",
+    "V0.manual.safety.duplicate-normalized-options",
+    "V0.manual.safety.unexpected-line",
+    "V0.manual.safety.long-context"
+  ],
+  "J6.3.self-subject-denied.B": [
+    "V0.suggestions.denied-role.subject",
+    "V0.suggestions.denied-role.alias"
+  ],
+  "J6.3.group-history.B": [
+    "V0.suggestions.history-scope-provenance",
+    "V0.suggestions.history-membership-window",
+    "V0.suggestions.blocked-history-creator",
+    "V0.suggestions.cross-group-subject"
+  ],
+  "J7.2.group-history.B": [
+    "V0.history-rejoin"
+  ],
+  "J7.3.aggregate.B": [
+    "V0.recap-read"
+  ],
+  "J9.2.no-old-history.B": [
+    "V0.history-rejoin"
+  ],
+  "N1.reveal.B": [
+    "V0.sweep-reveal-boundaries",
+    "V0.sweep-invalid-interval",
+    "N1.outbox-idempotency"
+  ],
+  "J5.1.one-reveal-push.B": [
+    "V0.sweep-reveal-boundaries",
+    "N1.outbox-idempotency",
+    "N1.concurrent-workers",
+    "N3.duplicate-lease"
   ]
 }
