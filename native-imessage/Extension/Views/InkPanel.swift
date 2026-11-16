@@ -2,8 +2,9 @@ import SwiftUI
 import UIKit
 
 struct InkNoise: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 15)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 15, paused: reduceMotion)) { timeline in
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.bubble))
                 var rng = SeededRandom(seed: UInt64(timeline.date.timeIntervalSinceReferenceDate * 15))
@@ -65,6 +66,7 @@ struct RubToReveal<Content: View>: View {
     @State private var size: CGSize = .zero
     @State private var pulse = false
     @State private var shine = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let cols = 20
     private let rows = 6
 
@@ -84,7 +86,8 @@ struct RubToReveal<Content: View>: View {
     private func reveal() {
         guard !uncovered else { return }
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-        withAnimation(.easeOut(duration: 0.35)) { uncovered = true }
+        if reduceMotion { uncovered = true }
+        else { withAnimation(.easeOut(duration: 0.35)) { uncovered = true } }
     }
 
     var body: some View {
@@ -129,6 +132,7 @@ struct RubToReveal<Content: View>: View {
                         }
                     }
                     .onAppear {
+                        guard !reduceMotion else { return }
                         withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
                         withAnimation(.easeInOut(duration: 1.8).delay(0.4).repeatForever(autoreverses: false)) { shine = true }
                     }
@@ -142,6 +146,11 @@ struct RubToReveal<Content: View>: View {
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { reveal() }
             }
+        }
+        if !uncovered {
+            Button("Reveal without rubbing") { reveal() }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("bet.revealWithoutRubbing")
         }
     }
 }
