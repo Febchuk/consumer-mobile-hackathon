@@ -89,11 +89,7 @@ struct NewBetView: View {
             Footnote(text: "The server checks safety for suggestions and your edits. After creation, you still tap Send yourself in Messages. A cancelled draft does not mean a delivered message.")
             ErrorText(text: error)
                 .task(id: group.id) {
-                    var calendar = Calendar(identifier: .gregorian)
-                    if let timezone = TimeZone(identifier: group.timezone) {
-                        calendar.timeZone = timezone
-                        if let next = calendar.nextDate(after: Date(), matching: DateComponents(hour: 20, minute: 0), matchingPolicy: .nextTime) { reveal = next }
-                    }
+                    if let next = RevealSchedule.nextDefault(in: group.timezone) { reveal = next }
                     await loadMembers(group.id)
                 }
                 .task(id: subjectID) {
