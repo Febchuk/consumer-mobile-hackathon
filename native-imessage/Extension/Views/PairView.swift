@@ -10,13 +10,13 @@ struct PairView: View {
     var body: some View {
         HStack(spacing: 10) {
             CIAvatar(size: 40)
-            Text("Sign in to Called It").font(.system(size: 28, weight: .bold))
+            Text("Sign in to Called It").font(.largeTitle.bold())
         }
         Text("On the web app, open your group, tap Details, then \"Pair iMessage app\". Type your account pairing code here. It proves who you are, works once and lasts 10 minutes. It is not a group invite code.")
-            .font(.system(size: 15)).foregroundStyle(Theme.sub)
+            .font(.subheadline).foregroundStyle(Theme.sub)
         CardBox {
             TextField("ABC123", text: $code)
-                .font(.system(size: 30, weight: .bold, design: .monospaced))
+                .font(.title.bold().monospaced())
                 .multilineTextAlignment(.center)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
@@ -39,7 +39,7 @@ struct PairView: View {
             .disabled(code.count != 6)
             .accessibilityIdentifier("pairButton")
         ErrorText(text: error)
-        Button("Open the web app") { model.openWeb() }.font(.system(size: 17))
+        Button("Open the web app") { model.openWeb() }.font(.body)
         Footnote(text: "Your sign-in stays in this device's Keychain. Called It never reads your messages or contacts.")
     }
 

@@ -43,7 +43,7 @@ struct Avatar: View {
                     .font(.system(size: size * 0.45, weight: .semibold))
                     .foregroundStyle(.white)
             } else {
-                Text(emoji ?? "?").font(.system(size: size * 0.5))
+                Image(systemName: "person.fill").font(.system(size: size * 0.45)).foregroundStyle(.white)
             }
         }
         .frame(width: size, height: size)
@@ -87,14 +87,14 @@ struct SheetHeader: View {
 
     var body: some View {
         ZStack {
-            Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(1).padding(.horizontal, 80)
+            Text(title).font(.headline).lineLimit(1).padding(.horizontal, 80)
             HStack {
-                if let leading { Button(leading) { leadingAction?() }.font(.system(size: 17)).foregroundStyle(Theme.accent) }
+                if let leading { Button(leading) { leadingAction?() }.font(.body).foregroundStyle(Theme.accent) }
                 Spacer()
                 if let trailing {
                     if let trailingAction {
                         Button(trailing, action: trailingAction)
-                            .font(.system(size: 17, weight: trailingBold ? .semibold : .regular))
+                            .font(.body.weight(trailingBold ? .semibold : .regular))
                             .foregroundStyle(Theme.accent)
                     } else {
                         Text(trailing).font(.subheadline).foregroundStyle(Theme.sub)
@@ -155,7 +155,7 @@ struct PrimaryButton: View {
                 Text(title).opacity(busy ? 0 : 1)
                 if busy { ProgressView().tint(.white) }
             }
-            .font(.system(size: 17, weight: .semibold))
+            .font(.headline)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(color))
             .foregroundStyle(.white)
@@ -172,7 +172,7 @@ struct SoftButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17))
+                .font(.body)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white))
                 .foregroundStyle(Theme.accent)
@@ -196,7 +196,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 13))
+            .font(.footnote)
             .foregroundStyle(Theme.sub)
             .padding(.leading, 16)
             .padding(.top, 6)
@@ -207,7 +207,7 @@ struct Footnote: View {
     let text: String
 
     var body: some View {
-        Text(text).font(.system(size: 13)).foregroundStyle(Theme.sub).padding(.horizontal, 16)
+        Text(text).font(.footnote).foregroundStyle(Theme.sub).padding(.horizontal, 16)
     }
 }
 
@@ -235,7 +235,7 @@ struct QuestionBubble: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 17))
+            .font(.body)
             .foregroundStyle(.primary)
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.bubble))

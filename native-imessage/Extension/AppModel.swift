@@ -20,8 +20,6 @@ final class AppModel: ObservableObject {
     @Published var linkedRoomId: String?
     @Published var error: String?
     @Published var pendingRoomId: String?
-    @Published var bubbleBetId: String?
-    @Published var bubbleSubject: String?
 
     weak var controller: MessagesViewController?
     private var conversationKey: String?
@@ -73,12 +71,6 @@ final class AppModel: ObservableObject {
         guard let url = message.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         let q = Dictionary((parts.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
         guard let room = q["r"], !room.isEmpty else { return }
-        if style == .transcript {
-            bubbleBetId = q["b"]
-            let caption = (message.layout as? MSMessageLiveLayout)?.alternateLayout.caption ?? (message.layout as? MSMessageTemplateLayout)?.caption
-            bubbleSubject = caption.map { $0.replacingOccurrences(of: "Bet about ", with: "") }
-            return
-        }
         pendingRoomId = room
         resolvePending()
         if let bet = q["b"], !bet.isEmpty {
@@ -168,7 +160,7 @@ enum Cards {
         layout.imageTitle = "Tap to open in Called It"
         layout.image = art(name: name)
         let message = MSMessage(session: session ?? MSSession())
-        message.layout = MSMessageLiveLayout(alternateLayout: layout)
+        message.layout = layout
         message.url = url(["r": roomId, "b": betId])
         message.summaryText = "Called It bet"
         message.accessibilityLabel = "Called It bet about \(name)"

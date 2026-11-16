@@ -7,9 +7,7 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if model.style == .transcript {
-                TranscriptBubble()
-            } else if model.style == .compact {
+            if model.style == .compact {
                 CompactView()
             } else {
                 ExpandedView()
@@ -58,7 +56,7 @@ struct HomeView: View {
         if let room = model.linkedRoom, let me = model.me {
             VStack(spacing: 6) {
                 AvatarStack(people: room.members.map { (name: $0.name, emoji: $0.emoji) }, size: 44)
-                Text(room.name).font(.system(size: 22, weight: .bold))
+                Text(room.name).font(.title2.bold())
                 Text("\(room.members.count) people · you're \(me.user.name)").font(.subheadline).foregroundStyle(Theme.sub)
             }
             .frame(maxWidth: .infinity)
@@ -129,14 +127,14 @@ struct RecentBets: View {
             if item.type == "sealed" {
                 CIAvatar(size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("A bet about you").font(.system(size: 15, weight: .semibold))
-                    Text((item.faces ?? []).map(\.name).joined(separator: ", ") + " bet").font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text("A bet about you").font(.subheadline.weight(.semibold))
+                    Text((item.faces ?? []).map(\.name).joined(separator: ", ") + " bet").font(.footnote).foregroundStyle(Theme.sub).lineLimit(1)
                 }
             } else {
                 Avatar(name: item.subject?.name, emoji: item.subject?.emoji, size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.question ?? "").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                    Text(odds(item)).font(.system(size: 13).monospacedDigit()).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text(item.question ?? "").font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(odds(item)).font(.footnote.monospacedDigit()).foregroundStyle(Theme.sub).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)

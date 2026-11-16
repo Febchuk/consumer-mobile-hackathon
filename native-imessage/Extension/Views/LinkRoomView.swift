@@ -8,7 +8,7 @@ struct LinkRoomView: View {
     @State private var error: String?
 
     var body: some View {
-        Text("Link this chat").font(.system(size: 28, weight: .bold))
+        Text("Link this chat").font(.largeTitle.bold())
         Footnote(text: "Pick the Called It group this conversation plays in. The link is saved on this device only. Called It can't see who's in this chat.")
         if model.notMemberOfPending {
             CardBox {
@@ -27,8 +27,8 @@ struct LinkRoomView: View {
                         InsetRow(last: index == rooms.count - 1) {
                             AvatarStack(people: room.members.map { (name: $0.name, emoji: nil) }, size: 28)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(room.name).font(.system(size: 17, weight: .semibold))
-                                Text("\(room.members.count) people").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                Text(room.name).font(.headline)
+                                Text("\(room.members.count) people").font(.footnote).foregroundStyle(Theme.sub)
                             }
                             Spacer()
                             if room.id == model.linkedRoomId {

@@ -11,21 +11,21 @@ struct BoardView: View {
         Group {
             SheetHeader(leading: "Back", leadingAction: { model.home() }, title: board?.room.name ?? "Board")
             if let board {
-                Text("Today's standings").font(.system(size: 28, weight: .bold))
+                Text("Today's standings").font(.largeTitle.bold())
                 InsetGroup {
                     ForEach(Array(board.rows.enumerated()), id: \.element.id) { index, row in
                         InsetRow(last: index == board.rows.count - 1) {
-                            Text("\(index + 1)").font(.system(size: 17, weight: .semibold).monospacedDigit()).foregroundStyle(Theme.sub).frame(width: 20)
+                            Text("\(index + 1)").font(.headline.monospacedDigit()).foregroundStyle(Theme.sub).frame(width: 20)
                             Avatar(name: row.name, size: 32)
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack(spacing: 6) {
-                                    Text(row.name).font(.system(size: 17, weight: index == 0 ? .semibold : .regular))
+                                    Text(row.name).font(.body.weight(index == 0 ? .semibold : .regular))
                                     if row.streak > 0 { Text("🔥\(row.streak)").font(.footnote.weight(.semibold)) }
                                 }
-                                Text("\(row.correct)/\(row.called) called").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                Text("\(row.correct)/\(row.called) called").font(.footnote).foregroundStyle(Theme.sub)
                             }
                             Spacer()
-                            Text(pts(row.points)).font(.system(size: 17, weight: .semibold).monospacedDigit())
+                            Text(pts(row.points)).font(.headline.monospacedDigit())
                         }
                     }
                 }

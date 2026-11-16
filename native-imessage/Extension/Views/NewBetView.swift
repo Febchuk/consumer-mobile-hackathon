@@ -131,8 +131,8 @@ struct NewBetView: View {
                     Button { apply(idea, friends: friends) } label: {
                         InsetRow(last: index == ideas.count - 1) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(idea.question).font(.system(size: 15, weight: .semibold)).multilineTextAlignment(.leading)
-                                if let why = idea.why { Text(why).font(.system(size: 13)).foregroundStyle(Theme.sub).multilineTextAlignment(.leading) }
+                                Text(idea.question).font(.subheadline.weight(.semibold)).multilineTextAlignment(.leading)
+                                if let why = idea.why { Text(why).font(.footnote).foregroundStyle(Theme.sub).multilineTextAlignment(.leading) }
                             }
                             Spacer()
                             Image(systemName: "plus.circle").foregroundStyle(Theme.accent)
