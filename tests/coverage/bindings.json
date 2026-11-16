@@ -961,7 +961,10 @@
     "V0.proof.voided-denied",
     "V0.proof.revocation",
     "V0.proof.leave.friend",
-    "V0.proof.leave.subject"
+    "V0.proof.leave.subject",
+    "V0.proof.reauthorize-mid-read.revoke",
+    "V0.proof.reauthorize-mid-read.leave",
+    "V0.proof.reauthorize-mid-read.delete"
   ],
   "SEC5.bounded-suggest.B": [
     "V0.suggestions.quota-reset"
@@ -988,13 +991,19 @@
     "V0.proof.read-denied.new",
     "V0.proof.read-denied.left",
     "V0.proof.read-denied.revoked",
-    "V0.proof.revocation"
+    "V0.proof.revocation",
+    "V0.proof.reauthorize-mid-read.revoke",
+    "V0.proof.reauthorize-mid-read.leave",
+    "V0.proof.reauthorize-mid-read.delete"
   ],
   "J5.4.delete-revoke.B": [
     "V0.proof.delete-cascade",
     "V0.proof.revocation",
     "V0.proof.leave.friend",
-    "V0.proof.leave.subject"
+    "V0.proof.leave.subject",
+    "V0.proof.reauthorize-mid-read.revoke",
+    "V0.proof.reauthorize-mid-read.leave",
+    "V0.proof.reauthorize-mid-read.delete"
   ],
   "J6.1.three-to-five.B": [
     "V0.suggestions.safe-template-shape"

@@ -189,4 +189,29 @@ describe("actual V0 private proof handlers with synthetic storage", () => {
     await expect(f.t.action(api.v0Proof.read, { token: f.actors.friend.token, proofId: created.id })).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
     await expect(f.t.action(api.v0Proof.read, { token: f.actors.subject.token, proofId: created.id })).rejects.toMatchObject({ data: { code: "AUTH_REQUIRED" } });
   });
+
+  for (const change of ["revoke", "leave", "delete"] as const) {
+    it(`[V0.proof.reauthorize-mid-read.${change}] rechecks real authorization after storage resolves and never returns stale bytes`, async () => {
+      const f = await v0Fixture();
+      vi.setSystemTime(REVEAL);
+      const created = await f.t.action(api.v0Proof.upload, upload(f));
+      const original = Blob.prototype.arrayBuffer;
+      let intercepted = false;
+      const storage = vi.spyOn(Blob.prototype, "arrayBuffer").mockImplementationOnce(async function (this: Blob) {
+        const bytes = await original.call(this);
+        intercepted = true;
+        if (change === "revoke") await f.t.mutation(api.v0Auth.revoke, { token: f.actors.friend.token, allDevices: false, requestId: `${f.runId}_mid_revoke` });
+        if (change === "leave") await f.t.mutation(api.v0Controls.leave, { token: f.actors.friend.token, groupId: f.g1, requestId: `${f.runId}_mid_leave` });
+        if (change === "delete") await f.t.mutation(api.v0Controls.deleteAccount, { token: f.actors.subject.token, requestId: `${f.runId}_mid_delete` });
+        return bytes;
+      });
+      try {
+        await expect(f.t.action(api.v0Proof.read, { token: f.actors.friend.token, proofId: created.id })).rejects.toMatchObject({ data: { code: change === "revoke" ? "AUTH_REQUIRED" : "NOT_AVAILABLE" } });
+        expect(intercepted).toBe(true);
+        expect(storage).toHaveBeenCalledTimes(1);
+      } finally {
+        storage.mockRestore();
+      }
+    });
+  }
 });
