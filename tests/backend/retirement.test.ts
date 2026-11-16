@@ -67,19 +67,38 @@ describe("Canonical checkpoint: retired public APIs fail closed", () => {
   }
 
   for (const role of ["anonymous", "creator", "friend", "subject", "outsider", "alias", "revoked", "new", "left"] as const) {
-    it(`[STATIC.hosting:serve.${role}] serves only the registered neutral static fixture, never a private bet`, async () => {
+    it(`[STATIC.hosting:serve.${role}] serves a neutral install landing and retires legacy content`, async () => {
       const f = await fixture();
       const text = "Called It · Get the app and open the original card in Messages";
       await f.t.run(async (ctx) => {
         const storageId = await ctx.storage.store(new Blob([text], { type: "text/html" }));
         await ctx.db.insert("assets", { path: "/index.html", storageId, contentType: "text/html", deployId: f.runId });
       });
-      for (const path of ["/", `/bet/${f.bet}`, `/c/${f.runId}`, "/unregistered-proof.png"]) {
+      let landing: string | undefined;
+      for (const path of ["/", `/c/${"a".repeat(64)}`, `/c/${"b".repeat(64)}`, `/bet/${f.bet}`, "/unregistered-proof.png"]) {
         const response = await f.t.fetch(path, { method: "GET", headers: role === "anonymous" ? {} : { Authorization: `Bearer ${f.actors[role].token}` } });
         const body = await response.text();
-        expect([200, 404]).toContain(response.status);
-        expect(body).toBe(response.status === 200 ? text : "Not found");
+        const supported = path === "/" || path.startsWith("/c/");
+        expect(response.status).toBe(supported ? 200 : 410);
+        expect(response.headers.get("Cache-Control")).toBe("no-store");
+        if (supported) {
+          expect(response.headers.get("Content-Type")).toContain("text/html");
+          expect(body).toContain("Get the app");
+          expect(body).toContain("<button disabled>");
+          expect(body).toContain("verified TestFlight invitation");
+          expect(body).toContain("tap the original card");
+          expect(body).not.toContain("<a href=");
+          expect(body).not.toContain(text);
+          expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+          expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+          landing ??= body;
+          expect(body).toBe(landing);
+        } else {
+          expect(response.headers.get("Content-Type")?.toLowerCase()).toContain("text/plain");
+          expect(body).toBe("This legacy web page is no longer available.");
+        }
         noPrivateValues(body, f.privateValues);
+        expect(body).not.toContain(f.runId);
       }
     });
   }
