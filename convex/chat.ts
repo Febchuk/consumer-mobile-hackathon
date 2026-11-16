@@ -120,7 +120,7 @@ export const home = query({
           }
         }
         const author = b.byAI ? "AI" : users.find((u) => u._id === b.createdBy)?.name ?? "someone";
-        const text = b.subjectUserId === user._id && now() < (g.revealAt ?? REVEAL_AT) ? author + ": 🔒 a bet about you" : author + ": " + b.question;
+        const text = b.subjectUserId === user._id && now() < betRevealAt(b, g) ? author + ": 🔒 a bet about you" : author + ": " + b.question;
         if (!last || b._creationTime > last.t) last = { t: b._creationTime, text };
       }
       groups.push({
