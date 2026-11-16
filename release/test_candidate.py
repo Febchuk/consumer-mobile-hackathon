@@ -2,12 +2,12 @@ import copy
 import datetime as dt
 import hashlib
 import json
-from pathlib import Path
 import plistlib
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
 
 import candidate
 

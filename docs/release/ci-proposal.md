@@ -9,9 +9,10 @@ Run with no deployment/provider/signing credentials, outbound provider network d
 ```sh
 python3 -m unittest discover -s release -p 'test_*.py' -v
 python3 -m py_compile release/candidate.py release/test_candidate.py
+uvx ruff check --target-version py310 release/
 ```
 
-The example config must fail validation; do not turn missing values into permissive defaults. Integrator supplies the actual root lint/backend test script names. Baseline lacks lint configuration; `expo lint` may install/generate it, so do not run that auto-setup as an unattended read-only check. Root owner must configure it deliberately. No test command may call `deploy:convex` or inherit the production key. Pin release tests to the candidate revision and include negative tests for profile mismatch, sandbox APNs, fixture flag, endpoint mismatch, missing shared groups and credential stripping.
+The explicit Ruff target preserves the documented Python 3.10 minimum; `datetime.UTC` is Python 3.11+, so automatic modernization to that alias is inappropriate here. No lint rules are disabled by the target flag. The example config must fail validation; do not turn missing values into permissive defaults. Integrator supplies the actual root lint/backend test script names. Baseline lacks lint configuration; `expo lint` may install/generate it, so do not run that auto-setup as an unattended read-only check. Root owner must configure it deliberately. No test command may call `deploy:convex` or inherit the production key. Pin release tests to the candidate revision and include negative tests for profile mismatch, sandbox APNs, fixture flag, endpoint mismatch, missing shared groups and credential stripping.
 
 ## Controlled Mac test lane
 
