@@ -22,6 +22,7 @@ settings:
     Debug:
       DEVELOPMENT_TEAM: 6555P5TAV6
       CODE_SIGN_STYLE: Automatic
+      EXCLUDED_SOURCE_FILE_NAMES: "QA*.swift"
     QA:
       DEVELOPMENT_TEAM: 6555P5TAV6
       CODE_SIGN_STYLE: Automatic
@@ -29,8 +30,19 @@ settings:
     Release:
       DEVELOPMENT_TEAM: $(CALLED_IT_DEVELOPMENT_TEAM)
       CODE_SIGN_STYLE: Manual
+      EXCLUDED_SOURCE_FILE_NAMES: "QA*.swift"
 targetTemplates:
   Runtime:
+    preBuildScripts:
+      - path: Configuration/prepare-info-plist.sh
+        name: Prepare runtime Info.plist
+        shell: /bin/bash
+        showEnvVars: false
+        inputFiles:
+          - $(SRCROOT)/$(CALLED_IT_BASE_INFO_PLIST)
+          - $(SRCROOT)/Configuration/prepare-info-plist.sh
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/Runtime-Info.plist
     info:
       properties:
         UIUserInterfaceStyle: Light
@@ -56,7 +68,7 @@ targets:
     templates: [Runtime]
     type: application
     platform: iOS
-    sources: [App, Shared]
+    sources: [App, Shared, QA]
     info:
       path: App/Info.plist
       properties:
@@ -74,9 +86,11 @@ targets:
         PRODUCT_NAME: CalledItMessages
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Configuration/Host.entitlements
+        CALLED_IT_BASE_INFO_PLIST: App/Info.plist
       configs:
         QA:
           PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.qa.host
+          INFOPLIST_FILE: $(DERIVED_FILE_DIR)/Runtime-Info.plist
         Release:
           PROVISIONING_PROFILE_SPECIFIER: $(CALLED_IT_HOST_PROFILE)
     dependencies:
@@ -86,7 +100,7 @@ targets:
     templates: [Runtime]
     type: app-extension.messages
     platform: iOS
-    sources: [Extension, Shared]
+    sources: [Extension, Shared, QA]
     info:
       path: Extension/Info.plist
       properties:
@@ -100,15 +114,17 @@ targets:
         PRODUCT_NAME: CalledItExtension
         ASSETCATALOG_COMPILER_APPICON_NAME: iMessage App Icon
         CODE_SIGN_ENTITLEMENTS: Configuration/Shared.entitlements
+        CALLED_IT_BASE_INFO_PLIST: Extension/Info.plist
       configs:
         QA:
           PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.qa.host.messages
+          INFOPLIST_FILE: $(DERIVED_FILE_DIR)/Runtime-Info.plist
         Release:
           PROVISIONING_PROFILE_SPECIFIER: $(CALLED_IT_EXTENSION_PROFILE)
   CalledItCoreTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests, TestSupport, Shared]
+    sources: [Tests, TestSupport, Shared, App/HostAuthenticationModel.swift]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.messages.coretests

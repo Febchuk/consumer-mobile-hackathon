@@ -27,8 +27,8 @@ struct VerifiedPhoneAuthentication: PhoneAuthenticating {
     func verifyCode(challenge: PhoneChallenge, code: String) async throws -> SharedSession {
         let configuration = try Config.load()
         let defaults = try SharedState.defaults(configuration: configuration)
-        let deviceID = defaults.string(forKey: "deviceID") ?? UUID().uuidString
-        defaults.set(deviceID, forKey: "deviceID")
+        let deviceID = defaults.string(forKey: configuration.storageKey("deviceID")) ?? UUID().uuidString
+        defaults.set(deviceID, forKey: configuration.storageKey("deviceID"))
         guard let result: Verified = try await API.action("v0Auth:verifyCode", [
             "phone": challenge.phone, "code": code, "requestId": challenge.id, "deviceId": deviceID,
         ]) else { throw NativeError.unavailable }

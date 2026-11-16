@@ -10,8 +10,8 @@ struct CardLocator: Codable, Equatable, Hashable {
 
     init(url: URL, configuration: RuntimeConfiguration) throws {
         guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              parts.scheme == "https", parts.host == configuration.cardBaseURL.host,
-              parts.user == nil, parts.password == nil, parts.port == nil, parts.fragment == nil,
+              parts.scheme == configuration.cardBaseURL.scheme, parts.host == configuration.cardBaseURL.host,
+              parts.user == nil, parts.password == nil, parts.port == configuration.cardBaseURL.port, parts.fragment == nil,
               parts.query == nil else { throw NativeError.invalidLink }
         let path = parts.path.split(separator: "/", omittingEmptySubsequences: false)
         guard path.count == 3, path[0].isEmpty, path[1] == "c", Self.valid(String(path[2])),
@@ -46,6 +46,6 @@ enum ConversationLinks {
     }
 
     private static func key(_ accountID: String, _ configuration: RuntimeConfiguration) -> String {
-        "links." + configuration.environmentID + "." + accountID
+        "links." + configuration.storageNamespace + "." + accountID
     }
 }
