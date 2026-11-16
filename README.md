@@ -6,6 +6,8 @@ Your friends write bets about each other and send them as chat messages. Everyon
 
 Live: https://reliable-kookabura-33.convex.site (the root is the new app)
 
+There is also a real iMessage app (a native Messages extension) in `native-imessage/`. See [Native iMessage app](#native-imessage-app) below.
+
 The first version, a hackathon-wide game with hourly drops, a TV view and a host console, still runs at `/hackathon`.
 
 ## Screenshots
@@ -24,7 +26,22 @@ All taken at 390 by 844 on the live site, in a test group with test users (names
 | --- |
 | ![Dinner pot and leaderboard](docs/screenshots/07-group-details.png) |
 
-TODO (parent): add a screenshot of the rub-to-reveal and the honor-system call once the 5:00 PM reveal has run (or after a demo replay).
+
+## Native iMessage app
+
+`native-imessage/` is a real Messages extension (SwiftUI in an `MSMessagesAppViewController`, built with XcodeGen) that talks to the same Convex backend. You pair it once with a one-time code from the web app's group details ("Pair iMessage app"). The token lives only in the device Keychain. You then link the conversation to your group.
+
+- A friend writes a bet in the extension and inserts a neutral card into the conversation. The card shows who it's about, the reveal time and who's in, never the question. The friend taps Send, so nothing sends automatically.
+- Tapping the card opens a private view. Friends see the question and take a side. The person it's about sees invisible ink, a countdown, and who bet with the sides hidden. The server never sends them the question before the reveal.
+- After the reveal they rub the ink, see everyone's positions, call what happened, and can send a result card. The board shows standings and streaks and can send a top-3 card.
+
+What has been verified: every flow above ran live against the backend in the iOS Simulator's Messages app, with two test accounts on two Simulators. The extension is installed on a physical iPhone and appears in the real Messages app drawer. Pairing on that phone and real message delivery between phones are the next things to check. Build and install steps are in [native-imessage/README.md](native-imessage/README.md).
+
+| Card sent in Messages | Friend takes a side | Sealed, about you | Call it after the reveal |
+| --- | --- | --- | --- |
+| ![Neutral bet card sent in a Messages conversation](docs/screenshots/native-01-card.png) | ![Bet view with sides and stake](docs/screenshots/native-02-friend.png) | ![Invisible ink with who bet and sides hidden](docs/screenshots/native-03-sealed.png) | ![Positions and the declared result](docs/screenshots/native-04-declared.png) |
+
+Simulator screenshots with test users (zz_). The phone number in the conversation is the Simulator's built-in sample contact.
 
 ## How to play
 
@@ -63,7 +80,6 @@ What exists today:
 - The "Draft live with AI from the shared chat" button calls a Convex action (`convex/ai.ts`, `suggest`) that sends a staged sample chat export to a hosted model (Anthropic). It shows the shape of the feature. It is not the on-device model.
 - Nothing from a real chat, photo or contact is read or stored.
 
-TODO (parent): confirm this section matches what you say on stage.
 
 ## Tech
 
@@ -79,7 +95,8 @@ Layout: `src/app/c/` chat routes (groups list, thread, group details), `src/comp
 **Capy.** Capy coding agents wrote the app. A Captain thread planned the work and ran parallel threads and subagents on cloud machines, each opening its own pull request. Capy also ran the Revyl iOS builds and the cloud iPhone. This submission pack was written by a Capy subagent.
 
 **Revyl.** We built the iOS app on Revyl's cloud runners and ran it on a cloud iPhone, with no local Xcode. Plain-English tests are in `revyl/tests/`.
-- TODO (parent): link `revyl/results.md` and add the pass count for the new chat app. The current tests cover the original game.
+- Results: `revyl/results.md`. A nine-journey pass of the chat app ran on the cloud iPhone at commit b2bd010. All nine journeys completed, and journey 8 found a swipe-back bug during the rub. That bug was fixed in 7fb596e and confirmed on a fresh standalone build at 83c90be (build 01M7GWYNB5HEPC9KSKC65YM3XZ). These runs were driven step by step on Revyl's cloud iPhone; they were not run by Revyl's own test runner.
+- `.revyl/config.yaml` holds a pull-request build profile for Revyl proof of changes.
 
 **Convex.** Convex is the whole backend. The chat is a realtime query, so a stake on one phone moves the odds and the reactions on every other phone. Stakes, declares and vetoes are mutations, so pots, points and payout messages stay consistent. The AI draft is a Convex action that reads its key from an environment variable. The web app is served from Convex storage.
 
