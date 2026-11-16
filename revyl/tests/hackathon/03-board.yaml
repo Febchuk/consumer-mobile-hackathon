@@ -1,0 +1,20 @@
+test:
+  metadata:
+    name: called-it-board
+    platform: ios
+    tags:
+      - smoke
+      - board
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  blocks:
+  # Precondition: a joined user. revyl* users are hidden from boards, so they don't see their own row or the "You" footer.
+    - type: instructions
+      step_description: "Tap the \"Board\" tab in the bottom tab bar."
+    - type: validation
+      step_description: "The Board screen shows a ranked list of players with rank numbers, emoji, names and points."
+    - type: validation
+      step_description: "Summary tiles show PLAYERS, IN THIS DROP and PTS RIDING counts above the table."

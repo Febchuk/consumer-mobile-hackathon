@@ -1,0 +1,30 @@
+test:
+  metadata:
+    name: called-it-chat-context
+    platform: ios
+    tags:
+      - smoke
+      - onboarding
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Precondition: a freshly joined user on the context screen.
+  blocks:
+    - type: validation
+      step_description: "Three cards are listed: Photos & screenshots, Shared chats, Contacts. The main button reads \"Allow at least one\" and is disabled."
+    - type: instructions
+      step_description: "Tap Allow on the \"Photos & screenshots\" card."
+    - type: validation
+      step_description: "The card shows \"Allowed ✓\" and the main button reads \"Continue\"."
+    - type: instructions
+      step_description: "Tap Continue."
+    - type: validation
+      step_description: "The screen says \"Reading what you shared, on your phone…\" with a progress bar and a list of noticed things."
+    - type: validation
+      step_description: "The screen shows \"All read.\" and \"Found 2 friends · 9 bet ideas\"."
+    - type: instructions
+      step_description: "Tap \"See the bets\"."
+    - type: validation
+      step_description: "The Groups list is visible with the title \"Groups\", a Join button at top left and a ✎ button at top right."

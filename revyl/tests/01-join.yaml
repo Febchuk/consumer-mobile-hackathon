@@ -1,0 +1,28 @@
+test:
+  metadata:
+    name: called-it-chat-join
+    platform: ios
+    tags:
+      - smoke
+      - join
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # {{username}} must be unique per run, e.g. revyl_qa_2.
+  blocks:
+    - type: validation
+      step_description: "The Join screen shows the CALLED IT wordmark, \"Your friends are already talking about you.\", a @username field and a dashed square emoji box."
+    - type: instructions
+      step_description: "Tap the @username field and type \"{{username}}\"."
+    - type: instructions
+      step_description: "Tap the dashed square emoji box, switch to the emoji keyboard and tap the 😎 emoji."
+    - type: instructions
+      step_description: "Tap an empty area above the form to dismiss the keyboard."
+    - type: validation
+      step_description: "The \"I'm in\" button is enabled."
+    - type: instructions
+      step_description: "Tap \"I'm in\"."
+    - type: validation
+      step_description: "The \"Let Called It read the room.\" context screen is visible."

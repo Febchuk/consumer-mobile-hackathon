@@ -1,0 +1,34 @@
+test:
+  metadata:
+    name: called-it-place-bet
+    platform: ios
+    tags:
+      - smoke
+      - betting
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  # Precondition: a joined user (run called-it-join first) and an open Drop.
+  blocks:
+    - type: validation
+      step_description: "The Today screen shows the current Drop with at least one LIVE bet card."
+    - type: instructions
+      step_description: "Tap the first LIVE bet's question to open its market page."
+    - type: validation
+      step_description: "The market page shows the question, the chance percentage, a price chart and a MAKE THE CALL section."
+    - type: instructions
+      step_description: "Tap \"← Today\" to go back."
+    - type: instructions
+      step_description: "On the first LIVE bet card, tap the YES (or OVER) side button to open the stake sheet."
+    - type: instructions
+      step_description: "Tap the amount field, delete the existing amount with the keyboard delete key and type 10."
+    - type: instructions
+      step_description: "Tap the question title at the top of the sheet to dismiss the number pad."
+    - type: validation
+      step_description: "The sheet's button reads \"Call it · 10 on Yes\"."
+    - type: instructions
+      step_description: "Tap \"Call it · 10 on Yes\"."
+    - type: validation
+      step_description: "The bet card shows \"You called YES · 10\" and the header points dropped by 10."

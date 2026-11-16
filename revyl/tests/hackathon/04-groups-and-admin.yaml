@@ -1,0 +1,41 @@
+test:
+  metadata:
+    name: called-it-admin-and-group-settle
+    platform: ios
+    tags:
+      - admin
+      - groups
+      - settle
+  build:
+    name: called-it
+  device:
+    model: iPhone 16
+    orientation: portrait
+  blocks:
+  # Admin part is read-only: never settle real hackathon bets. The settle happens in a private test group.
+    - type: manual
+      step_type: navigate
+      url: "calledit://admin"
+    - type: instructions
+      step_description: "Type \"{{admin_passcode}}\" into the passcode field."
+    - type: validation
+      step_description: "The admin panel lists drops (rounds) with their bets. Do not tap any settle, void, lock or delete button."
+    - type: manual
+      step_type: navigate
+      url: "calledit://me"
+    - type: instructions
+      step_description: "In the groups section, type \"Revyl QA\" in the new group field and tap Create."
+    - type: instructions
+      step_description: "Tap the \"Revyl QA\" group to open it."
+    - type: instructions
+      step_description: "Type \"Revyl QA: does this test pass?\" in the new bet question field, keep Yes/No selected, and tap \"Add bet\"."
+    - type: validation
+      step_description: "The bet \"Revyl QA: does this test pass?\" is listed in the group."
+    - type: instructions
+      step_description: "Stake on Yes for \"Revyl QA: does this test pass?\"."
+    - type: validation
+      step_description: "The group bet shows the player's Yes stake."
+    - type: instructions
+      step_description: "Tap \"Yes happened\" on the bet to settle it."
+    - type: validation
+      step_description: "The bet shows as settled with Yes as the winning outcome."
