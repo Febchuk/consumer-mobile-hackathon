@@ -6,11 +6,12 @@ struct BetView: View {
     @State private var card: NativeBet?
     @State private var serverClock: ServerClock?
     @State private var side = 0
-    @State private var confidence = 0.5
+    @State private var confidence = 50.0
     @State private var uncovered = false
     @State private var busy = false
     @State private var error: String?
     @State private var mutationIDs: [String: String] = [:]
+    @State private var saveConfirmation: String?
 
     var body: some View {
         Group {
@@ -27,6 +28,8 @@ struct BetView: View {
         .task(id: model.isActive) { if model.isActive { await poll() } }
         .onChange(of: model.activeTick) { _, _ in Task { await load() } }
         .onChange(of: model.isActive) { _, active in if !active { card = nil; uncovered = false } }
+        .onChange(of: side) { _, _ in saveConfirmation = nil }
+        .onChange(of: confidence) { _, _ in saveConfirmation = nil }
     }
 
     private var unavailable: some View {
@@ -69,8 +72,12 @@ struct BetView: View {
         }
         if !details.canAnswer || uncovered {
             if details.canPick {
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    Text(deadline(bet.cutoffAt, prefix: "Picks lock")).font(.subheadline.monospacedDigit())
+                if model.me?.policy.approved == true {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(deadline(bet.cutoffAt, prefix: "Server cutoff")).font(.subheadline.monospacedDigit())
+                    }
+                } else {
+                    Footnote(text: "The pick-lock rule is awaiting confirmation. Saving a pick doesn't mean it is finally locked.")
                 }
                 InsetGroup {
                     ForEach(0..<2, id: \.self) { index in
@@ -82,29 +89,35 @@ struct BetView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .disabled(busy)
                         .accessibilityLabel(details.options[index])
                         .accessibilityAddTraits(side == index ? .isSelected : [])
                         .accessibilityIdentifier("bet.option.\(index)")
                     }
                 }
                 CardBox {
-                    Text("Confidence: \(Int((confidence * 100).rounded()))%").font(.headline)
-                    Slider(value: $confidence, in: 0...1, step: 0.01)
+                    Text("Confidence: \(Int(confidence)) / 100").font(.headline)
+                    Slider(value: $confidence, in: 1...100, step: 1)
+                        .disabled(busy)
                         .accessibilityLabel("Confidence")
-                        .accessibilityValue("\(Int((confidence * 100).rounded())) percent")
+                        .accessibilityValue("\(Int(confidence)) out of 100")
                         .accessibilityIdentifier("bet.confidence")
-                    if let risk = details.myPick?.riskPoints { Text("Server-recorded risk: \(pts(risk)) points").font(.footnote) }
                 }
                 PrimaryButton(title: details.myPick == nil ? "Save pick" : "Update pick", busy: busy) {
-                    Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": confidence]) }
+                    Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": confidence / 100]) }
                 }
                 .accessibilityIdentifier("bet.savePick")
-                Footnote(text: "One editable pick until cutoff. Scores and any risk/reward come only from the server's approved policy, never an estimated payout here.")
+                if let saveConfirmation { Text(saveConfirmation).font(.subheadline).accessibilityIdentifier("bet.saveConfirmation") }
+                if let pick = details.myPick {
+                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(Int((pick.confidence * 100).rounded())) / 100")
+                        .font(.footnote).accessibilityIdentifier("bet.savedPick")
+                }
+                Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero and don't reduce your group points. The server applies the confirmed scoring rules.")
             } else {
-                Text(bet.state == "locked" ? "Picks are locked. Waiting for reveal." : bet.state.capitalized)
+                Text(bet.state == "locked" ? "Picks closed by the server." : bet.state.capitalized)
                     .font(.headline).accessibilityIdentifier("bet.state")
                 if let pick = details.myPick {
-                    Text("Your pick: \(details.options[safe: pick.option] ?? "—") · \(Int(pick.confidence * 100))% confidence")
+                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(Int((pick.confidence * 100).rounded())) / 100")
                         .accessibilityIdentifier("bet.savedPick")
                 }
             }
@@ -121,11 +134,12 @@ struct BetView: View {
                     }
                     .accessibilityIdentifier("bet.answer.\(index)")
                 }
-                Footnote(text: "Self-declare honestly. Proof is optional; upload it before answering. Your answer stays provisional through the server's challenge window.")
+                Footnote(text: "Proof is optional; upload it before answering. Unanswered bets void 24 hours after reveal. Your recorded answer starts a one-hour challenge window; the server owns both deadlines.")
             }
             if let provisional = details.provisionalOutcome {
                 Text("Provisional: \(details.options[safe: provisional] ?? "—")").font(.headline)
                 if let at = details.challengeDeadline { Text(deadline(at, prefix: "Challenges close")).font(.footnote) }
+                Footnote(text: "The challenge window lasts one hour from the recorded answer. The server confirms the final result.")
             }
             if details.canChallenge {
                 Button("Challenge this answer") { Task { await mutate("v0Bets:challenge", bet: bet) } }
@@ -156,7 +170,7 @@ struct BetView: View {
                         Spacer()
                         VStack(alignment: .trailing) {
                             Text(details.options[safe: pick.option] ?? "—")
-                            Text("\(Int(pick.confidence * 100))% confidence").font(.footnote).foregroundStyle(Theme.sub)
+                            Text("Confidence \(Int((pick.confidence * 100).rounded())) / 100").font(.footnote).foregroundStyle(Theme.sub)
                         }
                     }
                 }
@@ -174,7 +188,9 @@ struct BetView: View {
             await load()
             var interval = 8.0
             if let card, let serverClock {
-                let deadlines = [card.cutoffAt, card.revealAt].filter { $0 > serverClock.now() }
+                var deadlines = [card.cutoffAt, card.revealAt]
+                if case .bet(let details) = card.content { deadlines += [details.answerDeadline, details.challengeDeadline].compactMap { $0 } }
+                deadlines = deadlines.filter { $0 > serverClock.now() }
                 if let next = deadlines.min() { interval = min(interval, max(0.3, (next - serverClock.now()) / 1000 + 0.2)) }
             }
             do { try await Task.sleep(for: .seconds(interval)) }
@@ -194,7 +210,7 @@ struct BetView: View {
             serverClock = ServerClock(serverTime: next.serverTime)
             if firstLoad, case .bet(let details) = next.content, let pick = details.myPick {
                 side = pick.option
-                confidence = pick.confidence
+                confidence = min(100, max(1, pick.confidence * 100))
             }
             error = nil
         } catch {
@@ -216,7 +232,16 @@ struct BetView: View {
         args["betId"] = bet.betId
         args["requestId"] = requestID
         do {
-            let _: Ignored? = try await API.mutation(path, args)
+            if path == "v0Bets:pick" {
+                guard let receipt: PickReceipt = try await API.mutation(path, args), receipt.saved,
+                      receipt.option == args["option"] as? Int,
+                      receipt.confidence == args["confidence"] as? Double,
+                      receipt.updatedAt.isFinite else { throw APIError(code: "TRANSPORT") }
+                guard model.token == token else { return }
+                saveConfirmation = "Pick saved on the server."
+            } else {
+                let _: Ignored? = try await API.mutation(path, args)
+            }
             guard model.token == token else { return }
             mutationIDs.removeValue(forKey: fingerprint)
             await load()

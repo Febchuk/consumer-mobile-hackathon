@@ -100,6 +100,12 @@ struct ConfidencePick: Decodable {
         riskPoints = try values.decodeIfPresent(Double.self, forKey: .riskPoints)
     }
 }
+struct PickReceipt: Decodable {
+    let saved: Bool
+    let option: Int
+    let confidence: Double
+    let updatedAt: Double
+}
 struct VisiblePick: Decodable, Identifiable {
     let accountId: String
     let alias: String
