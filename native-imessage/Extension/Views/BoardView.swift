@@ -31,6 +31,7 @@ struct BoardView: View {
                 }
             }
             Footnote(text: "Points and streaks belong only to this group. There are no individual cash rewards.")
+            Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero without reducing points. The server calculates the bonus after the remaining streak rules are confirmed.")
             SectionTitle(text: "Shared group goal")
             if let goal = board.goal {
                 CardBox {
