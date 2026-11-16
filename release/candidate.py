@@ -42,7 +42,7 @@ def run(args, cwd=None):
 
 def validate_config(c):
     for key in ("source_revision", "version", "build", "build_channel", "environment", "api_url",
-                "web_url", "team_id", "app_identifier_prefix", "host_id",
+                "web_url", "support_url", "team_id", "app_identifier_prefix", "host_id",
                 "extension_id", "app_group", "keychain_group",
                 "signing_certificate_sha1", "approval_reference"):
         require(isinstance(c.get(key), str) and c[key].strip(), f"Missing {key}")
@@ -59,11 +59,12 @@ def validate_config(c):
     require(c["extension_id"].startswith(c["host_id"] + "."), "Extension must be nested under host ID")
     require(c["app_group"].startswith("group."), "Invalid App Group")
     require(c["keychain_group"].startswith(c["app_identifier_prefix"] + "."), "Keychain prefix mismatch")
-    for key in ("api_url", "web_url"):
+    for key in ("api_url", "web_url", "support_url"):
         u = urlparse(c[key])
         require(u.scheme == "https" and u.hostname and not u.username and not u.password
-                and not u.port and u.path in ("", "/") and not u.query and not u.fragment,
-                f"{key} must be an HTTPS origin")
+                and not u.port and not u.query and not u.fragment,
+                f"{key} must be HTTPS without credentials, port, query or fragment")
+        require(key == "support_url" or u.path in ("", "/"), f"{key} must be an HTTPS origin")
         require(not re.search(r"localhost|(?:^|\.)test(?:\.|$)|\.invalid$|\.local$|^[\d.:]+$", u.hostname),
                 f"Test/local origin forbidden in {key}")
     for role in ("host", "extension"):
@@ -104,6 +105,27 @@ def export_options(c):
     }
 
 
+def archive_settings(c):
+    return {
+        "CODE_SIGN_STYLE": "Manual", "DEVELOPMENT_TEAM": c["team_id"],
+        "CODE_SIGN_IDENTITY": c["signing_certificate_sha1"],
+        "CALLED_IT_DEVELOPMENT_TEAM": c["team_id"],
+        "CALLED_IT_HOST_PROFILE": c["profiles"]["host"]["uuid"],
+        "CALLED_IT_EXTENSION_PROFILE": c["profiles"]["extension"]["uuid"],
+        "MARKETING_VERSION": c["version"], "CURRENT_PROJECT_VERSION": c["build"],
+        "CALLED_IT_BUILD_CHANNEL": c["build_channel"],
+        "CALLED_IT_API_URL": c["api_url"], "CALLED_IT_WEB_URL": c["web_url"],
+        "CALLED_IT_EXPECTED_API_HOST": urlparse(c["api_url"]).hostname,
+        "CALLED_IT_EXPECTED_CARD_HOST": urlparse(c["web_url"]).hostname,
+        "CALLED_IT_APP_GROUP": c["app_group"], "CALLED_IT_KEYCHAIN_GROUP": c["keychain_group"],
+        "CALLED_IT_SUPPORT_URL": c["support_url"], "CALLED_IT_APNS_ENVIRONMENT": "production",
+        "CALLED_IT_ENVIRONMENT": c["environment"], "CALLED_IT_SOURCE_REVISION": c["source_revision"],
+        "CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION": c["backend"]["source_revision"],
+        "CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID": c["backend"]["deployment"],
+        "CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION": c["backend"]["config_version"],
+    }
+
+
 def permits(expected, actual):
     if isinstance(expected, str) and isinstance(actual, str):
         return fnmatch.fnmatchcase(actual, expected)
@@ -140,12 +162,17 @@ def validate_signed(c, role, info, ent, profile, now=None):
         require(key in pe and permits(pe[key], value), f"{role}: entitlement not allowed by profile: {key}")
     if role == "host":
         require(ent.get("aps-environment") == pe.get("aps-environment") == "production", "TestFlight host APNs must be production")
+        require("applinks:" + urlparse(c["web_url"]).hostname in ent.get("com.apple.developer.associated-domains", []), "Host card associated-domain mismatch")
     elif "aps-environment" in ent:
         require(ent["aps-environment"] == "production", "Development APNs in extension")
     require(info.get("CFBundleIdentifier") == bundle, f"{role}: bundle ID mismatch")
     require(info.get("CFBundleVersion") == c["build"], f"{role}: build mismatch")
     require(info.get("CFBundleShortVersionString") == c["version"], f"{role}: version mismatch")
     for key, expected in (("CalledItAPIURL", c["api_url"]), ("CalledItWebURL", c["web_url"]),
+                          ("CalledItExpectedAPIHost", urlparse(c["api_url"]).hostname),
+                          ("CalledItExpectedCardHost", urlparse(c["web_url"]).hostname),
+                          ("CalledItAppGroup", c["app_group"]), ("CalledItKeychainGroup", c["keychain_group"]),
+                          ("CalledItSupportURL", c["support_url"]), ("CalledItAPNsEnvironment", "production"),
                           ("CalledItBuildChannel", c["build_channel"]),
                           ("CalledItReleaseEnvironment", c["environment"]), ("CalledItSourceRevision", c["source_revision"]),
                           ("CalledItExpectedBackendSourceRevision", c["backend"]["source_revision"]),
@@ -179,7 +206,8 @@ def inspect_app(c, app):
             require(hashlib.sha1(Path(prefix + "0").read_bytes()).hexdigest() == c["signing_certificate_sha1"].lower(), f"{role}: actual signer mismatch")
         result[role] = {"bundle_id": info["CFBundleIdentifier"], "executable_sha256": digest(executable),
                         "profile_sha256": digest(profile_path), "profile_expires": profile["ExpirationDate"].isoformat()}
-    allowed = {c["api_url"].rstrip("/"), c["web_url"].rstrip("/")}
+    support = urlparse(c["support_url"])
+    allowed = {c["api_url"].rstrip("/"), c["web_url"].rstrip("/"), f"{support.scheme}://{support.netloc}"}
     for file in app.rglob("*"):
         require(not file.is_symlink(), "Symlinks forbidden in candidate")
         if not file.is_file():
@@ -260,17 +288,7 @@ def main():
                  "-scheme", "CalledItMessages", "-configuration", "Release",
                  "-destination", "generic/platform=iOS", "-archivePath", str(out / "CalledIt.xcarchive"),
                  "-derivedDataPath", str(out / "DerivedData"), "archive",
-                 "CODE_SIGN_STYLE=Manual", f"DEVELOPMENT_TEAM={c['team_id']}",
-                 f"CODE_SIGN_IDENTITY={c['signing_certificate_sha1']}",
-                 f"CALLED_IT_HOST_PROFILE={c['profiles']['host']['uuid']}",
-                 f"CALLED_IT_EXTENSION_PROFILE={c['profiles']['extension']['uuid']}",
-                 f"MARKETING_VERSION={c['version']}", f"CURRENT_PROJECT_VERSION={c['build']}",
-                 f"CALLED_IT_BUILD_CHANNEL={c['build_channel']}",
-                 f"CALLED_IT_API_URL={c['api_url']}", f"CALLED_IT_WEB_URL={c['web_url']}",
-                 f"CALLED_IT_ENVIRONMENT={c['environment']}", f"CALLED_IT_SOURCE_REVISION={c['source_revision']}",
-                 f"CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION={c['backend']['source_revision']}",
-                 f"CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID={c['backend']['deployment']}",
-                 f"CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION={c['backend']['config_version']}"])
+                 *[f"{key}={value}" for key, value in archive_settings(c).items()]])
         artifact = out / "CalledIt.xcarchive"
     else:
         require(args.artifact is not None and args.artifact.exists(), "Supply an existing artifact")

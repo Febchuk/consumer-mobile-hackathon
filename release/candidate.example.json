@@ -6,6 +6,7 @@
   "environment": "staging",
   "api_url": null,
   "web_url": null,
+  "support_url": null,
   "team_id": null,
   "app_identifier_prefix": null,
   "host_id": null,
