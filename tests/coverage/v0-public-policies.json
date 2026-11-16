@@ -242,14 +242,15 @@
   "v0Bets:get": {
     "kind": "query",
     "scope": "bet_visibility",
-    "rule": "active interval predating bet; opaque locator; subject sealed until server reveal; quiet void",
+    "rule": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; no unapproved settlement",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
       "scope_specific_valid_fixture"
-    ]
+    ],
+    "policyVersion": "v0-policy.1"
   },
   "v0Bets:list": {
     "kind": "query",
@@ -278,7 +279,7 @@
   "v0Bets:create": {
     "kind": "mutation",
     "scope": "bet_visibility",
-    "rule": "active consenting different subject; schema/safety/topic/time validation; POLICY_PENDING",
+    "rule": "active consenting different subject; safety/topic/future time validation; optional next20:00 group-local reveal or explicit override; lock/creator policy still POLICY_PENDING",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -290,7 +291,7 @@
   "v0Bets:pick": {
     "kind": "mutation",
     "scope": "bet_visibility",
-    "rule": "eligible nonsubject; authoritative cutoff; option/confidence bounds; POLICY_PENDING",
+    "rule": "eligible nonsubject; authoritative cutoff; option and confidence0.01..1; reject present riskPoints; unresolved lock policy stays POLICY_PENDING",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -314,31 +315,33 @@
   "v0Bets:answer": {
     "kind": "mutation",
     "scope": "subject_after_reveal",
-    "rule": "eligible subject after server reveal; valid option; POLICY_PENDING",
+    "rule": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; no settlement credit",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
       "scope_specific_valid_fixture"
-    ]
+    ],
+    "policyVersion": "v0-policy.1"
   },
   "v0Bets:challenge": {
     "kind": "mutation",
     "scope": "bet_visibility",
-    "rule": "eligible nonsubject provisional state; POLICY_PENDING",
+    "rule": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting or adjudicate majority",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
       "scope_specific_valid_fixture"
-    ]
+    ],
+    "policyVersion": "v0-policy.1"
   },
   "v0Proof:upload": {
     "kind": "action",
     "scope": "subject_after_reveal",
-    "rule": "eligible subject after reveal; bytes signature/MIME/512KiB/quota; idempotent private storage",
+    "rule": "eligible subject after reveal; bytes signature/MIME/512KiB/quota; idempotent private storage; derived24h unanswered timeout denies even before sweep",
     "source": "v0Proof.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -350,7 +353,7 @@
   "v0Proof:list": {
     "kind": "query",
     "scope": "proof_visibility",
-    "rule": "eligible membership interval after reveal; no void or public URL",
+    "rule": "eligible membership interval after reveal; no void or public URL; derived24h unanswered timeout denies even before sweep",
     "source": "v0Proof.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -362,7 +365,7 @@
   "v0Proof:read": {
     "kind": "action",
     "scope": "proof_visibility",
-    "rule": "eligible post-reveal membership; authorization checked again after storage read; authenticated bytes",
+    "rule": "eligible post-reveal membership; authorization checked again after storage read; authenticated bytes; derived24h unanswered timeout denies even before sweep",
     "source": "v0Proof.ts",
     "authenticated": true,
     "minimumAssertions": [
