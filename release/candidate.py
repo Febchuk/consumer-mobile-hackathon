@@ -42,7 +42,7 @@ def run(args, cwd=None):
 
 
 def validate_config(c):
-    for key in ("source_revision", "version", "build", "environment", "api_url",
+    for key in ("source_revision", "version", "build", "build_channel", "environment", "api_url",
                 "web_url", "team_id", "app_identifier_prefix", "host_id",
                 "extension_id", "app_group", "keychain_group",
                 "signing_certificate_sha1", "approval_reference"):
@@ -51,6 +51,7 @@ def validate_config(c):
     require(re.fullmatch(r"[1-9][0-9]*", c["build"]), "Build must be an explicit positive integer string")
     require(re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", c["version"]), "Invalid version")
     require(c["environment"] in ("staging", "production"), "Invalid environment")
+    require(c["build_channel"] in ("qa", "release"), "Invalid build channel")
     require(re.fullmatch(r"[A-Z0-9]{10}", c["team_id"]), "Invalid team ID")
     require(re.fullmatch(r"[A-Z0-9]{10}", c["app_identifier_prefix"]), "Invalid App ID prefix")
     require(re.fullmatch(r"[0-9A-Fa-f]{40}", c["signing_certificate_sha1"]), "Pin signing certificate SHA1")
@@ -146,7 +147,11 @@ def validate_signed(c, role, info, ent, profile, now=None):
     require(info.get("CFBundleVersion") == c["build"], f"{role}: build mismatch")
     require(info.get("CFBundleShortVersionString") == c["version"], f"{role}: version mismatch")
     for key, expected in (("CalledItAPIURL", c["api_url"]), ("CalledItWebURL", c["web_url"]),
-                          ("CalledItReleaseEnvironment", c["environment"]), ("CalledItSourceRevision", c["source_revision"])):
+                          ("CalledItBuildChannel", c["build_channel"]),
+                          ("CalledItReleaseEnvironment", c["environment"]), ("CalledItSourceRevision", c["source_revision"]),
+                          ("CalledItExpectedBackendSourceRevision", c["backend"]["source_revision"]),
+                          ("CalledItExpectedBackendDeploymentID", c["backend"]["deployment"]),
+                          ("CalledItExpectedBackendConfigVersion", c["backend"]["config_version"])):
         require(info.get(key) == expected, f"{role}: {key} mismatch")
     require(info.get("CalledItFixtureMode") is False, f"{role}: fixture mode must be boolean false")
     if role == "extension":
@@ -199,7 +204,7 @@ def source_manifest(c, root):
         files[folder] = hashlib.sha256(run(["git", "ls-tree", "-r", "HEAD", "--", folder], root)).hexdigest()
     return {"source_revision": c["source_revision"], "git_tree_inventory_sha256": files,
             "backend": c["backend"], "version": c["version"], "build": c["build"],
-            "environment": c["environment"], "toolchain": c["toolchain"],
+            "environment": c["environment"], "build_channel": c["build_channel"], "toolchain": c["toolchain"],
             "tests": c["tests"],
             "approval_reference": c["approval_reference"],
             "release_gates": "UNVERIFIED: inspection is not approval or physical/E2E evidence"}
@@ -234,6 +239,7 @@ def main():
     if args.action == "attest":
         print("Saved backend metadata matches; it is not cryptographic deployment proof")
         return
+    require(c["build_channel"] == "release", "App Store candidate requires release channel, even with staging backend")
     require(sys.platform == "darwin", "Signed candidate actions require the approved Mac; no cloud signing fallback")
     require(args.output is not None and not args.output.exists(), "Choose a new private output directory")
     root = Path(__file__).resolve().parents[1]
@@ -260,8 +266,12 @@ def main():
                  f"CALLED_IT_HOST_PROFILE={c['profiles']['host']['uuid']}",
                  f"CALLED_IT_EXTENSION_PROFILE={c['profiles']['extension']['uuid']}",
                  f"MARKETING_VERSION={c['version']}", f"CURRENT_PROJECT_VERSION={c['build']}",
+                 f"CALLED_IT_BUILD_CHANNEL={c['build_channel']}",
                  f"CALLED_IT_API_URL={c['api_url']}", f"CALLED_IT_WEB_URL={c['web_url']}",
-                 f"CALLED_IT_ENVIRONMENT={c['environment']}", f"CALLED_IT_SOURCE_REVISION={c['source_revision']}"])
+                 f"CALLED_IT_ENVIRONMENT={c['environment']}", f"CALLED_IT_SOURCE_REVISION={c['source_revision']}",
+                 f"CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION={c['backend']['source_revision']}",
+                 f"CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID={c['backend']['deployment']}",
+                 f"CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION={c['backend']['config_version']}"])
         artifact = out / "CalledIt.xcarchive"
     else:
         require(args.artifact is not None and args.artifact.exists(), "Supply an existing artifact")

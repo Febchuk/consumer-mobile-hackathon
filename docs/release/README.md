@@ -24,7 +24,7 @@ See [preflight](preflight.md), [metadata](metadata.md), [privacy/support drafts]
 Requires Python 3.10+; signed operations require the approved Mac with pinned Xcode and XcodeGen, existing distribution identity/private key and installed profiles. No tool downloads profiles or uses `-allowProvisioningUpdates`. Run `xcodebuild -help` on that pinned toolchain to verify its `app-store-connect` export options before first use. Commands have not been exercised on macOS yet.
 
 1. Integrator assembles the coordinated candidate, preserving the PR3 server-clock fix. Record the full clean source SHA, backend source/config and rule versions. Do not build from an uncommitted workspace or infer deployed state from Git.
-2. Copy `release/candidate.example.json` to a **private location outside Git**, fill every null from verified evidence and record the Captain approval reference. The example deliberately fails validation. Config contains only nonsecret references, UUIDs, certificate fingerprints and approved origins, never tokens, P8 contents or signing passwords. Use separate configs and build numbers for staging and production. TestFlight always uses production APNs; its backend may be staging.
+2. Copy `release/candidate.example.json` to a **private location outside Git**, fill every null from verified evidence and record the Captain approval reference. The example deliberately fails validation. Config contains only nonsecret references, UUIDs, certificate fingerprints and approved origins, never tokens, P8 contents or signing passwords. Build channel (`qa|release`) is independent of backend environment (`local|staging|production` in native). This App Store candidate tool accepts only staging/production backends and requires the **release** channel for signed actions. Use separate configs and build numbers for staging and production. TestFlight always uses production APNs; its backend may be approved staging, never fixture adapters.
 3. Native owner must wire the contract below before archiving. These scripts cannot repair native/project configuration. Existing baseline hardcoded endpoints and literal Info.plist versions will fail inspection. Obtain a saved JSON **value** from the integrator's `v0Runtime:attestation` only through an authorized environment read; record its observation time/origin and deployment receipt separately. The tool compares exact app/environment/deployment/source/schema/contract/config and `testAdapters=false`; it never fetches a backend itself.
 4. Execute locally after archive authorization, using new private output directories outside the repository:
 
@@ -54,13 +54,17 @@ Both targets' Release Info.plists must resolve the following from build settings
 |---|---|
 | `CalledItAPIURL` | `$(CALLED_IT_API_URL)` string |
 | `CalledItWebURL` | `$(CALLED_IT_WEB_URL)` string |
+| `CalledItBuildChannel` | `$(CALLED_IT_BUILD_CHANNEL)` string: qa or release; App Store/TestFlight candidate requires release |
 | `CalledItReleaseEnvironment` | `$(CALLED_IT_ENVIRONMENT)` string: staging or production |
-| `CalledItSourceRevision` | `$(CALLED_IT_SOURCE_REVISION)` full SHA |
+| `CalledItSourceRevision` | `$(CALLED_IT_SOURCE_REVISION)` full **native artifact** SHA |
+| `CalledItExpectedBackendSourceRevision` | `$(CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION)` full backend SHA, independent of native SHA |
+| `CalledItExpectedBackendDeploymentID` | `$(CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID)` nonsecret selected deployment ID |
+| `CalledItExpectedBackendConfigVersion` | `$(CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION)` expected backend config version |
 | `CalledItFixtureMode` | Boolean false, never a runtime test toggle |
 | `CFBundleVersion` | `$(CURRENT_PROJECT_VERSION)` |
 | `CFBundleShortVersionString` | `$(MARKETING_VERSION)` |
 
-Host `PROVISIONING_PROFILE_SPECIFIER` must resolve `$(CALLED_IT_HOST_PROFILE)` and extension `$(CALLED_IT_EXTENSION_PROFILE)` in Release. Both need the approved App Group and explicit shared Keychain access group; the host needs `aps-environment=production`. Session-sharing behavior needs tests; matching entitlements alone do not prove it. App ID prefix and Team ID are separately pinned because they need not be the same for every account history. Runtime must reject missing config, test hooks and invalid environments. No root/native/package changes are owned by this release track.
+Host `PROVISIONING_PROFILE_SPECIFIER` must resolve `$(CALLED_IT_HOST_PROFILE)` and extension `$(CALLED_IT_EXTENSION_PROFILE)` in Release. Both need the approved App Group and explicit shared Keychain access group; the host needs `aps-environment=production`. Session-sharing behavior needs tests; matching entitlements alone do not prove it. App ID prefix and Team ID are separately pinned because they need not be the same for every account history. Runtime must reject missing config, test hooks and invalid environments, and compare expected backend environment/source/deployment/config against attestation before using it. Release fixture mode stays false even against staging. No root/native/package changes are owned by this release track.
 
 ## After all technical gates pass
 

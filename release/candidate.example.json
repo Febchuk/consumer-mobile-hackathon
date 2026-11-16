@@ -2,6 +2,7 @@
   "source_revision": null,
   "version": "1.0",
   "build": null,
+  "build_channel": "release",
   "environment": "staging",
   "api_url": null,
   "web_url": null,
