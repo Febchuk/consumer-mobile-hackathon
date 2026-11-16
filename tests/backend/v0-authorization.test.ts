@@ -84,7 +84,7 @@ describe("SEC1 actual V0 public authorization matrix", () => {
       const value = await f.t.query(api.v0Bets.get, { token: f.actors.subject.token, locator: f.locator });
       expect(value).toMatchObject({ state, view, serverTime: time });
       if (view === "sealed") noPrivateValues(value, f.privateValues);
-      else expect(value).toMatchObject({ question: f.privateValues[0], canPick: false, canAnswer: false });
+      else expect(value).toMatchObject({ question: f.privateValues[0], canPick: false, canAnswer: true, canChallenge: false, answerDeadline: REVEAL + 86_400_000 });
     }
   });
 
