@@ -393,7 +393,7 @@
     "path": "v0Bets:answer",
     "kind": "mutation",
     "requiredPolicy": "subject_after_reveal",
-    "policy": "eligible subject after server reveal; valid option; POLICY_PENDING",
+    "policy": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; no settlement credit",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -405,7 +405,7 @@
     "path": "v0Bets:challenge",
     "kind": "mutation",
     "requiredPolicy": "bet_visibility",
-    "policy": "eligible nonsubject provisional state; POLICY_PENDING",
+    "policy": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting or adjudicate majority",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -417,7 +417,7 @@
     "path": "v0Bets:create",
     "kind": "mutation",
     "requiredPolicy": "bet_visibility",
-    "policy": "active consenting different subject; schema/safety/topic/time validation; POLICY_PENDING",
+    "policy": "active consenting different subject; safety/topic/future time validation; optional next20:00 group-local reveal or explicit override; lock/creator policy still POLICY_PENDING",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -429,7 +429,7 @@
     "path": "v0Bets:get",
     "kind": "query",
     "requiredPolicy": "bet_visibility",
-    "policy": "active interval predating bet; opaque locator; subject sealed until server reveal; quiet void",
+    "policy": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; no unapproved settlement",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -465,7 +465,7 @@
     "path": "v0Bets:pick",
     "kind": "mutation",
     "requiredPolicy": "bet_visibility",
-    "policy": "eligible nonsubject; authoritative cutoff; option/confidence bounds; POLICY_PENDING",
+    "policy": "eligible nonsubject; authoritative cutoff; option and confidence0.01..1; reject present riskPoints; unresolved lock policy stays POLICY_PENDING",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -789,7 +789,7 @@
     "path": "v0Proof:list",
     "kind": "query",
     "requiredPolicy": "proof_visibility",
-    "policy": "eligible membership interval after reveal; no void or public URL",
+    "policy": "eligible membership interval after reveal; no void or public URL; derived24h unanswered timeout denies even before sweep",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -801,7 +801,7 @@
     "path": "v0Proof:read",
     "kind": "action",
     "requiredPolicy": "proof_visibility",
-    "policy": "eligible post-reveal membership; authorization checked again after storage read; authenticated bytes",
+    "policy": "eligible post-reveal membership; authorization checked again after storage read; authenticated bytes; derived24h unanswered timeout denies even before sweep",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -813,7 +813,7 @@
     "path": "v0Proof:upload",
     "kind": "action",
     "requiredPolicy": "subject_after_reveal",
-    "policy": "eligible subject after reveal; bytes signature/MIME/512KiB/quota; idempotent private storage",
+    "policy": "eligible subject after reveal; bytes signature/MIME/512KiB/quota; idempotent private storage; derived24h unanswered timeout denies even before sweep",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",

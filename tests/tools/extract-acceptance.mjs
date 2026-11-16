@@ -29,6 +29,21 @@ const requirements = mapping.requirements.map((r) => {
   });
   return { ...r, sha256: hash(text), text, assertions: cases.flatMap((c) => c.assertions) };
 });
-const document = { schemaVersion: 1, sourceDigests: Object.fromEntries(Object.entries(sources).map(([name, text]) => [name, hash(text)])), acceptanceCheckboxCount: actualAcceptanceLines.length, requirements };
+const policyAddenda = [];
+if (args.includes("--decision-addendum")) {
+  const path = resolve(option("--decision-addendum"));
+  if (path === process.cwd() || path.startsWith(`${process.cwd()}/`)) throw new Error("Product decision text must remain outside the repository");
+  const raw = readFileSync(path, "utf8");
+  const policy = JSON.parse(raw);
+  const preserved = policy.baselinePreserved;
+  if (policy.schemaVersion !== 1 || typeof policy.version !== "string" || !policy.version || !Array.isArray(policy.decisions) || !Array.isArray(policy.plannedAssertions) ||
+      preserved?.requirementCount !== requirements.length || preserved.acceptanceCheckboxCount !== actualAcceptanceLines.length ||
+      requirements.find((item) => item.id === preserved.editablePickRequirement)?.sha256 !== preserved.editablePickSha256) throw new Error("Decision addendum must preserve the pinned original acceptance inventory");
+  for (const assertion of policy.plannedAssertions) {
+    if (!assertion.id || !assertion.status || !Array.isArray(assertion.caseIds) || assertion.caseIds.some((id) => !inventory.cases.some((item) => item.id === id))) throw new Error("Decision assertion must map to existing acceptance cases");
+  }
+  policyAddenda.push({ version: policy.version, decisionDate: policy.decisionDate, sourcePath: path, sha256: hash(raw), baselinePreserved: true, assertions: policy.plannedAssertions.map(({ id, status, caseIds }) => ({ id, status, caseIds })), executionCredit: "none; versioned decisions and planned assertions are not executed evidence" });
+}
+const document = { schemaVersion: 1, sourceDigests: Object.fromEntries(Object.entries(sources).map(([name, text]) => [name, hash(text)])), acceptanceCheckboxCount: actualAcceptanceLines.length, requirements, ...(policyAddenda.length ? { policyAddenda } : {}) };
 writeFileSync(output, JSON.stringify(document, null, 2) + "\n", { mode: 0o600 });
 console.log(JSON.stringify({ requirements: requirements.length, acceptanceCheckboxes: actualAcceptanceLines.length, assertionReferences: requirements.reduce((n, r) => n + r.assertions.length, 0) }));

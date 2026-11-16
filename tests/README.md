@@ -36,8 +36,16 @@ The private source extraction command verifies the pinned source digests, reject
 ```sh
 node tests/tools/extract-acceptance.mjs \
   --spec-root "$PRIVATE_SPEC_DIRECTORY" \
+  --decision-addendum "$PRIVATE_POLICY_ADDENDUM" \
   --output "$HOME/.capy/work/v0-acceptance-private.json"
 ```
+
+The optional decision addendum stays outside the repository, is hash-pinned in
+the private inventory, and maps new planned policy assertions to the original
+cases without replacing their source text/hashes. It must preserve the original
+editable-pick requirement; an ambiguous later immediate-lock proposal does not
+silently weaken that criterion. Addendum/planned-assertion metadata earns no
+execution or acceptance credit.
 
 Keep baseline red evidence when integrating a fix. Inspect failures against the contract before calling them product defects: the first retirement run’s nine errors were the harness treating an HTTP action as a query; they were not nine product failures. The HTTP handler now has a real router/response assertion instead. Disabling a legacy endpoint safely may satisfy its retirement assertion, but never substitutes for testing its canonical V0 replacement. Full V0 readiness requires every uncut layer on the integrated candidate, not a count of test filenames or screenshots.
 
