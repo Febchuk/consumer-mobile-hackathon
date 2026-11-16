@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline-only archive/export/inspection. Never provisions, deploys or uploads."""
 
 import argparse
@@ -8,15 +7,15 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import plistlib
 import re
 import subprocess
 import sys
 import tarfile
 import tempfile
-from urllib.parse import urlparse
 import zipfile
+from pathlib import Path
+from urllib.parse import urlparse
 
 
 class GateError(Exception):
@@ -36,7 +35,7 @@ def run(args, cwd=None):
     env = {k: os.environ[k] for k in (
         "PATH", "HOME", "TMPDIR", "DEVELOPER_DIR", "LANG", "LC_ALL"
     ) if k in os.environ}
-    result = subprocess.run(args, cwd=cwd, env=env, capture_output=True)
+    result = subprocess.run(args, cwd=cwd, env=env, capture_output=True, check=False)
     require(result.returncode == 0, f"{Path(args[0]).name} failed; inspect locally, do not publish raw signing logs")
     return result.stdout
 
@@ -185,7 +184,7 @@ def inspect_app(c, app):
         require(not file.is_symlink(), "Symlinks forbidden in candidate")
         if not file.is_file():
             continue
-        require(not re.search(r"(?:\.xctest|\.p8|\.p12|\.env|fixture|UITests)", file.name, re.I), "Test or secret asset in candidate")
+        require(not re.search(r"(?:\.xctest|\.p8|\.p12|\.env|fixture|UITests)", file.name, re.IGNORECASE), "Test or secret asset in candidate")
         if file.suffix == ".mobileprovision":
             continue
         data = file.read_bytes()
