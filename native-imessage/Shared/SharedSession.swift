@@ -17,8 +17,8 @@ enum SessionStore {
     private static func query(_ configuration: RuntimeConfiguration) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.mikunad.calledit.verified-session." + configuration.environmentID,
-            kSecAttrAccount as String: "session",
+            kSecAttrService as String: "com.mikunad.calledit.verified-session." + configuration.storageNamespace,
+            kSecAttrAccount as String: configuration.storageKey("session"),
             kSecAttrAccessGroup as String: configuration.keychainGroup,
             kSecAttrSynchronizable as String: false,
         ]
@@ -73,9 +73,9 @@ enum SharedState {
 
     static func clearAccount(_ accountID: String, configuration: RuntimeConfiguration) throws {
         let defaults = try defaults(configuration: configuration)
-        defaults.removeObject(forKey: "links." + configuration.environmentID + "." + accountID)
-        defaults.removeObject(forKey: "reveals." + configuration.environmentID + "." + accountID)
-        defaults.removeObject(forKey: "pendingCard")
-        defaults.removeObject(forKey: "pendingNotification")
+        defaults.removeObject(forKey: "links." + configuration.storageNamespace + "." + accountID)
+        defaults.removeObject(forKey: "reveals." + configuration.storageNamespace + "." + accountID)
+        defaults.removeObject(forKey: configuration.storageKey("pendingCard"))
+        defaults.removeObject(forKey: configuration.storageKey("pendingNotification"))
     }
 }

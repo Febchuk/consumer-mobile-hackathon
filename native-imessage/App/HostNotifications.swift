@@ -13,11 +13,15 @@ final class HostNotifications: ObservableObject {
 
     func refresh() async {
         if tap == nil, let configuration = try? Config.load(),
-           let data = try? SharedState.defaults(configuration: configuration).data(forKey: "pendingNotification"),
+           let data = try? SharedState.defaults(configuration: configuration).data(forKey: configuration.storageKey("pendingNotification")),
            let pending = try? JSONDecoder().decode(NotificationTap.self, from: data), (try? pending.validate()) != nil {
             tap = pending
         }
         await loadPreferences()
+        guard (try? Config.load()) != nil else { status = "Not configured"; return }
+        #if QA && targetEnvironment(simulator)
+        if (try? Config.load())?.qaContext != nil { status = "QA provider delivery disabled"; return }
+        #endif
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -69,7 +73,7 @@ final class HostNotifications: ObservableObject {
             let destination = try JSONDecoder().decode(NotificationTap.self, from: data)
             try destination.validate()
             let configuration = try Config.load()
-            try SharedState.defaults(configuration: configuration).set(data, forKey: "pendingNotification")
+            try SharedState.defaults(configuration: configuration).set(data, forKey: configuration.storageKey("pendingNotification"))
             tap = destination
         } catch { self.error = "This notification can't be opened. Open your original card in Messages instead." }
     }
@@ -77,11 +81,15 @@ final class HostNotifications: ObservableObject {
     func clearDestination() {
         tap = nil
         if let configuration = try? Config.load() {
-            try? SharedState.defaults(configuration: configuration).removeObject(forKey: "pendingNotification")
+            try? SharedState.defaults(configuration: configuration).removeObject(forKey: configuration.storageKey("pendingNotification"))
         }
     }
 
     func requestPermission() async {
+        guard (try? Config.load()) != nil else { status = "Not configured"; return }
+        #if QA && targetEnvironment(simulator)
+        if (try? Config.load())?.qaContext != nil { status = "QA provider delivery disabled"; return }
+        #endif
         do {
             let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
             if allowed { UIApplication.shared.registerForRemoteNotifications() }
@@ -93,6 +101,9 @@ final class HostNotifications: ObservableObject {
     func registered(deviceToken: Data) async {
         do {
             let configuration = try Config.load()
+            #if QA && targetEnvironment(simulator)
+            if configuration.qaContext != nil { status = "QA provider delivery disabled"; return }
+            #endif
             guard let session = try SessionStore.load(configuration: configuration) else { return }
             guard enabled == true else { return }
             guard let rawEnvironment = Bundle.main.object(forInfoDictionaryKey: "CalledItAPNsEnvironment") as? String,
