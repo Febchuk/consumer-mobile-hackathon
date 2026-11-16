@@ -45,7 +45,7 @@ function Particles({ width, height }: { width: number; height: number }) {
               width: d.r * 2,
               height: d.r * 2,
               borderRadius: d.r,
-              backgroundColor: d.dark ? "#6E6E73" : "#FFFFFF",
+              backgroundColor: d.dark ? "#3A3A3C" : "#8E8E93",
               opacity: p.interpolate({ inputRange: [0, 1], outputRange: i % 2 ? [0.15, 0.95] : [0.9, 0.2] }),
               transform: [
                 { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, d.dx] }) },
@@ -64,7 +64,7 @@ export function InvisibleInk({
   canRub,
   children,
   width = 250,
-  height = 120,
+  height = 64,
   hint,
 }: {
   name: string;
@@ -109,12 +109,10 @@ export function InvisibleInk({
       {children ? <View style={{ opacity: 0 }}>{children}</View> : <View style={{ width, height }} />}
       <Animated.View
         {...pan.panHandlers}
-        style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0, borderRadius: 18, overflow: "hidden", backgroundColor: I.ink, opacity: fade, alignItems: "center", justifyContent: "center" }}
+        style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0, borderRadius: 18, overflow: "hidden", backgroundColor: "#E9E9EB", opacity: fade, alignItems: "flex-start", justifyContent: "flex-start", padding: 12 }}
       >
         <Particles width={width} height={height} />
-        <View style={{ backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <Text style={t(15, "600")}>{name}</Text>
-        </View>
+        <Text style={t(17, "600", "#0A7AFF")}>{name}</Text>
       </Animated.View>
       </View>
       {tip || canRub || hint ? (

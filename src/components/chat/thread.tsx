@@ -126,30 +126,28 @@ function Poll({ b, mine }: { b: BetItem; mine: boolean }) {
   const settled = b.status === "settled" || b.status === "refunded";
   const fg = mine ? "#fff" : I.label;
   const sub = mine ? "rgba(255,255,255,0.8)" : I.secondary;
+  const mention = mine ? "#fff" : "#0A7AFF";
   return (
-    <View style={{ gap: 8, width: 244, paddingVertical: 2 }}>
-      {b.subject ? (
-        <Text style={t(12, "600", sub)}>
-          {b.aboutMe ? "About you" : "About " + b.subject.emoji + " " + b.subject.name}
-        </Text>
-      ) : null}
-      <Text style={t(17, "600", fg)}>{b.question}</Text>
-      {b.options.map((o, i) => {
-        const won = settled && b.winningOption === i;
-        const col = optColor(b.kind, i);
-        return (
-          <View key={i} style={{ height: 34, borderRadius: 10, backgroundColor: mine ? "rgba(255,255,255,0.22)" : "#FFFFFF", overflow: "hidden", justifyContent: "center" }}>
-            <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: Math.max(3, b.pct[i]) + "%", backgroundColor: won ? col.fg : mine ? "rgba(255,255,255,0.28)" : col.soft }} />
-            <View style={{ flexDirection: "row", paddingHorizontal: 10, alignItems: "center", gap: 6 }}>
-              <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: won ? "#fff" : mine ? "#fff" : I.tertiary, backgroundColor: b.mine?.option === i ? (mine ? "#fff" : I.blue) : "transparent", alignItems: "center", justifyContent: "center" }}>
-                {won ? <Text style={t(10, "800", won ? "#fff" : fg)}>✓</Text> : null}
-              </View>
-              <Text numberOfLines={1} style={[t(15, "500", won ? "#fff" : fg), { flex: 1 }]}>{o}</Text>
-              <Text style={[t(14, "600", won ? "#fff" : sub), { fontVariant: ["tabular-nums"] }]}>{Math.round(b.pct[i])}%</Text>
+    <View style={{ gap: 10, width: 252, paddingVertical: 2 }}>
+      <Text style={t(17, "400", fg)}>
+        {b.subject && !b.question.toLowerCase().includes("@" + b.subject.name.toLowerCase()) ? <Text style={t(17, "600", mention)}>{b.aboutMe ? "@you " : "@" + b.subject.name + " "}</Text> : null}
+        {b.question}
+      </Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {b.options.map((o, i) => {
+          const won = settled && b.winningOption === i;
+          const lost = settled && b.winningOption !== i;
+          const picked = b.mine?.option === i;
+          return (
+            <View key={i} style={{ borderRadius: 99, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: won ? "#22903F" : picked ? "#0A7AFF" : "#fff", opacity: lost ? 0.5 : 1 }}>
+              <Text style={[t(15, "500", won || picked ? "#fff" : "#0A7AFF"), { fontVariant: ["tabular-nums"] }]}>
+                {won ? "✓ " : ""}
+                {o} · {Math.round(b.pct[i])}%
+              </Text>
             </View>
-          </View>
-        );
-      })}
+          );
+        })}
+      </View>
       <Text style={[t(12, "400", sub), { fontVariant: ["tabular-nums"] }]}>
         {b.bettors} in · {fmt(b.total)} pts ·{" "}
         {settled
