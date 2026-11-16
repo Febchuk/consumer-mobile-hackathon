@@ -87,7 +87,7 @@ struct ProofView: View {
             guard model.token == token, model.isActive else { return }
             let _: ProofReference? = try await API.action("v0Proof:upload", [
                 "token": token, "betId": betID, "contentType": prepared.contentType,
-                "bytes": ["$bytes": prepared.bytes.base64EncodedString()], "requestId": UUID().uuidString,
+                "bytes": prepared.bytes, "requestId": UUID().uuidString,
             ])
             await load()
             error = nil

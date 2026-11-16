@@ -165,7 +165,7 @@ final class AppModel: ObservableObject {
             guard let url = message.url else { throw NativeError.invalidLink }
             let configuration = try Config.load()
             let locator = try CardLocator(url: url, configuration: configuration)
-            try SharedState.defaults(configuration: configuration).set(try JSONEncoder().encode(locator), forKey: "pendingCard")
+            try SecureSessionPersistence().setPendingCard(locator, configuration: configuration)
             guard let token, let conversationKey else { return }
             let bet: NativeBet? = try await API.query("v0Bets:get", ["token": token, "locator": locator.value])
             guard self.token == token, self.conversationKey == conversationKey, !Task.isCancelled else { return }

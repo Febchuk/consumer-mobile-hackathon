@@ -36,17 +36,9 @@ struct ContainerView: View {
 
     var body: some View {
         Form {
-            #if QA
+            #if QA && targetEnvironment(simulator)
             Section("QA runtime diagnostics") {
-                Text(Bundle.main.object(forInfoDictionaryKey: "CalledItBuildChannel") as? String ?? "missing")
-                    .accessibilityIdentifier("qa.runtime.buildChannel")
-                Text(Bundle.main.bundleIdentifier ?? "unknown").accessibilityIdentifier("qa.runtime.bundleID")
-                Text((Bundle.main.object(forInfoDictionaryKey: "CalledItFixtureMode") as? Bool).map { $0 ? "true" : "false" } ?? "missing")
-                    .accessibilityIdentifier("qa.runtime.fixtureMode")
-                Text((try? Config.load()) == nil ? "unconfigured" : "attestation_required")
-                    .accessibilityIdentifier("qa.runtime.endpointPolicy")
-                Text((Bundle.main.object(forInfoDictionaryKey: "CalledItKeychainGroup") as? String)?.contains(".qa.") == true ? "qa_shared_keychain" : "invalid")
-                    .accessibilityIdentifier("qa.runtime.sessionStorage")
+                QADiagnosticsView()
             }
             #endif
             Section {

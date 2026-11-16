@@ -10,6 +10,9 @@ struct RootView: View {
             else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        #if QA && targetEnvironment(simulator)
+                        QADiagnosticsView()
+                        #endif
                         HStack {
                             if model.screen != .home { Button("Home") { model.home() } }
                             Spacer()
@@ -134,6 +137,9 @@ struct CompactView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            #if QA && targetEnvironment(simulator)
+            ScrollView { QADiagnosticsView() }.frame(maxHeight: 120)
+            #endif
             HStack {
                 CIAvatar(size: 28)
                 Text("Called It").font(.headline)

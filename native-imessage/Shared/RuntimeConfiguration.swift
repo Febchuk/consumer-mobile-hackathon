@@ -13,6 +13,9 @@ struct RuntimeConfiguration: Equatable {
     let cardBaseURL: URL
     let appGroup: String
     let keychainGroup: String
+    #if QA && targetEnvironment(simulator)
+    let qaContext: QARuntimeContext?
+    #endif
 
     init(values: [String: Any]) throws {
         func required(_ name: String) throws -> String {
@@ -52,14 +55,47 @@ struct RuntimeConfiguration: Equatable {
         appGroup = try required("CalledItAppGroup")
         keychainGroup = try required("CalledItKeychainGroup")
         guard values["CalledItFixtureMode"] as? Bool == false else { throw NativeError.configuration }
+        #if QA && targetEnvironment(simulator)
+        qaContext = nil
+        #endif
     }
 
-    static func load(bundle: Bundle = .main) throws -> RuntimeConfiguration {
-        try RuntimeConfiguration(values: bundle.infoDictionary ?? [:])
+    #if QA && targetEnvironment(simulator)
+    private init(qa: QARuntimeContext) {
+        channel = .qa
+        environmentID = "local"
+        sourceRevision = qa.sourceRevision
+        backendRevision = qa.backendRevision
+        deploymentID = qa.deploymentID
+        configVersion = qa.configVersion
+        apiURL = qa.apiURL
+        cardBaseURL = qa.cardBaseURL
+        appGroup = qa.appGroup
+        keychainGroup = qa.keychainGroup
+        qaContext = qa
     }
+    #endif
+
+    static func load(bundle: Bundle = .main) throws -> RuntimeConfiguration {
+        #if QA && targetEnvironment(simulator)
+        if let qa = try QARuntimeContext.fromLaunch(bundle: bundle) { return RuntimeConfiguration(qa: qa) }
+        #endif
+        return try RuntimeConfiguration(values: bundle.infoDictionary ?? [:])
+    }
+
+    var storageNamespace: String {
+        #if QA && targetEnvironment(simulator)
+        if let qaContext { return environmentID + ".qa." + qaContext.runID }
+        #endif
+        return environmentID
+    }
+    func storageKey(_ key: String) -> String { storageNamespace + "." + key }
 }
 
 enum NativeError: LocalizedError {
+    #if QA && targetEnvironment(simulator)
+    case qaConfiguration
+    #endif
     case configuration
     case sessionStorage
     case unavailable
@@ -68,6 +104,9 @@ enum NativeError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        #if QA && targetEnvironment(simulator)
+        case .qaConfiguration: return "Invalid QA launch. Use the exact QA build and a fresh, attested simulator/run manifest."
+        #endif
         case .configuration: return "This build isn't connected to a verified Called It environment."
         case .sessionStorage: return "Called It couldn't access its shared sign-in. Unlock your device and try again."
         case .unavailable: return "Phone sign-in isn't configured for this build yet."
