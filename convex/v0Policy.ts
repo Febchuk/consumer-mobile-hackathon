@@ -32,7 +32,7 @@ export async function requireSession(ctx: QueryCtx, token: string) {
   if (!token || token.length > 256) fail("AUTH_REQUIRED", "Sign in to continue.");
   const digest = await hash(token);
   const current = await ctx.db.query("v0Sessions").withIndex("by_hash", (q) => q.eq("tokenHash", digest)).unique();
-  if (!current || current.revokedAt !== undefined || current.expiresAt <= Date.now()) fail("AUTH_REQUIRED", "Sign in to continue.");
+  if (!current || current.revokedAt !== undefined || !Number.isFinite(current.createdAt) || !Number.isFinite(current.expiresAt) || current.createdAt > Date.now() || current.expiresAt <= Date.now() || current.expiresAt <= current.createdAt) fail("AUTH_REQUIRED", "Sign in to continue.");
   const account = await ctx.db.get(current.accountId);
   if (!account || account.deletedAt !== undefined) fail("AUTH_REQUIRED", "Sign in to continue.");
   return { account, session: current };
@@ -40,7 +40,8 @@ export async function requireSession(ctx: QueryCtx, token: string) {
 
 export async function activeMember(ctx: QueryCtx, groupId: Id<"v0Groups">, accountId: Id<"v0Accounts">) {
   const rows = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", groupId).eq("accountId", accountId)).collect();
-  return rows.find((row) => row.leftAt === undefined) ?? null;
+  const active = rows.filter((row) => row.leftAt === undefined && Number.isFinite(row.joinedAt) && row.joinedAt <= Date.now());
+  return active.length === 1 ? active[0] : null;
 }
 
 export async function requireMember(ctx: QueryCtx, groupId: Id<"v0Groups">, accountId: Id<"v0Accounts">) {
@@ -59,6 +60,7 @@ export async function isBlocked(ctx: QueryCtx, first: Id<"v0Accounts">, second: 
 }
 
 export async function canReadBet(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accounts">) {
+  if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt <= bet.cutoffAt) return false;
   const member = await activeMember(ctx, bet.groupId, accountId);
   return !!member && (member.joinedAt < bet.createdAt || (member.joinedAt === bet.createdAt && member._creationTime < bet._creationTime))
     && !(await isBlocked(ctx, accountId, bet.creatorId))
