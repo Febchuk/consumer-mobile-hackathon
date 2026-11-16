@@ -2,8 +2,9 @@ import SwiftUI
 import UIKit
 
 struct InkNoise: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 15)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 15, paused: reduceMotion)) { timeline in
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.bubble))
                 var rng = SeededRandom(seed: UInt64(timeline.date.timeIntervalSinceReferenceDate * 15))
@@ -85,7 +86,8 @@ struct RubToReveal<Content: View>: View {
     private func reveal() {
         guard !uncovered else { return }
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-        withAnimation(.easeOut(duration: 0.35)) { uncovered = true }
+        if reduceMotion { uncovered = true }
+        else { withAnimation(.easeOut(duration: 0.35)) { uncovered = true } }
     }
 
     var body: some View {

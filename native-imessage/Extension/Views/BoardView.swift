@@ -5,6 +5,7 @@ struct BoardView: View {
     let groupID: String
     @State private var board: GroupBoard?
     @State private var history: [NativeBet] = []
+    @State private var recap: WeeklyRecap?
     @State private var goalLabel = ""
     @State private var target = ""
     @State private var busy = false
@@ -56,6 +57,18 @@ struct BoardView: View {
                 }
             }
             if !board.policy.approved { Footnote(text: "Goal approval and scoring rules are awaiting a product decision.") }
+            SectionTitle(text: "Weekly recap")
+            if let recap {
+                CardBox {
+                    Text("\(Date(timeIntervalSince1970: recap.startsAt / 1000).formatted(date: .abbreviated, time: .omitted)) – \(Date(timeIntervalSince1970: recap.endsAt / 1000).formatted(date: .abbreviated, time: .omitted))")
+                        .font(.headline)
+                    ForEach(recap.rows) { row in
+                        HStack { Text(row.alias); Spacer(); Text("\(pts(row.points)) pts").monospacedDigit() }
+                    }
+                    if !recap.policy.approved { Text("Scoring policy is awaiting approval.").font(.footnote) }
+                }
+                .accessibilityIdentifier("board.recap")
+            } else { Footnote(text: "No weekly recap available in your membership period yet.") }
             SectionTitle(text: "Your group's final history")
             if history.isEmpty { Footnote(text: "No final bets available in your current membership period.") }
             ForEach(history) { bet in
@@ -83,14 +96,18 @@ struct BoardView: View {
         do {
             let result: GroupBoard? = try await API.query("v0Groups:board", ["token": token, "groupId": groupID])
             let past: [NativeBet]? = try await API.query("v0Bets:history", ["token": token, "groupId": groupID])
+            let latest: WeeklyRecap? = try await API.query("v0Groups:recap", ["token": token, "groupId": groupID])
             guard model.token == token else { return }
             guard result?.groupId == groupID else { throw NativeError.invalidLink }
             board = result
             history = (past ?? []).filter { $0.groupId == groupID }
+            guard latest == nil || latest?.groupId == groupID else { throw NativeError.invalidLink }
+            recap = latest
             error = nil
         } catch {
             board = nil
             history = []
+            recap = nil
             self.error = error.localizedDescription
             model.handle(error)
         }

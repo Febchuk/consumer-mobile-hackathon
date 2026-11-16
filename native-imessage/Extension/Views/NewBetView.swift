@@ -109,6 +109,9 @@ struct NewBetView: View {
             let result: [GroupMember]? = try await API.query("v0Groups:members", ["token": token, "groupId": groupID])
             guard model.token == token else { return }
             members = result ?? []
+            if let requested = model.requestedSubjectID, members.contains(where: { $0.id == requested && !$0.noBets }), requested != model.session?.accountID {
+                subjectID = requested
+            }
         } catch { model.handle(error) }
     }
 

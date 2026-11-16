@@ -36,6 +36,7 @@ enum SessionStore {
             throw NativeError.sessionStorage
         }
         guard session.isUsable(in: configuration) else {
+            try SharedState.clearAccount(session.accountID, configuration: configuration)
             try delete(configuration: configuration)
             return nil
         }
@@ -75,5 +76,6 @@ enum SharedState {
         defaults.removeObject(forKey: "links." + configuration.environmentID + "." + accountID)
         defaults.removeObject(forKey: "reveals." + configuration.environmentID + "." + accountID)
         defaults.removeObject(forKey: "pendingCard")
+        defaults.removeObject(forKey: "pendingNotification")
     }
 }

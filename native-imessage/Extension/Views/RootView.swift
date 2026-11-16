@@ -59,9 +59,10 @@ struct HomeView: View {
         Text("You're \(room.alias) · \(pts(room.points)) group points · streak \(room.streak)")
             .font(.subheadline).foregroundStyle(Theme.sub)
         HStack {
-            PrimaryButton(title: "New bet") { model.go(.newBet) }.accessibilityIdentifier("navigation.newBet")
+            PrimaryButton(title: "New bet") { model.compose() }.accessibilityIdentifier("navigation.newBet")
             SoftButton(title: "Group board") { model.go(.board(room.id)) }.accessibilityIdentifier("navigation.board")
         }
+        DailyTurnView(groupID: room.id)
         if model.me?.policy.approved != true {
             Footnote(text: "Game rules are awaiting approval. Scoring, deadlines and rewards aren't final.")
         }
@@ -146,7 +147,7 @@ struct CompactView: View {
             } else if let room = model.linkedRoom {
                 Text(room.name).font(.title3.bold())
                 HStack {
-                    PrimaryButton(title: "New bet") { model.go(.newBet) }
+                    PrimaryButton(title: "New bet") { model.compose() }
                     SoftButton(title: "Open group") { model.go(.home) }
                 }
             } else {

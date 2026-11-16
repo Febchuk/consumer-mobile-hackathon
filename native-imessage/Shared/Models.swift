@@ -107,7 +107,8 @@ struct NativeBet: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case serverTime, groupId, betId, state, cutoffAt, revealAt, card, view, canVeto
-        case question, options, picks, myPick, outcome, provisionalOutcome, contextLine, media, suggestions
+        case question, options, picks, myPick, outcome, provisionalOutcome, contextLine, media, suggestions, format, line
+        case answerDeadline, challengeDeadline
     }
 
     init(from decoder: Decoder) throws {
@@ -125,13 +126,16 @@ struct NativeBet: Decodable, Identifiable {
         }
         let view = try values.decode(String.self, forKey: .view)
         if view == "sealed" || view == "unavailable" {
-            let privateKeys: [CodingKeys] = [.question, .options, .picks, .myPick, .outcome, .provisionalOutcome, .contextLine, .media, .suggestions]
+            let privateKeys: [CodingKeys] = [.question, .options, .picks, .myPick, .outcome, .provisionalOutcome, .contextLine, .media, .suggestions, .format, .line, .answerDeadline, .challengeDeadline]
             guard !privateKeys.contains(where: values.contains) else { throw NativeError.invalidLink }
             content = view == "sealed" ? .sealed(canVeto: try values.decode(Bool.self, forKey: .canVeto)) : .unavailable
         } else if view == "bet" {
             let details = try BetDetails(from: decoder)
             guard details.options.count == 2, details.options[0] != details.options[1],
                   ["yes_no", "over_under", "this_that"].contains(details.format) else { throw NativeError.invalidLink }
+            guard details.myPick.map({ (0...1).contains($0.option) && $0.confidence.isFinite && (0...1).contains($0.confidence) }) ?? true,
+                  details.picks.allSatisfy({ (0...1).contains($0.option) && $0.confidence.isFinite && (0...1).contains($0.confidence) }),
+                  details.line?.isFinite ?? true else { throw NativeError.invalidLink }
             content = .bet(details)
         } else {
             throw NativeError.invalidLink
@@ -159,6 +163,67 @@ struct PrivacySettings: Decodable {
     let copyDeletionCaveat: String
 }
 struct CreatedBet: Decodable { let betId: String; let groupId: String; let card: CardMetadata }
+
+struct CreatorTurn: Decodable {
+    let id: String
+    let groupId: String
+    let localDate: String
+    let creatorId: String
+    let subjectId: String
+    let status: String
+    let assignedAt: Double
+    let passAt: Double
+    let canPass: Bool
+}
+struct WeeklyRecap: Decodable {
+    struct Row: Decodable, Identifiable {
+        let accountId: String
+        let alias: String
+        let points: Double
+        var id: String { accountId }
+    }
+    let id: String
+    let groupId: String
+    let startsAt: Double
+    let endsAt: Double
+    let rows: [Row]
+    let policy: PolicyStatus
+}
+struct NotificationPreferences: Decodable { let enabled: Bool }
+struct NotificationTap: Decodable {
+    let kind: String
+    let groupId: String?
+    let locator: String?
+
+    func validate() throws {
+        guard ["turn", "reveal", "result", "recap"].contains(kind), groupId != nil || locator != nil else {
+            throw NativeError.invalidLink
+        }
+        if let groupId { _ = try CardLocator(value: groupId) }
+        if let locator { _ = try CardLocator(value: locator) }
+    }
+}
+struct ProofReference: Decodable, Identifiable {
+    let id: String
+    let contentType: String
+    let createdAt: Double
+}
+struct ConvexBytes: Decodable {
+    let data: Data
+    enum CodingKeys: String, CodingKey { case bytes = "$bytes" }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let base64 = try values.decode(String.self, forKey: .bytes)
+        guard let data = Data(base64Encoded: base64), data.count <= 512 * 1024 else { throw NativeError.invalidLink }
+        self.data = data
+    }
+}
+struct PrivateProof: Decodable {
+    let id: String
+    let contentType: String
+    let createdAt: Double
+    let bytes: ConvexBytes
+}
 
 struct ServerClock {
     let serverTime: Double

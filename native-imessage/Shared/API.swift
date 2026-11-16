@@ -36,7 +36,7 @@ struct RuntimeAttestation: Decodable {
     let testAdapters: Bool
 
     func validate(configuration: RuntimeConfiguration) throws {
-        guard app == "called-it", contractVersion == "v0.1", schemaVersion == "v0.1", !testAdapters,
+        guard app == "called-it", contractVersion == "v0.2", schemaVersion == "v0.2", !testAdapters,
               environment == configuration.environmentID,
               sourceSha == configuration.backendRevision, deploymentId == configuration.deploymentID,
               configVersion == configuration.configVersion,
