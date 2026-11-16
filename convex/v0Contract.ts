@@ -1,4 +1,5 @@
 import type { Id } from "./_generated/dataModel";
+import type { approvedPolicy } from "./v0GamePolicy";
 
 export type Account = { id: Id<"v0Accounts">; displayName: string };
 export type Session = { token: string; expiresAt: number; account: Account };
@@ -27,5 +28,5 @@ export type Turn = { id: Id<"v0Turns">; groupId: Id<"v0Groups">; localDate: stri
 export type Recap = { id: Id<"v0Recaps">; groupId: Id<"v0Groups">; startsAt: number; endsAt: number; rows: { accountId: Id<"v0Accounts">; alias: string; points: number }[]; policy: PolicyStatus };
 export type NotificationPreferences = { enabled: boolean };
 export type NotificationTap = { kind: "turn" | "reveal" | "result" | "recap"; groupId?: Id<"v0Groups">; locator?: string };
-export type PolicyStatus = { status: "pending"; missing: string[] } | { status: "approved"; version: string };
+export type PolicyStatus = { status: "pending"; version: string; approved: typeof approvedPolicy; missing: string[] } | { status: "approved"; version: string };
 export const contractVersion = "v0.2";

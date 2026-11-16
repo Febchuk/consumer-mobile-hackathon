@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { NotificationPreferences, NotificationTap } from "./v0Contract";
 import { activeMember, canReadBet, fail, hash, once, rateLimit, requireSession } from "./v0Policy";
+import { stateAt } from "./v0GamePolicy";
 
 export type NotificationInput = {
   key: string;
@@ -53,7 +54,7 @@ async function canNotify(ctx: QueryCtx, input: NotificationInput) {
   if (input.groupId && !(await ctx.db.get(input.groupId))) return false;
   if (!input.betId) return true;
   const bet = await ctx.db.get(input.betId);
-  if (!bet || bet.groupId !== input.groupId || bet.state === "voided" || !(await canReadBet(ctx, bet, input.accountId))) return false;
+  if (!bet || bet.groupId !== input.groupId || stateAt(bet, Date.now()) === "voided" || !(await canReadBet(ctx, bet, input.accountId))) return false;
   const [subject, creator, subjectCanRead, creatorCanRead] = await Promise.all([
     ctx.db.get(bet.subjectId),
     ctx.db.get(bet.creatorId),

@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, query, type QueryCtx } from "./_generated/server";
 import type { PrivateProof, ProofRef } from "./v0Contract";
 import { fail, once, rateLimit, requireBet, requireSession } from "./v0Policy";
+import { stateAt } from "./v0GamePolicy";
 
 const contentType = v.union(v.literal("image/jpeg"), v.literal("image/png"), v.literal("audio/mp4"));
 const MAX_PROOF_BYTES = 512 * 1024;
@@ -15,7 +16,7 @@ function proofRef(proof: Doc<"v0Proofs">): ProofRef {
 async function visibleBet(ctx: QueryCtx, token: string, betId: Id<"v0Bets">) {
   const { account } = await requireSession(ctx, token);
   const bet = await requireBet(ctx, betId, account._id);
-  if (Date.now() < bet.revealAt || bet.state === "voided") fail("NOT_AVAILABLE");
+  if (Date.now() < bet.revealAt || stateAt(bet, Date.now()) === "voided") fail("NOT_AVAILABLE");
   return { account, bet };
 }
 

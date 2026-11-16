@@ -1,22 +1,15 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import type { BetState, BetView, CardLocator } from "./v0Contract";
+import type { BetView, CardLocator } from "./v0Contract";
 import { activeMember, canReadBet, fail, isBlocked, once, policyStatus, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
 import { format } from "./v0Schema";
 import { validateCandidate } from "./v0Safety";
 import { queueNotification } from "./v0Notifications";
+import { answerDeadlineFor, approvedPolicy, challengeDeadlineFor, nextDefaultRevealAt, stateAt } from "./v0GamePolicy";
 
 function lifecyclePolicy(): never {
-  return fail("POLICY_PENDING", "Scoring and lifecycle rules are awaiting approval.");
-}
-
-function stateAt(bet: Doc<"v0Bets">, now: number): BetState {
-  if (bet.state === "voided") return "voided";
-  if (bet.state === "finalized" || bet.state === "provisional") return bet.state;
-  if (now < bet.cutoffAt) return "open";
-  if (now < bet.revealAt) return "locked";
-  return "revealed";
+  return fail("POLICY_PENDING", "Pick lock and creator rules are awaiting approval.");
 }
 
 async function cardFor(ctx: QueryCtx, bet: Doc<"v0Bets">): Promise<CardLocator> {
@@ -48,6 +41,9 @@ async function cardFor(ctx: QueryCtx, bet: Doc<"v0Bets">): Promise<CardLocator> 
 async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accounts">): Promise<BetView> {
   const now = Date.now();
   const state = stateAt(bet, now);
+  const answerDeadline = answerDeadlineFor(bet);
+  const challengeDeadline = challengeDeadlineFor(bet);
+  const challenge = state === "provisional" && accountId !== bet.subjectId ? await ctx.db.query("v0Challenges").withIndex("by_bet_account", (q) => q.eq("betId", bet._id).eq("accountId", accountId)).unique() : null;
   const base = { serverTime: now, groupId: bet.groupId, betId: bet._id, state, cutoffAt: bet.cutoffAt, revealAt: bet.revealAt, card: await cardFor(ctx, bet) };
   if (state === "voided") return { ...base, view: "unavailable" };
   if (accountId === bet.subjectId && now < bet.revealAt) return { ...base, view: "sealed", canVeto: true };
@@ -58,7 +54,7 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
     for (const pick of allPicks) {
       const member = await activeMember(ctx, bet.groupId, pick.accountId);
       if (member?._id !== pick.membershipId || await isBlocked(ctx, accountId, pick.accountId)) continue;
-      picks.push({ accountId: pick.accountId, alias: member.alias, option: pick.option, confidence: pick.confidence, ...(pick.riskPoints === undefined ? {} : { riskPoints: pick.riskPoints }) });
+      picks.push({ accountId: pick.accountId, alias: member.alias, option: pick.option, confidence: pick.confidence });
     }
   }
   return {
@@ -69,12 +65,12 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
     options: bet.options,
     ...(bet.line === undefined ? {} : { line: bet.line }),
     canPick: false,
-    canAnswer: false,
-    canChallenge: false,
-    myPick: mine ? { option: mine.option, confidence: mine.confidence, ...(mine.riskPoints === undefined ? {} : { riskPoints: mine.riskPoints }) } : null,
+    canAnswer: accountId === bet.subjectId && state === "revealed" && now < answerDeadline,
+    canChallenge: accountId !== bet.subjectId && state === "provisional" && challengeDeadline !== undefined && now < challengeDeadline && !challenge,
+    myPick: mine ? { option: mine.option, confidence: mine.confidence } : null,
     picks,
-    ...(now >= bet.revealAt && bet.answerDeadline !== undefined ? { answerDeadline: bet.answerDeadline } : {}),
-    ...(now >= bet.revealAt && bet.challengeDeadline !== undefined ? { challengeDeadline: bet.challengeDeadline } : {}),
+    ...(now >= bet.revealAt ? { answerDeadline } : {}),
+    ...(now >= bet.revealAt && challengeDeadline !== undefined ? { challengeDeadline } : {}),
     ...(now >= bet.revealAt && bet.provisionalOutcome !== undefined ? { provisionalOutcome: bet.provisionalOutcome } : {}),
     ...(now >= bet.revealAt && state === "finalized" && bet.outcome !== undefined ? { outcome: bet.outcome } : {}),
   };
@@ -83,7 +79,7 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
 export async function voidBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
   if (bet.state === "finalized" || bet.state === "voided") return;
   const now = Date.now();
-  await ctx.db.patch(bet._id, { state: "voided", provisionalOutcome: undefined, outcome: undefined });
+  await ctx.db.patch(bet._id, { state: "voided", provisionalOutcome: undefined, outcome: undefined, answeredAt: undefined, challengeDeadline: undefined });
   for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {
     if (pick.voidedAt === undefined) await ctx.db.patch(pick._id, { voidedAt: now });
   }
@@ -122,13 +118,13 @@ export const history = query({
     await requireMember(ctx, groupId, account._id);
     const bets = await ctx.db.query("v0Bets").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect();
     const views: BetView[] = [];
-    for (const bet of bets) if ((bet.state === "finalized" || bet.state === "voided") && await canReadBet(ctx, bet, account._id)) views.push(await viewFor(ctx, bet, account._id));
+    for (const bet of bets) if (["finalized", "voided"].includes(stateAt(bet, Date.now())) && await canReadBet(ctx, bet, account._id)) views.push(await viewFor(ctx, bet, account._id));
     return views;
   },
 });
 
 export const create = mutation({
-  args: { token: v.string(), groupId: v.id("v0Groups"), subjectId: v.id("v0Accounts"), question: v.string(), contextLine: v.string(), format, options: v.array(v.string()), line: v.optional(v.number()), cutoffAt: v.number(), revealAt: v.number(), source: v.union(v.literal("manual"), v.literal("template"), v.literal("history"), v.literal("hosted_ai")), requestId: v.string() },
+  args: { token: v.string(), groupId: v.id("v0Groups"), subjectId: v.id("v0Accounts"), question: v.string(), contextLine: v.string(), format, options: v.array(v.string()), line: v.optional(v.number()), cutoffAt: v.number(), revealAt: v.optional(v.number()), source: v.union(v.literal("manual"), v.literal("template"), v.literal("history"), v.literal("hosted_ai")), requestId: v.string() },
   handler: async (ctx, args) => {
     const { account } = await requireSession(ctx, args.token);
     await requireMember(ctx, args.groupId, account._id);
@@ -136,7 +132,16 @@ export const create = mutation({
     const subject = await ctx.db.get(args.subjectId);
     if (args.subjectId === account._id || !subject || subject.deletedAt !== undefined || subject.noBets || await isBlocked(ctx, account._id, args.subjectId)) fail("NOT_AVAILABLE");
     validateCandidate(args, { blockedTopics: [...subject.blockedTopics, ...account.blockedTopics], contextLine: args.contextLine });
-    if (!Number.isFinite(args.cutoffAt) || !Number.isFinite(args.revealAt) || args.cutoffAt <= Date.now() || args.cutoffAt >= args.revealAt) fail("INVALID_INPUT", "The cutoff must be in the future and before reveal.");
+    const group = (await ctx.db.get(args.groupId))!;
+    let revealAt = args.revealAt;
+    if (revealAt === undefined) {
+      try {
+        revealAt = nextDefaultRevealAt(group.timezone, Date.now()) ?? undefined;
+      } catch {
+        fail("INVALID_INPUT", "Choose a valid group timezone.");
+      }
+    }
+    if (!Number.isFinite(args.cutoffAt) || revealAt === undefined || !Number.isFinite(revealAt) || args.cutoffAt <= Date.now() || revealAt <= Date.now()) fail("INVALID_INPUT", "Choose valid future scheduled times.");
     return lifecyclePolicy();
   },
 });
@@ -147,7 +152,7 @@ export const pick = mutation({
     const { account } = await requireSession(ctx, args.token);
     const bet = await requireBet(ctx, args.betId, account._id);
     if (bet.subjectId === account._id || stateAt(bet, Date.now()) !== "open") fail("NOT_AVAILABLE");
-    if (![0, 1].includes(args.option) || !Number.isFinite(args.confidence) || args.confidence < 0 || args.confidence > 1 || (args.riskPoints !== undefined && (!Number.isFinite(args.riskPoints) || args.riskPoints < 0))) fail("INVALID_INPUT");
+    if (![0, 1].includes(args.option) || !Number.isFinite(args.confidence) || args.confidence < approvedPolicy.confidenceMin || args.confidence > approvedPolicy.confidenceMax || args.riskPoints !== undefined) fail("INVALID_INPUT");
     return lifecyclePolicy();
   },
 });
@@ -169,22 +174,38 @@ export const veto = mutation({
 
 export const answer = mutation({
   args: { token: v.string(), betId: v.id("v0Bets"), option: v.number(), requestId: v.string() },
-  handler: async (ctx, { token, betId, option }) => {
+  handler: async (ctx, { token, betId, option, requestId }) => {
     const { account } = await requireSession(ctx, token);
     const bet = await requireBet(ctx, betId, account._id);
-    if (bet.subjectId !== account._id || stateAt(bet, Date.now()) !== "revealed") fail("NOT_AVAILABLE");
+    if (bet.subjectId !== account._id || stateAt(bet, Date.now()) === "voided") fail("NOT_AVAILABLE");
     if (![0, 1].includes(option)) fail("INVALID_INPUT");
-    return lifecyclePolicy();
+    return await once(ctx, account._id, "bets.answer", requestId, { betId, option }, async () => {
+      const now = Date.now();
+      if (stateAt(bet, now) !== "revealed" || now >= answerDeadlineFor(bet)) fail("NOT_AVAILABLE");
+      await rateLimit(ctx, `answer:${account._id}`, 60, 60_000);
+      const challengeDeadline = now + approvedPolicy.challengeDurationMs;
+      await ctx.db.patch(betId, { state: "provisional", answeredAt: now, answerDeadline: answerDeadlineFor(bet), challengeDeadline, provisionalOutcome: option, policyVersion: approvedPolicy.version });
+      return { state: "provisional" as const, challengeDeadline };
+    });
   },
 });
 
 export const challenge = mutation({
   args: { token: v.string(), betId: v.id("v0Bets"), requestId: v.string() },
-  handler: async (ctx, { token, betId }) => {
+  handler: async (ctx, { token, betId, requestId }) => {
     const { account } = await requireSession(ctx, token);
     const bet = await requireBet(ctx, betId, account._id);
     if (bet.subjectId === account._id || stateAt(bet, Date.now()) !== "provisional") fail("NOT_AVAILABLE");
-    return lifecyclePolicy();
+    return await once(ctx, account._id, "bets.challenge", requestId, { betId }, async () => {
+      const deadline = challengeDeadlineFor(bet);
+      if (deadline === undefined || Date.now() >= deadline) fail("NOT_AVAILABLE");
+      const existing = await ctx.db.query("v0Challenges").withIndex("by_bet_account", (q) => q.eq("betId", betId).eq("accountId", account._id)).unique();
+      if (!existing) {
+        await rateLimit(ctx, `challenge:${account._id}`, 60, 60_000);
+        await ctx.db.insert("v0Challenges", { betId, accountId: account._id, createdAt: Date.now() });
+      }
+      return { recorded: true as const };
+    });
   },
 });
 
@@ -204,6 +225,10 @@ export async function advanceBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
     return "voided" as const;
   }
   const state = stateAt(bet, Date.now());
+  if (state === "voided") {
+    await voidBet(ctx, bet);
+    return state;
+  }
   if (state === bet.state) return state;
   await ctx.db.patch(bet._id, { state });
   if (state === "revealed") {
