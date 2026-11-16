@@ -22,7 +22,7 @@ export type BetView = {
 );
 export type Suggestion = { subjectId: Id<"v0Accounts">; question: string; format: BetFormat; options: string[]; line?: number; source: "template" | "history" | "hosted_ai" };
 export type ProofRef = { id: Id<"v0Proofs">; contentType: "image/jpeg" | "image/png" | "audio/mp4"; createdAt: number };
-export type PrivateProof = ProofRef & { bytes: Uint8Array };
+export type PrivateProof = ProofRef & { bytes: ArrayBuffer };
 export type Turn = { id: Id<"v0Turns">; groupId: Id<"v0Groups">; localDate: string; creatorId: Id<"v0Accounts">; subjectId: Id<"v0Accounts">; status: "assigned" | "passed" | "created" | "expired"; assignedAt: number; passAt: number; canPass: boolean };
 export type Recap = { id: Id<"v0Recaps">; groupId: Id<"v0Groups">; startsAt: number; endsAt: number; rows: { accountId: Id<"v0Accounts">; alias: string; points: number }[]; policy: PolicyStatus };
 export type NotificationPreferences = { enabled: boolean };

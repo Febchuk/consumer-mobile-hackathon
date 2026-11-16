@@ -7,7 +7,7 @@ for (const name of ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "CI", "TZ", "System
 env.EXPO_NO_DOTENV = "1";
 env.NODE_ENV = "test";
 const args = process.argv.slice(2).filter((arg) => arg !== "--run");
-const result = spawnSync(process.execPath, ["node_modules/vitest/vitest.mjs", "run", ...args], {
+const result = spawnSync(process.execPath, ["tests/run-isolated.mjs", ...args], {
   env,
   stdio: "inherit",
 });
