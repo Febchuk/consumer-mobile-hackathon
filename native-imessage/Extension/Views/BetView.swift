@@ -97,19 +97,19 @@ struct BetView: View {
                 }
                 CardBox {
                     Text("Confidence: \(Int(confidence)) / 100").font(.headline)
-                    Slider(value: $confidence, in: 1...100, step: 1)
+                    Slider(value: $confidence, in: ConfidenceInput.range, step: 1)
                         .disabled(busy)
                         .accessibilityLabel("Confidence")
                         .accessibilityValue("\(Int(confidence)) out of 100")
                         .accessibilityIdentifier("bet.confidence")
                 }
                 PrimaryButton(title: details.myPick == nil ? "Save pick" : "Update pick", busy: busy) {
-                    Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": confidence / 100]) }
+                    Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": ConfidenceInput.normalized(confidence)]) }
                 }
                 .accessibilityIdentifier("bet.savePick")
                 if let saveConfirmation { Text(saveConfirmation).font(.subheadline).accessibilityIdentifier("bet.saveConfirmation") }
                 if let pick = details.myPick {
-                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(Int((pick.confidence * 100).rounded())) / 100")
+                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100")
                         .font(.footnote).accessibilityIdentifier("bet.savedPick")
                 }
                 Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero and don't reduce your group points. The server applies the confirmed scoring rules.")
@@ -117,7 +117,7 @@ struct BetView: View {
                 Text(bet.state == "locked" ? "Picks closed by the server." : bet.state.capitalized)
                     .font(.headline).accessibilityIdentifier("bet.state")
                 if let pick = details.myPick {
-                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(Int((pick.confidence * 100).rounded())) / 100")
+                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100")
                         .accessibilityIdentifier("bet.savedPick")
                 }
             }
@@ -170,7 +170,7 @@ struct BetView: View {
                         Spacer()
                         VStack(alignment: .trailing) {
                             Text(details.options[safe: pick.option] ?? "—")
-                            Text("Confidence \(Int((pick.confidence * 100).rounded())) / 100").font(.footnote).foregroundStyle(Theme.sub)
+                            Text("Confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100").font(.footnote).foregroundStyle(Theme.sub)
                         }
                     }
                 }
@@ -210,7 +210,7 @@ struct BetView: View {
             serverClock = ServerClock(serverTime: next.serverTime)
             if firstLoad, case .bet(let details) = next.content, let pick = details.myPick {
                 side = pick.option
-                confidence = min(100, max(1, pick.confidence * 100))
+                confidence = ConfidenceInput.controlValue(for: pick.confidence)
             }
             error = nil
         } catch {
@@ -233,10 +233,8 @@ struct BetView: View {
         args["requestId"] = requestID
         do {
             if path == "v0Bets:pick" {
-                guard let receipt: PickReceipt = try await API.mutation(path, args), receipt.saved,
-                      receipt.option == args["option"] as? Int,
-                      receipt.confidence == args["confidence"] as? Double,
-                      receipt.updatedAt.isFinite else { throw APIError(code: "TRANSPORT") }
+                guard let receipt: PickReceipt = try await API.mutation(path, args),
+                      receipt.matches(option: args["option"] as? Int, confidence: args["confidence"] as? Double) else { throw APIError(code: "TRANSPORT") }
                 guard model.token == token else { return }
                 saveConfirmation = "Pick saved on the server."
             } else {
