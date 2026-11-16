@@ -39,7 +39,7 @@ entitlements, accessibility and runtime injection. No wiring was changed here.
 3. Provide `CalledItUITests` with `UITests/**/*.swift` and
    `TestSupport/NativeQARun.swift` only. Use QA host bundle
    `com.mikunad.calledit.qa.host`, embedded Messages extension
-   `com.mikunad.calledit.qa.messages`, and runner bundle
+   `com.mikunad.calledit.qa.host.messages`, and runner bundle
    `com.mikunad.calledit.qa.uitests` (Xcode may append `.xctrunner`). UI tests must
    not link a replacement extension view tree into the runner.
 4. Make the test scheme/configuration explicitly QA-only. Add neither test source,
@@ -70,7 +70,7 @@ shell or MobileSMS launch environment:
 | `CALLEDIT_QA_SIMULATOR_UDID` | the executing `SIMULATOR_UDID`, a valid UUID |
 | `CALLEDIT_QA_ERASED_FOR_RUN` | the exact run ID, after the provisioner verified erasure |
 | `CALLEDIT_QA_HOST_BUNDLE` | `com.mikunad.calledit.qa.host` |
-| `CALLEDIT_QA_EXTENSION_BUNDLE` | `com.mikunad.calledit.qa.messages` |
+| `CALLEDIT_QA_EXTENSION_BUNDLE` | `com.mikunad.calledit.qa.host.messages` |
 | `CALLEDIT_QA_CARD_ORIGIN` | `https://calledit.qa.invalid` (reserved, never live hosting) |
 | `CALLEDIT_QA_ENDPOINT` | explicit loopback adapter origin with a port; `http`/`https`, only `localhost`, `127.0.0.1`, `[::1]`; no credentials/path/query/fragment |
 | `CALLEDIT_QA_CONVERSATION` | `CalledIt QA <exact run ID>` |

@@ -4,8 +4,25 @@ import { describe, expect, it, vi } from "vitest";
 import { fixture } from "./fixture";
 import { syntheticProviders } from "./adapters";
 import { qaBundles, requireFixtureTarget } from "./target-guard";
+import { v0Fixture } from "./v0-fixture";
 
 describe("HARNESS isolation (not product coverage)", () => {
+  it("[HARNESS.runtime-export-inventory] catches registered public exports even behind aliased builders", async () => {
+    const modules = import.meta.glob(["../../convex/**/*.ts", "!../../convex/_generated/**"]);
+    const actual: { path: string; kind: string }[] = [];
+    for (const [path, load] of Object.entries(modules)) {
+      const values = await load() as Record<string, { isPublic?: boolean; isHttp?: boolean; isQuery?: boolean; isMutation?: boolean; isAction?: boolean }>;
+      for (const [name, value] of Object.entries(values)) {
+        if (!value || (!value.isPublic && !value.isHttp)) continue;
+        const kind = value.isHttp ? "httpAction" : value.isQuery ? "query" : value.isMutation ? "mutation" : value.isAction ? "action" : "unknown";
+        expect(kind).not.toBe("unknown");
+        actual.push({ path: `${path.replace("../../convex/", "").replace(/\.ts$/, "")}:${name}`, kind });
+      }
+    }
+    const declared = JSON.parse(readFileSync("tests/coverage/public-exports.json", "utf8")) as { path: string; kind: string }[];
+    expect(actual.sort((a, b) => a.path.localeCompare(b.path))).toEqual(declared.map(({ path, kind }) => ({ path, kind })));
+  });
+
   it("[HARNESS.environment] has no inherited credentials or deployment target", () => {
     expect(process.env.E2E_ISOLATED).toBe("network-namespace-v1");
     expect(Object.keys(process.env).filter((key) => /(?:KEY|SECRET|TOKEN|PASSCODE|CONVEX.*(?:URL|DEPLOY))/i.test(key))).toEqual([]);
@@ -51,6 +68,19 @@ describe("HARNESS isolation (not product coverage)", () => {
     expect(() => a.storage.get("synthetic_outsider", media)).toThrow();
     a.storage.deleteOwner("synthetic_owner");
     expect(() => a.storage.get("synthetic_owner", media)).toThrow();
+  });
+
+  it("[HARNESS.v0-schema] seeds real V0.2 schema and hashed sessions without pretending handlers exist", async () => {
+    const f = await v0Fixture();
+    const state = await f.t.run(async (ctx) => ({ sessions: await ctx.db.query("v0Sessions").collect(), members: await ctx.db.query("v0Memberships").collect(), bet: await ctx.db.get(f.bet), proofs: await ctx.db.query("v0Proofs").collect(), publicAssets: await ctx.db.query("assets").collect() }));
+    expect(f.actors.alias.id).toBe(f.actors.subject.id);
+    expect(f.actors.unadmittedAlias.id).not.toBe(f.actors.subject.id);
+    expect(state.sessions.every((session) => /^[a-f0-9]{64}$/.test(session.tokenHash))).toBe(true);
+    expect(JSON.stringify(state.sessions)).not.toContain(f.actors.subject.token);
+    expect(state.members.some((member) => member.accountId === f.actors.left.id && member.leftAt !== undefined)).toBe(true);
+    expect(state.members.find((member) => member.accountId === f.actors.new.id)?.joinedAt).toBeGreaterThan(state.bet!.createdAt);
+    expect(state.proofs).toHaveLength(1);
+    expect(state.publicAssets).toEqual([]);
   });
 
   const clockCases = JSON.parse(readFileSync("tests/fixtures/clock-boundaries.json", "utf8")) as { utc: string; zone: string; localDate: string; localHour: string }[];

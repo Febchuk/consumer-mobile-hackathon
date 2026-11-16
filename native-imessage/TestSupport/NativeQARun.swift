@@ -2,7 +2,7 @@ import Foundation
 
 struct NativeQARun {
     static let hostBundle = "com.mikunad.calledit.qa.host"
-    static let extensionBundle = "com.mikunad.calledit.qa.messages"
+    static let extensionBundle = "com.mikunad.calledit.qa.host.messages"
     static let cardOrigin = "https://calledit.qa.invalid"
 
     let id: String

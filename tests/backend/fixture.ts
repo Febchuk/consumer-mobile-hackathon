@@ -43,6 +43,7 @@ export async function fixture(withPicks = false) {
     }
     const round = await ctx.db.insert("rounds", { number: 1, title: runId, opensAt: T0 - 60_000, locksAt: CUTOFF, revealAt: REVEAL, groupId: g1 });
     const bet = await ctx.db.insert("bets", { roundId: round, question: secret, kind: "yesno", options, pools: withPicks ? [10, 20] : [0, 0], status: "open", subjectUserId: actors.subject.id, createdBy: actors.creator.id, revealAt: REVEAL, order: 1 });
+    const snapshot = await ctx.db.insert("snapshots", { groupId: g1, label: runId, data: "{}" });
     if (withPicks) {
       for (const [role, option, amount] of [["creator", 0, 10], ["friend", 1, 20]] as const) {
         await ctx.db.insert("stakes", { betId: bet, roundId: round, userId: actors[role].id, option, amount, late: false, streakAtBet: 0 });
@@ -50,7 +51,7 @@ export async function fixture(withPicks = false) {
         await ctx.db.patch(member!._id, { points: 1000 - amount });
       }
     }
-    return { g1, g2, round, bet };
+    return { g1, g2, round, bet, snapshot };
   });
   return { t, runId, actors, secret, options, privateValues, ...state };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../convex/_generated/api";
-import { deniedOrNeutral, noPrivateValues } from "./assertions";
-import { fixture, REVEAL, T0, type Fixture } from "./fixture";
+import { deniedOrNeutral, noPrivateValues } from "../backend/assertions";
+import { fixture, REVEAL, T0, type Fixture } from "../backend/fixture";
 
 const reads = {
   "ext.card": (f: Fixture, token?: string) => f.t.query(api.ext.card, { token, betId: f.bet, now: T0 }),

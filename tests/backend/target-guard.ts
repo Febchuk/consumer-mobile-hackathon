@@ -1,6 +1,6 @@
 export const qaBundles = {
   host: "com.mikunad.calledit.qa.host",
-  extension: "com.mikunad.calledit.qa.messages",
+  extension: "com.mikunad.calledit.qa.host.messages",
   coreTests: "com.mikunad.calledit.qa.coretests",
   uiTests: "com.mikunad.calledit.qa.uitests",
 } as const;

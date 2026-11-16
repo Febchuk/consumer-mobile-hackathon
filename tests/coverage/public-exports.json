@@ -266,7 +266,7 @@
   {
     "path": "hosting:serve",
     "kind": "httpAction",
-    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "requiredPolicy": "public-static-only-no-private-reads",
     "verification": "blocked-runtime-policy-matrix"
   },
   {
@@ -315,6 +315,12 @@
     "path": "users:setProfile",
     "kind": "mutation",
     "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "v0Runtime:attestation",
+    "kind": "query",
+    "requiredPolicy": "anonymous-neutral-attestation",
     "verification": "blocked-runtime-policy-matrix"
   }
 ]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../../convex/_generated/api";
-import { fixture, ledger, REVEAL, T0 } from "./fixture";
+import { fixture, ledger, REVEAL, T0 } from "../backend/fixture";
 
 describe("SEC2 identity regressions", () => {
   it("[SEC2.pair-replay] redeems a synthetic pair once and rejects reuse", async () => {

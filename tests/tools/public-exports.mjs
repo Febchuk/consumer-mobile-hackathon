@@ -26,7 +26,7 @@ export function publicExports(root) {
 }
 
 if (process.argv.includes("--write")) {
-  const inventory = publicExports(process.cwd()).map((entry) => ({ ...entry, requiredPolicy: entry.path.startsWith("v0Runtime:") ? "anonymous-neutral-attestation" : entry.path.startsWith("v0Auth:requestCode") || entry.path.startsWith("v0Auth:verifyCode") || entry.path.startsWith("v0Auth:redeemPair") ? "bounded-anonymous-auth" : entry.path.startsWith("v0") ? "verified-session-active-membership-subject-time-state" : "legacy-disable-or-apply-full-v0-policy", verification: "blocked-runtime-policy-matrix" }));
+  const inventory = publicExports(process.cwd()).map((entry) => ({ ...entry, requiredPolicy: entry.kind === "httpAction" ? "public-static-only-no-private-reads" : entry.path.startsWith("v0Runtime:") ? "anonymous-neutral-attestation" : entry.path.startsWith("v0Auth:requestCode") || entry.path.startsWith("v0Auth:verifyCode") || entry.path.startsWith("v0Auth:redeemPair") ? "bounded-anonymous-auth" : entry.path.startsWith("v0") ? "verified-session-active-membership-subject-time-state" : "legacy-disable-or-apply-full-v0-policy", verification: "blocked-runtime-policy-matrix" }));
   writeFileSync(new URL("../coverage/public-exports.json", import.meta.url), JSON.stringify(inventory, null, 2) + "\n");
   console.log(JSON.stringify({ publicExports: inventory.length, runtimeVerification: "blocked" }));
 }

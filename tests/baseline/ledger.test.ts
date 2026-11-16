@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../convex/_generated/api";
-import { CUTOFF, fixture, ledger, REVEAL, type Fixture } from "./fixture";
+import { CUTOFF, fixture, ledger, REVEAL, type Fixture } from "../backend/fixture";
 
 const stakeRoutes = {
   "chat.stake": (f: Fixture, option = 0, amount = 10) => f.t.mutation(api.chat.stake, { token: f.actors.friend.token, betId: f.bet, option, amount }),

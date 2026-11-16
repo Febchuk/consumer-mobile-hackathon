@@ -7,15 +7,17 @@ This is an assertion-based test component, not a release certificate. It changes
 Use Node 24.22.3 and the root-owned pinned dependencies. On an isolated Linux runner:
 
 ```sh
-node tests/run-isolated.mjs --output "$HOME/.capy/work/v0-run-unique"
-node --test tests/tools/evidence.test.mjs
-npm run typecheck
-npm run lint
+env -i PATH="$PATH" HOME="$HOME" node tests/run-isolated.mjs --output "$HOME/.capy/work/v0-run-unique"
+env -i PATH="$PATH" HOME="$HOME" unshare --user --map-root-user --net node --test tests/tools/evidence.test.mjs
+env -i PATH="$PATH" HOME="$HOME" npm run typecheck
+env -i PATH="$PATH" HOME="$HOME" npm run lint
 ```
 
 The first command constructs an environment allowlist, creates a fresh HOME, enters a new user/network namespace, checks that no external route exists, and denies fetch unless a case explicitly installs a synthetic adapter. There is no network-enabled fallback. It rejects an existing report directory, direct Vitest execution, deployment/provider credentials and ambiguous target configuration. Each case uses schema-validated `convex-test`, real exported handlers, a fresh database and unique synthetic namespace. It never runs Convex deployment/codegen or a live HTTP client. Linux user namespaces are required; permission failure is blocked infrastructure, not a skipped pass.
 
-The baseline fixtures exercise legacy exported handlers. Fake OTP/APNs/LLM/storage adapters are test utilities, not proof those providers are integrated; fresh DB actors and legacy membership deletion are not proof the new interval/cascade handlers exist. Canonical V0 fixtures must use the integrator’s actual schema/DTOs and hashed-session representation once those handlers are published. Do not invent handler paths, numeric confidence scoring, challenge windows or timeout rules. Concurrency against the mock does not prove real Convex transaction conflicts; an isolated local real-backend lane remains required.
+`tests/baseline` preserves the original positive-behavior/privacy/ledger assertions. They produced 63 failures and 79 passes (including isolation tests) at test commit `8d11da4`, whose product source is PR3 `d23f9e7`. To reproduce that historical baseline, use a separate checkout at `8d11da4`, the pinned tooling listed in its run manifest, and that commit’s `tests/run-isolated.mjs`. Do not run those active-legacy expectations as though retired APIs are the new V0 implementation. They are intentionally separate from the current backend lane; no assertion was weakened, and none of their missing canonical replacement assertions is counted as passing.
+
+The current backend lane separately asserts every retired public query/mutation/action fails closed for every fixture role, and the public static HTTP handler serves only registered neutral fixture assets. `v0-fixture.ts` seeds the actual additive V0 schema, hashed sessions and membership intervals, but this is fixture validation, not proof that new business handlers exist. Fake OTP/APNs/LLM/storage adapters are test utilities, not proof those providers are integrated. Do not invent handler paths, numeric confidence scoring, challenge windows or timeout rules. Concurrency against the mock does not prove real Convex transaction conflicts; an isolated local real-backend lane remains required.
 
 `tests/tsconfig.json` permits a focused harness typecheck without Expo globals. Root typecheck/lint remain required. The source-export inventory is an AST drift guard, not authorization proof: every listed public function still needs runtime policy assertions. Regenerate it only after reviewing the changed export contract:
 
@@ -35,7 +37,7 @@ node tests/tools/extract-acceptance.mjs \
   --output "$HOME/.capy/work/v0-acceptance-private.json"
 ```
 
-Keep baseline red evidence when integrating a fix. Inspect failures against the contract before calling them product defects. Disabling a legacy endpoint safely may satisfy its authorization regression, but never substitutes for testing its canonical V0 replacement. Full V0 readiness requires every uncut layer on the integrated candidate, not a count of test filenames or screenshots.
+Keep baseline red evidence when integrating a fix. Inspect failures against the contract before calling them product defects: the first retirement run’s nine errors were the harness treating an HTTP action as a query; they were not nine product failures. The HTTP handler now has a real router/response assertion instead. Disabling a legacy endpoint safely may satisfy its retirement assertion, but never substitutes for testing its canonical V0 replacement. Full V0 readiness requires every uncut layer on the integrated candidate, not a count of test filenames or screenshots.
 
 ## Native and physical lanes
 

@@ -2739,6 +2739,13 @@
           "expectation": "Public read authorization inventory: membership interval",
           "status": "blocked",
           "reason": "All public export contracts and legacy routes secured"
+        },
+        {
+          "id": "SEC1.legacy-retirement.B",
+          "layer": "B",
+          "expectation": "Every retired public query/mutation/action returns NOT_AVAILABLE for every synthetic actor without state changes",
+          "status": "blocked",
+          "reason": "Requires exact current export inventory and actual registered-handler execution"
         }
       ]
     },
