@@ -10,9 +10,9 @@ struct PairView: View {
     var body: some View {
         HStack(spacing: 10) {
             CIAvatar(size: 40)
-            Text("Pair Called It").font(.system(size: 28, weight: .bold))
+            Text("Sign in to Called It").font(.system(size: 28, weight: .bold))
         }
-        Text("On the web app, open your group, tap Details, then \"Pair iMessage app\". Type the 6-letter code here. It works once and lasts 10 minutes.")
+        Text("On the web app, open your group, tap Details, then \"Pair iMessage app\". Type your account pairing code here. It proves who you are, works once and lasts 10 minutes. It is not a group invite code.")
             .font(.system(size: 15)).foregroundStyle(Theme.sub)
         CardBox {
             TextField("ABC123", text: $code)

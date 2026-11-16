@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
     @Published var me: MeResult?
     @Published var linkedRoomId: String?
     @Published var error: String?
+    @Published var pendingRoomId: String?
 
     weak var controller: MessagesViewController?
     private var conversationKey: String?
@@ -41,6 +42,7 @@ final class AppModel: ObservableObject {
             guard let result else { return signOut() }
             me = result
             error = nil
+            resolvePending()
         } catch {
             self.error = error.localizedDescription
         }
@@ -66,14 +68,31 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ message: MSMessage) {
-        guard let url = message.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.scheme == "calledit" else { return }
+        guard let url = message.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         let q = Dictionary((parts.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
         guard let room = q["r"], !room.isEmpty else { return }
-        if parts.host == "bet", let bet = q["b"], !bet.isEmpty {
+        pendingRoomId = room
+        resolvePending()
+        if let bet = q["b"], !bet.isEmpty {
             screen = .bet(room: room, bet: bet)
-        } else if parts.host == "board" {
+        } else if parts.host == "board" || q["board"] != nil {
             screen = .board(room)
         }
+    }
+
+    private func resolvePending() {
+        guard let room = pendingRoomId, let me else { return }
+        guard me.rooms.contains(where: { $0.id == room }) else { return }
+        if linkedRoomId != room {
+            linkedRoomId = room
+            if let conversationKey { Links.set(room, for: conversationKey) }
+        }
+        pendingRoomId = nil
+    }
+
+    var notMemberOfPending: Bool {
+        guard let room = pendingRoomId, let me else { return false }
+        return !me.rooms.contains { $0.id == room }
     }
 
     func home() {

@@ -29,7 +29,10 @@ struct BetView: View {
     }
 
     private var noAccess: some View {
-        CardBox { Text("This bet is for another group").font(.headline) }
+        CardBox {
+            Text("This bet is for another group").font(.headline)
+            Button("Join with invite code") { model.screen = .link }
+        }
     }
 
     @ViewBuilder private func sealed(_ card: BetCard) -> some View {

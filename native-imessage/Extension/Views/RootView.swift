@@ -75,7 +75,7 @@ struct HomeView: View {
             RecentBets(roomId: room.id, limit: 8)
             InsetGroup {
                 InsetRow { Text("Reveal"); Spacer(); Text(room.revealAt.map(clock) ?? "5:00 PM").foregroundStyle(Theme.sub) }
-                InsetRow { Button("Change room") { model.screen = .link }; Spacer() }
+                InsetRow { Button("Link this chat to another group") { model.screen = .link }; Spacer() }
                 InsetRow(last: true) { Button("Sign out", role: .destructive) { model.signOut() }; Spacer() }
             }
             ErrorText(text: model.error)
@@ -193,7 +193,7 @@ struct CompactView: View {
             } else if let room = model.linkedRoom {
                 ScrollView { RecentBets(roomId: room.id, limit: 3) }
             } else if model.me != nil {
-                prompt("Link this chat to a room", "Pick one of your Called It groups.") { model.go(.link) }
+                prompt("Link this chat", "Pick one of your Called It groups, or enter a group invite code.") { model.go(.link) }
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }
