@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { crc32, deflateSync } from "node:zlib";
 
 export function makePng(targetLength) {
@@ -26,4 +27,3 @@ export function makePng(targetLength) {
   }
   return new Uint8Array(Buffer.concat([...parts, end])).buffer;
 }
-import { Buffer } from "node:buffer";

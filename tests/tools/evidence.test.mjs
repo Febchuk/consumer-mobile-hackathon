@@ -58,3 +58,26 @@ test("new public handlers require an explicit policy declaration", () => {
     assert.notEqual(handler.verification, "passing");
   }
 });
+
+test("current acceptance bindings use canonical executions without crediting pending policy or another evidence layer", () => {
+  const bindings = JSON.parse(readFileSync(new URL("../coverage/bindings.json", import.meta.url), "utf8"));
+  const policies = JSON.parse(readFileSync(new URL("../coverage/v0-public-policies.json", import.meta.url), "utf8"));
+  assert.ok(bindings["SEC1.public-export-policy.B"].includes("V0.policy-inventory"));
+  for (const [id, executions] of Object.entries(bindings)) {
+    assert.ok(id.endsWith(".B"));
+    assert.ok(executions.length > 0);
+    assert.equal(new Set(executions).size, executions.length);
+    for (const execution of executions) {
+      assert.ok(!execution.startsWith("V0.pending-policy."));
+      assert.ok(!execution.startsWith("NATIVE-") && !execution.startsWith("RPC."));
+    }
+  }
+  for (const [path, policy] of Object.entries(policies)) {
+    if (policy.authenticated && policy.kind === "query") {
+      for (const role of ["anonymous", "revoked"]) assert.ok(bindings["SEC1.read-matrix.B"].includes(`V0.auth.${path}.${role}`));
+    }
+    if (["group_membership", "bet_visibility", "subject_after_reveal", "proof_visibility", "safe_suggestions", "shared_membership"].includes(policy.scope)) {
+      for (const role of ["new", "left"]) assert.ok(bindings["SEC1.membership-interval.B"].includes(`V0.scope.${path}.${role}`));
+    }
+  }
+});
