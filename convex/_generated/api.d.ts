@@ -19,6 +19,7 @@ import type * as hosting from "../hosting.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
 import type * as market from "../market.js";
+import type * as merge from "../merge.js";
 import type * as reveal from "../reveal.js";
 import type * as users from "../users.js";
 
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   lib: typeof lib;
   market: typeof market;
+  merge: typeof merge;
   reveal: typeof reveal;
   users: typeof users;
 }>;
