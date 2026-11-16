@@ -161,7 +161,7 @@ enum Cards {
         layout.image = art(name: name)
         let message = MSMessage(session: session ?? MSSession())
         message.layout = layout
-        message.url = url(["r": roomId, "b": betId])
+        message.url = url("bet", ["r": roomId, "b": betId])
         message.summaryText = "Called It bet"
         message.accessibilityLabel = "Called It bet about \(name)"
         return message
@@ -187,7 +187,7 @@ enum Cards {
         layout.image = art(name: name)
         let message = MSMessage(session: session ?? MSSession())
         message.layout = layout
-        message.url = url(["r": roomId, "b": betId])
+        message.url = url("bet", ["r": roomId, "b": betId])
         message.summaryText = "Called It result"
         message.accessibilityLabel = "Called It result"
         return message
@@ -201,16 +201,18 @@ enum Cards {
         layout.image = art(name: board.room.name)
         let message = MSMessage(session: session ?? MSSession())
         message.layout = layout
-        message.url = url(["r": board.room._id, "board": "1"])
+        message.url = url("board", ["r": board.room._id])
         message.summaryText = "Called It leaderboard"
         message.accessibilityLabel = "\(board.room.name) leaderboard"
         return message
     }
 
-    private static func url(_ query: [String: String]) -> URL? {
-        var parts = URLComponents(url: Config.web, resolvingAgainstBaseURL: false)
-        parts?.queryItems = query.sorted { $0.key > $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
-        return parts?.url
+    private static func url(_ host: String, _ query: [String: String]) -> URL? {
+        var parts = URLComponents()
+        parts.scheme = "calledit"
+        parts.host = host
+        parts.queryItems = query.sorted { $0.key > $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return parts.url
     }
 
     private static func art(name: String) -> UIImage {
