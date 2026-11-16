@@ -56,7 +56,7 @@ struct HomeView: View {
         if let room = model.linkedRoom, let me = model.me {
             VStack(spacing: 6) {
                 AvatarStack(people: room.members.map { (name: $0.name, emoji: $0.emoji) }, size: 44)
-                Text(room.name).font(.system(size: 22, weight: .bold))
+                Text(room.name).font(.title2.bold())
                 Text("\(room.members.count) people · you're \(me.user.name)").font(.subheadline).foregroundStyle(Theme.sub)
             }
             .frame(maxWidth: .infinity)
@@ -72,10 +72,11 @@ struct HomeView: View {
             if let invite = room.inviteCode, copied {
                 Footnote(text: "Invite code \(invite) copied. Friends join from the web app or here with Join.")
             }
+            Footnote(text: "This chat is linked to \(room.name). That group holds this chat's bets and points.")
             RecentBets(roomId: room.id, limit: 8)
             InsetGroup {
                 InsetRow { Text("Reveal"); Spacer(); Text(room.revealAt.map(clock) ?? "5:00 PM").foregroundStyle(Theme.sub) }
-                InsetRow { Button("Change room") { model.screen = .link }; Spacer() }
+                InsetRow { Button("Link this chat to another group") { model.screen = .link }; Spacer() }
                 InsetRow(last: true) { Button("Sign out", role: .destructive) { model.signOut() }; Spacer() }
             }
             ErrorText(text: model.error)
@@ -127,14 +128,14 @@ struct RecentBets: View {
             if item.type == "sealed" {
                 CIAvatar(size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("A bet about you").font(.system(size: 15, weight: .semibold))
-                    Text((item.faces ?? []).map(\.name).joined(separator: ", ") + " bet").font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text("A bet about you").font(.subheadline.weight(.semibold))
+                    Text((item.faces ?? []).map(\.name).joined(separator: ", ") + " bet").font(.footnote).foregroundStyle(Theme.sub).lineLimit(1)
                 }
             } else {
                 Avatar(name: item.subject?.name, emoji: item.subject?.emoji, size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.question ?? "").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                    Text(odds(item)).font(.system(size: 13).monospacedDigit()).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text(item.question ?? "").font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(odds(item)).font(.footnote.monospacedDigit()).foregroundStyle(Theme.sub).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -193,7 +194,7 @@ struct CompactView: View {
             } else if let room = model.linkedRoom {
                 ScrollView { RecentBets(roomId: room.id, limit: 3) }
             } else if model.me != nil {
-                prompt("Link this chat to a room", "Pick one of your Called It groups.") { model.go(.link) }
+                prompt("Link this chat", "Pick one of your Called It groups, or enter a group invite code.") { model.go(.link) }
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }

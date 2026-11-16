@@ -29,7 +29,10 @@ struct BetView: View {
     }
 
     private var noAccess: some View {
-        CardBox { Text("This bet is for another group").font(.headline) }
+        CardBox {
+            Text("This bet is for another group").font(.headline)
+            Button("Join with invite code") { model.screen = .link }
+        }
     }
 
     @ViewBuilder private func sealed(_ card: BetCard) -> some View {
@@ -37,7 +40,7 @@ struct BetView: View {
         let revealAt = card.revealAt ?? nowMs()
         SheetHeader(title: "About you", trailing: "Done", trailingBold: true) { model.home() }
         VStack(alignment: .leading, spacing: 4) {
-            Text("Today's bet is about you").font(.system(size: 28, weight: .bold))
+            Text("Today's bet is about you").font(.largeTitle.bold())
             TimelineView(.periodic(from: .now, by: 1)) { t in
                 Text("Unlocks at \(clock(revealAt)) · in \(countdown(to: revealAt, from: t.date))")
                     .font(.subheadline.monospacedDigit()).foregroundStyle(Theme.sub)
@@ -133,9 +136,9 @@ struct BetView: View {
                     InsetRow(last: i == 1) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(options[i] + (card.status == "settled" && card.winningOption == i ? "  ✓ won" : ""))
-                                .font(.system(size: 17, weight: chosen == i ? .semibold : .regular))
+                                .font(.body.weight(chosen == i ? .semibold : .regular))
                             Text("\(pct)% picked this · pays \(multiple(total: total, pool: pool))")
-                                .font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                .font(.footnote).foregroundStyle(Theme.sub)
                         }
                         Spacer()
                         Image(systemName: chosen == i ? "checkmark.circle.fill" : "circle")
@@ -148,25 +151,28 @@ struct BetView: View {
                 .buttonStyle(.plain)
             }
         }
-        if open {
+        if open && points < 1 {
+            CardBox { Text("No points left in this group").font(.headline) }
+        } else if open {
             SectionTitle(text: "How sure are you")
             CardBox {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(pts(amount)).font(.system(size: 40, weight: .bold).monospacedDigit())
-                    Text("pts").font(.title3).foregroundStyle(Theme.sub)
+                    Text(pts(amount)).font(.largeTitle.bold().monospacedDigit())
+                    Text("pts").font(.title3).foregroundStyle(.secondary)
                     Spacer()
-                    Text("You have \(pts(points)) left").font(.subheadline).foregroundStyle(Theme.sub)
+                    Text("\(pts(points - amount)) left of \(pts(points))").font(.subheadline).foregroundStyle(.secondary)
                 }
-                if points > 10 {
-                    Slider(value: $amount, in: 10...points, step: 10).tint(Theme.accent)
+                if points > 1 {
+                    Slider(value: $amount, in: 1...points, step: 1).tint(Theme.accent).accessibilityIdentifier("stakeSlider")
                 }
                 HStack(spacing: 8) {
-                    ForEach([50.0, 100, 250], id: \.self) { v in
-                        Chip(title: pts(v), on: false) { amount = min(v, points) }
+                    ForEach([50.0, 100, 250].filter { $0 <= points }, id: \.self) { v in
+                        Chip(title: pts(v), on: amount == v) { amount = v }
                     }
-                    Chip(title: "All in", on: false) { amount = points }
+                    Chip(title: "All in", on: amount == points) { amount = points }
                 }
             }
+            .onChange(of: points) { _, p in amount = min(max(1, amount), max(1, p)) }
             HStack(spacing: 8) {
                 let people = (card.sides ?? []).flatMap { $0 }
                 AvatarStack(people: people.map { (name: $0.name, emoji: $0.emoji) }, size: 26)
@@ -184,7 +190,7 @@ struct BetView: View {
             .opacity(chosen == nil || amount < 1 ? 0.5 : 1)
             Footnote(text: "\(name) won't see this bet until \(clock(card.revealAt ?? nowMs())).")
             SoftButton(title: "Send update") {
-                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, bettors: card.bettors ?? [], session: model.selectedSession))
+                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, voters: Cards.voterNames(card), session: model.selectedSession))
             }
             Footnote(text: "The update card shows who it's about, the reveal time and who's in. Never the question.")
         } else {
@@ -195,7 +201,7 @@ struct BetView: View {
     @ViewBuilder private func verdict(_ card: BetCard) -> some View {
         let options = labels(card)
         SheetHeader(leading: "Close", leadingAction: { model.home() }, title: "Your bet for today")
-        Text("Your friends bet on whether…").font(.system(size: 22, weight: .bold))
+        Text("Your friends bet on whether…").font(.title2.bold())
         if card.status == "open" {
             RubToReveal(name: card.subject?.name ?? "you", uncovered: $uncovered) { asker(card) }
         } else {
@@ -204,7 +210,7 @@ struct BetView: View {
         if uncovered || card.status != "open" {
             PositionsBlock(card: card)
             if card.canDeclare == true {
-                Text("So... is it true?").font(.system(size: 22, weight: .bold)).padding(.top, 6)
+                Text("So... is it true?").font(.title2.bold()).padding(.top, 6)
                 HStack(spacing: 10) {
                     ForEach(0..<2, id: \.self) { i in
                         PrimaryButton(title: card.kind == "yesno" ? (i == 0 ? "Yeah, guilty" : "Nope, never") : options[i], color: Theme.verdict(i), busy: busy) {
@@ -257,7 +263,7 @@ struct BetView: View {
         do {
             let next: BetCard? = try await API.query("ext:card", ["token": token, "betId": betId, "now": nowMs()])
             if let next, next.status != "open" { uncovered = true }
-            if card == nil, let points = next?.points, points > 0 { amount = min(100, points) }
+            if let points = next?.points, card?.points != points { amount = max(1, min(card == nil ? 100 : amount, points.rounded(.down))) }
             card = next
             error = nil
         } catch {
@@ -295,7 +301,7 @@ struct PositionsBlock: View {
                 InsetRow(last: i == 1) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(options[safe: i] ?? "").font(.system(size: 17, weight: .semibold))
+                            Text(options[safe: i] ?? "").font(.headline)
                             Spacer()
                             Text("\(Int((card.pct?[safe: i] ?? 0).rounded()))%").font(.subheadline.monospacedDigit()).foregroundStyle(Theme.sub)
                         }
@@ -325,7 +331,7 @@ struct ResultBlock: View {
                 Text("Everyone got their points back.").font(.subheadline).foregroundStyle(Theme.sub)
             } else if let win = card.winningOption {
                 Text("It was \(card.options?[safe: win] ?? "")").font(.title3.weight(.bold)).foregroundStyle(Theme.verdict(win))
-                Text("PAYOUTS").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                Text("PAYOUTS").font(.footnote).foregroundStyle(Theme.sub)
                 ForEach(rows(win), id: \.0) { row in
                     HStack {
                         Text(row.0)

@@ -39,7 +39,7 @@ struct InkBubble: View {
         ZStack(alignment: .topLeading) {
             InkNoise()
             Text("@\(name)")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(Theme.accent)
                 .padding(.horizontal, 14).padding(.vertical, 10)
         }

@@ -8,17 +8,27 @@ struct LinkRoomView: View {
     @State private var error: String?
 
     var body: some View {
-        Text("Link this chat").font(.system(size: 28, weight: .bold))
-        Footnote(text: "Pick the Called It room for this conversation. It's saved on this device only.")
+        Text("Link this chat").font(.largeTitle.bold())
+        Footnote(text: "Pick the Called It group this conversation plays in. The link is saved on this device only. Called It can't see who's in this chat.")
+        if model.notMemberOfPending {
+            CardBox {
+                Text("You're not in this group yet").font(.headline)
+                Text("Ask a friend for the group invite code and enter it below.").font(.subheadline).foregroundStyle(Theme.sub)
+            }
+        }
+        SectionTitle(text: "Your groups")
         if let rooms = model.me?.rooms {
             InsetGroup {
+                if rooms.isEmpty {
+                    InsetRow(last: true) { Text("You're not in any groups yet.").foregroundStyle(Theme.sub); Spacer() }
+                }
                 ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
                     Button { model.link(room.id) } label: {
                         InsetRow(last: index == rooms.count - 1) {
-                            AvatarStack(people: room.members.map { (name: $0.name, emoji: $0.emoji) }, size: 28)
+                            AvatarStack(people: room.members.map { (name: $0.name, emoji: nil) }, size: 28)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(room.name).font(.system(size: 17, weight: .semibold))
-                                Text("\(room.members.count) people").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                Text(room.name).font(.headline)
+                                Text("\(room.members.count) people").font(.footnote).foregroundStyle(Theme.sub)
                             }
                             Spacer()
                             if room.id == model.linkedRoomId {
@@ -34,24 +44,27 @@ struct LinkRoomView: View {
         } else {
             ProgressView().frame(maxWidth: .infinity)
         }
-        SectionTitle(text: "New room")
+        SectionTitle(text: "Join with a group invite code")
         InsetGroup {
-            InsetRow { TextField("Room name", text: $newName) }
+            InsetRow {
+                TextField("Group invite code", text: $invite)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("inviteCode")
+            }
             InsetRow(last: true) {
-                Button("Create room") { Task { await create() } }
-                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+                Button("Join group") { Task { await join() } }.disabled(invite.isEmpty || busy)
                 Spacer()
             }
         }
-        SectionTitle(text: "Join with invite code")
+        Footnote(text: "A group invite code joins a group. It's different from the account pairing code you used to sign in.")
+        SectionTitle(text: "Or start a new group")
+        Footnote(text: "Called It keeps a private scoreboard for this chat. We make a matching group so your bets, points and the reveal stay with this conversation.")
         InsetGroup {
-            InsetRow {
-                TextField("Invite code", text: $invite)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-            }
+            InsetRow { TextField("Group name", text: $newName).accessibilityIdentifier("newGroupName") }
             InsetRow(last: true) {
-                Button("Join") { Task { await join() } }.disabled(invite.isEmpty || busy)
+                Button("Create group") { Task { await create() } }
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || busy)
                 Spacer()
             }
         }
