@@ -187,7 +187,7 @@ struct BetView: View {
             .opacity(chosen == nil || amount < 1 ? 0.5 : 1)
             Footnote(text: "\(name) won't see this bet until \(clock(card.revealAt ?? nowMs())).")
             SoftButton(title: "Send update") {
-                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, bettors: card.bettors ?? [], session: model.selectedSession))
+                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, voters: Cards.voterNames(card), session: model.selectedSession))
             }
             Footnote(text: "The update card shows who it's about, the reveal time and who's in. Never the question.")
         } else {

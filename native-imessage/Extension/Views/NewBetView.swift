@@ -116,6 +116,7 @@ struct NewBetView: View {
                     guard !ready else { return }
                     ready = true
                     if let at = room.revealAt, at > nowMs() { revealAt = Date(timeIntervalSince1970: at / 1000) }
+                    if revealAt.timeIntervalSinceNow < 60 { revealAt = Date().addingTimeInterval(3600) }
                     await loadIdeas(room.id)
                 }
         }
@@ -224,7 +225,7 @@ struct NewBetView: View {
             guard let betId: String = try await API.mutation("chat:createBet", args) else { return }
             let card: BetCard? = try? await API.query("ext:card", ["token": token, "betId": betId, "now": nowMs()])
             let subject = card?.subject ?? room.members.first(where: { $0.id == subjectId }).map { Person(_id: $0.id, name: $0.name, emoji: $0.emoji) }
-            let message = Cards.bet(roomId: room.id, betId: betId, subject: subject, revealAt: card?.revealAt ?? revealAt.timeIntervalSince1970 * 1000, bettors: card?.bettors ?? [], session: nil)
+            let message = Cards.bet(roomId: room.id, betId: betId, subject: subject, revealAt: card?.revealAt ?? revealAt.timeIntervalSince1970 * 1000, voters: Cards.voterNames(card), session: nil)
             error = nil
             model.screen = .bet(room: room.id, bet: betId)
             model.send(message)

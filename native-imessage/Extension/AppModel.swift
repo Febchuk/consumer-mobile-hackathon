@@ -20,6 +20,8 @@ final class AppModel: ObservableObject {
     @Published var linkedRoomId: String?
     @Published var error: String?
     @Published var pendingRoomId: String?
+    @Published var bubbleBetId: String?
+    @Published var bubbleSubject: String?
 
     weak var controller: MessagesViewController?
     private var conversationKey: String?
@@ -71,6 +73,12 @@ final class AppModel: ObservableObject {
         guard let url = message.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         let q = Dictionary((parts.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
         guard let room = q["r"], !room.isEmpty else { return }
+        if style == .transcript {
+            bubbleBetId = q["b"]
+            let caption = (message.layout as? MSMessageLiveLayout)?.alternateLayout.caption ?? (message.layout as? MSMessageTemplateLayout)?.caption
+            bubbleSubject = caption.map { $0.replacingOccurrences(of: "Bet about ", with: "") }
+            return
+        }
         pendingRoomId = room
         resolvePending()
         if let bet = q["b"], !bet.isEmpty {
@@ -139,16 +147,29 @@ enum Links {
 }
 
 enum Cards {
-    static func bet(roomId: String, betId: String, subject: Person?, revealAt: Double?, bettors: [String], session: MSSession?) -> MSMessage {
+    static func voterNames(_ card: BetCard?) -> [String] {
+        guard let card else { return [] }
+        if let who = card.who, !who.isEmpty { return who.map(\.name) }
+        return (card.sides ?? []).flatMap { $0 }.map(\.name)
+    }
+
+    static func initials(_ names: [String]) -> String {
+        names.prefix(4).map { String($0.prefix(1)).uppercased() }.joined(separator: " ")
+    }
+
+    static func bet(roomId: String, betId: String, subject: Person?, revealAt: Double?, voters: [String], session: MSSession?) -> MSMessage {
         let name = subject?.name ?? "a friend"
         let layout = MSMessageTemplateLayout()
-        layout.caption = "🔒 A bet about \(name)"
-        if let revealAt { layout.subcaption = "Reveal \(clock(revealAt))" }
-        layout.trailingSubcaption = bettors.joined()
-        layout.image = art(top: "🔒", bottom: subject?.emoji ?? "")
+        layout.caption = "Bet about \(name)"
+        if let revealAt {
+            layout.subcaption = revealAt <= nowMs() ? "Revealed, tap to see the result" : "Reveals \(clock(revealAt))"
+        }
+        layout.trailingSubcaption = voters.isEmpty ? nil : "\(voters.count) in · \(initials(voters))"
+        layout.imageTitle = "Tap to open in Called It"
+        layout.image = art(name: name)
         let message = MSMessage(session: session ?? MSSession())
-        message.layout = layout
-        message.url = url("bet", ["r": roomId, "b": betId])
+        message.layout = MSMessageLiveLayout(alternateLayout: layout)
+        message.url = url(["r": roomId, "b": betId])
         message.summaryText = "Called It bet"
         message.accessibilityLabel = "Called It bet about \(name)"
         return message
@@ -168,11 +189,13 @@ enum Cards {
                 layout.subcaption = "Settled"
             }
         }
-        layout.trailingSubcaption = (card.bettors ?? []).joined()
-        layout.image = art(top: "✓", bottom: card.subject?.emoji ?? "")
+        let voters = voterNames(card)
+        layout.trailingSubcaption = voters.isEmpty ? nil : "\(voters.count) in · \(initials(voters))"
+        layout.imageTitle = "Tap to open in Called It"
+        layout.image = art(name: name)
         let message = MSMessage(session: session ?? MSSession())
         message.layout = layout
-        message.url = url("bet", ["r": roomId, "b": betId])
+        message.url = url(["r": roomId, "b": betId])
         message.summaryText = "Called It result"
         message.accessibilityLabel = "Called It result"
         return message
@@ -182,37 +205,38 @@ enum Cards {
         let layout = MSMessageTemplateLayout()
         layout.caption = "\(board.room.name) leaderboard"
         layout.subcaption = board.rows.prefix(3).map { "\($0.name) \(pts($0.points))" }.joined(separator: " · ")
-        layout.image = art(top: "🏆", bottom: board.rows.prefix(3).map(\.emoji).joined())
+        layout.imageTitle = "Tap to open in Called It"
+        layout.image = art(name: board.room.name)
         let message = MSMessage(session: session ?? MSSession())
         message.layout = layout
-        message.url = url("board", ["r": board.room._id])
+        message.url = url(["r": board.room._id, "board": "1"])
         message.summaryText = "Called It leaderboard"
         message.accessibilityLabel = "\(board.room.name) leaderboard"
         return message
     }
 
-    private static func url(_ host: String, _ query: [String: String]) -> URL? {
-        var parts = URLComponents()
-        parts.scheme = "calledit"
-        parts.host = host
-        parts.queryItems = query.sorted { $0.key > $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
-        return parts.url
+    private static func url(_ query: [String: String]) -> URL? {
+        var parts = URLComponents(url: Config.web, resolvingAgainstBaseURL: false)
+        parts?.queryItems = query.sorted { $0.key > $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return parts?.url
     }
 
-    private static func art(top: String, bottom: String) -> UIImage {
+    private static func art(name: String) -> UIImage {
         let size = CGSize(width: 600, height: 300)
         return UIGraphicsImageRenderer(size: size).image { ctx in
             UIColor(Theme.bubble).setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
-            let style = NSMutableParagraphStyle()
-            style.alignment = .center
-            let line = "\(top)  \(bottom)"
+            var rng = SeededRandom(seed: 7)
+            for _ in 0..<5000 {
+                let x = CGFloat(rng.next() % 600), y = CGFloat(rng.next() % 300)
+                UIColor(white: 0.45 + CGFloat(rng.next() % 35) / 100, alpha: 1).setFill()
+                ctx.fill(CGRect(x: x, y: y, width: 2.5, height: 2.5))
+            }
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 96, weight: .bold),
-                .foregroundColor: UIColor.label,
-                .paragraphStyle: style,
+                .font: UIFont.preferredFont(forTextStyle: .largeTitle).withSize(56),
+                .foregroundColor: UIColor.systemBlue,
             ]
-            (line as NSString).draw(in: CGRect(x: 0, y: 90, width: size.width, height: 130), withAttributes: attrs)
+            ("@" + name as NSString).draw(at: CGPoint(x: 36, y: 30), withAttributes: attrs)
         }
     }
 }

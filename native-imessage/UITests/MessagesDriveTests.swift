@@ -148,7 +148,7 @@ final class MessagesDriveTests: XCTestCase {
         if send.waitForExistence(timeout: 5) { send.tap() }
         sleep(3)
         dump("f5-sent")
-        let bubble = messages.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'A bet about'")).element(boundBy: 0)
+        let bubble = messages.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'bet about'")).element(boundBy: 0)
         if bubble.waitForExistence(timeout: 5) { bubble.tap() }
         sleep(5)
         dump("f6-betview")

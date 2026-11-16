@@ -7,7 +7,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if model.style == .compact {
+            if model.style == .transcript {
+                TranscriptBubble()
+            } else if model.style == .compact {
                 CompactView()
             } else {
                 ExpandedView()

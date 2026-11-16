@@ -36,6 +36,10 @@ final class MessagesViewController: MSMessagesAppViewController {
         model.open(message)
     }
 
+    override func contentSizeThatFits(_ size: CGSize) -> CGSize {
+        CGSize(width: min(size.width, 280), height: 132)
+    }
+
     override func didTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.didTransition(to: presentationStyle)
         model.style = presentationStyle
