@@ -26,3 +26,4 @@ export function makePng(targetLength) {
   }
   return new Uint8Array(Buffer.concat([...parts, end])).buffer;
 }
+import { Buffer } from "node:buffer";
