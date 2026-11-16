@@ -72,6 +72,7 @@ struct HomeView: View {
             if let invite = room.inviteCode, copied {
                 Footnote(text: "Invite code \(invite) copied. Friends join from the web app or here with Join.")
             }
+            Footnote(text: "This chat is linked to \(room.name). That group holds this chat's bets and points.")
             RecentBets(roomId: room.id, limit: 8)
             InsetGroup {
                 InsetRow { Text("Reveal"); Spacer(); Text(room.revealAt.map(clock) ?? "5:00 PM").foregroundStyle(Theme.sub) }

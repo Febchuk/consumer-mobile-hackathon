@@ -59,6 +59,7 @@ struct LinkRoomView: View {
         }
         Footnote(text: "A group invite code joins a group. It's different from the account pairing code you used to sign in.")
         SectionTitle(text: "Or start a new group")
+        Footnote(text: "Called It keeps a private scoreboard for this chat. We make a matching group so your bets, points and the reveal stay with this conversation.")
         InsetGroup {
             InsetRow { TextField("Group name", text: $newName).accessibilityIdentifier("newGroupName") }
             InsetRow(last: true) {
