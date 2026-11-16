@@ -26,7 +26,12 @@ export function publicExports(root) {
 }
 
 if (process.argv.includes("--write")) {
-  const inventory = publicExports(process.cwd()).map((entry) => ({ ...entry, requiredPolicy: entry.kind === "httpAction" ? "public-static-only-no-private-reads" : entry.path.startsWith("v0Runtime:") ? "anonymous-neutral-attestation" : entry.path.startsWith("v0Auth:requestCode") || entry.path.startsWith("v0Auth:verifyCode") || entry.path.startsWith("v0Auth:redeemPair") ? "bounded-anonymous-auth" : entry.path.startsWith("v0") ? "verified-session-active-membership-subject-time-state" : "legacy-disable-or-apply-full-v0-policy", verification: "blocked-runtime-policy-matrix" }));
+  const policies = JSON.parse(readFileSync(new URL("../coverage/v0-public-policies.json", import.meta.url), "utf8"));
+  const inventory = publicExports(process.cwd()).map((entry) => {
+    const policy = policies[entry.path];
+    if (entry.path.startsWith("v0") && entry.path !== "v0Runtime:attestation" && (!policy || policy.kind !== entry.kind)) throw new Error(`Review auth/role/privacy policy and valid fixtures for ${entry.path} before updating inventory`);
+    return { ...entry, requiredPolicy: entry.kind === "httpAction" ? "neutral-install-landing-no-private-reads" : entry.path === "v0Runtime:attestation" ? "anonymous-neutral-attestation" : policy ? policy.scope : "legacy-disable-or-apply-full-v0-policy", ...(policy ? { policy: policy.rule, minimumAssertions: policy.minimumAssertions } : {}), verification: "blocked-runtime-policy-matrix" };
+  });
   writeFileSync(new URL("../coverage/public-exports.json", import.meta.url), JSON.stringify(inventory, null, 2) + "\n");
   console.log(JSON.stringify({ publicExports: inventory.length, runtimeVerification: "blocked" }));
 }
