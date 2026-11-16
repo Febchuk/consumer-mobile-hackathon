@@ -8,6 +8,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 import candidate
 
@@ -17,6 +18,7 @@ def config():
         "source_revision": "a" * 40, "version": "1.0", "build": "17", "build_channel": "release",
         "environment": "staging", "api_url": "https://synthetic-stage.convex.cloud",
         "web_url": "https://synthetic-stage.convex.site", "team_id": "SYNTHETIC1",
+        "support_url": "https://support.synthetic.org/help",
         "app_identifier_prefix": "SYNTHETIC1", "host_id": "com.synthetic.calledit",
         "extension_id": "com.synthetic.calledit.ext", "app_group": "group.com.synthetic.calledit",
         "keychain_group": "SYNTHETIC1.com.synthetic.session",
@@ -41,6 +43,7 @@ def signed(c, role="host"):
     }
     if role == "host":
         ent["aps-environment"] = "production"
+        ent["com.apple.developer.associated-domains"] = ["applinks:" + urlparse(c["web_url"]).hostname]
     profile = {
         "UUID": c["profiles"][role]["uuid"], "TeamIdentifier": [c["team_id"]],
         "ApplicationIdentifierPrefix": [c["app_identifier_prefix"]],
@@ -56,6 +59,10 @@ def signed(c, role="host"):
         "CalledItExpectedBackendSourceRevision": c["backend"]["source_revision"],
         "CalledItExpectedBackendDeploymentID": c["backend"]["deployment"],
         "CalledItExpectedBackendConfigVersion": c["backend"]["config_version"],
+        "CalledItExpectedAPIHost": urlparse(c["api_url"]).hostname,
+        "CalledItExpectedCardHost": urlparse(c["web_url"]).hostname,
+        "CalledItAppGroup": c["app_group"], "CalledItKeychainGroup": c["keychain_group"],
+        "CalledItSupportURL": c["support_url"], "CalledItAPNsEnvironment": "production",
     }
     if role == "extension":
         info["NSExtension"] = {"NSExtensionPointIdentifier": "com.apple.message-payload-provider"}
@@ -86,12 +93,28 @@ class CandidateTests(unittest.TestCase):
                            ("api_url", "https://user:pass@example.org"),
                            ("api_url", "https://example.org/?token=redacted"),
                            ("extension_id", "com.other.ext"), ("keychain_group", "WRONG.session"),
-                           ("build_channel", "staging")):
+                           ("build_channel", "staging"), ("support_url", "http://support.synthetic.org/help"),
+                           ("support_url", "https://support.invalid/help"),
+                           ("support_url", "https://user:pass@support.synthetic.org/help"),
+                           ("support_url", "https://support.synthetic.org/help?token=synthetic")):
             with self.subTest(key=key, value=value):
                 c = config()
                 c[key] = value
                 with self.assertRaises(candidate.GateError):
                     candidate.validate_config(c)
+
+    def test_archive_settings_match_native_runtime_contract(self):
+        c = candidate.validate_config(config())
+        settings = candidate.archive_settings(c)
+        self.assertEqual(settings["CALLED_IT_EXPECTED_API_HOST"], "synthetic-stage.convex.cloud")
+        self.assertEqual(settings["CALLED_IT_EXPECTED_CARD_HOST"], "synthetic-stage.convex.site")
+        self.assertEqual(settings["CALLED_IT_SUPPORT_URL"], c["support_url"])
+        self.assertEqual(settings["CALLED_IT_APP_GROUP"], c["app_group"])
+        self.assertEqual(settings["CALLED_IT_KEYCHAIN_GROUP"], c["keychain_group"])
+        self.assertEqual(settings["CALLED_IT_APNS_ENVIRONMENT"], "production")
+        self.assertEqual(settings["CALLED_IT_BUILD_CHANNEL"], "release")
+        self.assertEqual(settings["CALLED_IT_ENVIRONMENT"], "staging")
+        self.assertNotEqual(settings["CALLED_IT_SOURCE_REVISION"], settings["CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION"])
 
     def test_host_and_extension_profiles(self):
         c = config()
@@ -146,6 +169,13 @@ class CandidateTests(unittest.TestCase):
             ("info", "CalledItExpectedBackendSourceRevision", "a" * 40),
             ("info", "CalledItExpectedBackendDeploymentID", "other-stage"),
             ("info", "CalledItExpectedBackendConfigVersion", "other-version"),
+            ("info", "CalledItExpectedAPIHost", "other-api.synthetic.org"),
+            ("info", "CalledItExpectedCardHost", "other-card.synthetic.org"),
+            ("info", "CalledItAppGroup", "group.other.synthetic"),
+            ("info", "CalledItKeychainGroup", "SYNTHETIC1.other.synthetic"),
+            ("info", "CalledItSupportURL", "https://other-support.synthetic.org/help"),
+            ("info", "CalledItAPNsEnvironment", "development"),
+            ("ent", "com.apple.developer.associated-domains", ["applinks:other-card.synthetic.org"]),
         )
         for section, key, value in changes:
             with self.subTest(section=section, key=key):

@@ -54,17 +54,23 @@ Both targets' Release Info.plists must resolve the following from build settings
 |---|---|
 | `CalledItAPIURL` | `$(CALLED_IT_API_URL)` string |
 | `CalledItWebURL` | `$(CALLED_IT_WEB_URL)` string |
+| `CalledItExpectedAPIHost` | `$(CALLED_IT_EXPECTED_API_HOST)` derived from validated API origin, not independently entered |
+| `CalledItExpectedCardHost` | `$(CALLED_IT_EXPECTED_CARD_HOST)` derived from validated web/card origin |
 | `CalledItBuildChannel` | `$(CALLED_IT_BUILD_CHANNEL)` string: qa or release; App Store/TestFlight candidate requires release |
 | `CalledItReleaseEnvironment` | `$(CALLED_IT_ENVIRONMENT)` string: staging or production |
 | `CalledItSourceRevision` | `$(CALLED_IT_SOURCE_REVISION)` full **native artifact** SHA |
 | `CalledItExpectedBackendSourceRevision` | `$(CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION)` full backend SHA, independent of native SHA |
 | `CalledItExpectedBackendDeploymentID` | `$(CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID)` nonsecret selected deployment ID |
 | `CalledItExpectedBackendConfigVersion` | `$(CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION)` expected backend config version |
+| `CalledItAppGroup` | `$(CALLED_IT_APP_GROUP)` verified shared App Group from candidate config |
+| `CalledItKeychainGroup` | `$(CALLED_IT_KEYCHAIN_GROUP)` verified shared Keychain group from candidate config |
+| `CalledItSupportURL` | `$(CALLED_IT_SUPPORT_URL)` owner-approved public HTTPS support URL, validated separately from card/API origins |
+| `CalledItAPNsEnvironment` | `$(CALLED_IT_APNS_ENVIRONMENT)` production for TestFlight, including staging-backed candidates |
 | `CalledItFixtureMode` | Boolean false, never a runtime test toggle |
 | `CFBundleVersion` | `$(CURRENT_PROJECT_VERSION)` |
 | `CFBundleShortVersionString` | `$(MARKETING_VERSION)` |
 
-Host `PROVISIONING_PROFILE_SPECIFIER` must resolve `$(CALLED_IT_HOST_PROFILE)` and extension `$(CALLED_IT_EXTENSION_PROFILE)` in Release. Both need the approved App Group and explicit shared Keychain access group; the host needs `aps-environment=production`. Session-sharing behavior needs tests; matching entitlements alone do not prove it. App ID prefix and Team ID are separately pinned because they need not be the same for every account history. Runtime must reject missing config, test hooks and invalid environments, and compare expected backend environment/source/deployment/config against attestation before using it. Release fixture mode stays false even against staging. No root/native/package changes are owned by this release track.
+Host `PROVISIONING_PROFILE_SPECIFIER` must resolve `$(CALLED_IT_HOST_PROFILE)` and extension `$(CALLED_IT_EXTENSION_PROFILE)` in Release. Both need the approved App Group and explicit shared Keychain access group; the host needs `aps-environment=production` and `applinks:<validated card host>` in its associated-domain entitlement. Archive injects those group settings, production APNs, the derived host pins and `CALLED_IT_DEVELOPMENT_TEAM` as well as `DEVELOPMENT_TEAM`. A valid associated-domain entitlement is not proof of a reachable/valid AASA association; verify that separately at the authorized environment/device gate. Session-sharing behavior needs tests; matching entitlements alone do not prove it. App ID prefix and Team ID are separately pinned because they need not be the same for every account history. Runtime must reject missing config, test hooks and invalid environments, and compare expected backend environment/source/deployment/config against attestation before using it. Release fixture mode stays false even against staging. No root/native/package changes are owned by this release track.
 
 ## After all technical gates pass
 
