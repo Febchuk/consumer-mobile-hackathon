@@ -1,235 +1,165 @@
-# Native assertion suite — integration contract
+# Native assertion sources
 
-Status: **source only; execution blocked**. Written against the native source at
-`d23f9e7e8799988505a2d6bf5c6c1981716aa6d9`. This Linux workspace has neither Swift
-nor Xcode/iOS SDKs. No native compilation, simulator launch, Messages send,
-pairing, live backend call, screenshot or transport verification was performed.
-These tests must not be reported as passing until an exact QA candidate runs them.
+**Blocked/unexecuted:** this Linux machine has no Swift, Xcode or iOS simulator.
+No test compilation/execution, network request, remote build, pairing, personal
+Messages navigation or send has been performed. Source checkpoint inspected:
+`c3250ca`, integrated at `9c47fbd`. A source assertion is not a passing test.
 
-`UITests/MessagesDriveTests.swift` replaces the old optional-tap/screenshot driver.
-It never launches Messages, searches contacts/history, obtains a pairing code or
-taps the Messages Send button. Missing setup, IDs and unsupported paths fail the
-test; there is no `XCTSkip`, optional success or screenshots-as-assertions path.
+## Actual target and source membership
 
-## Native owner: targets and real source membership
+`CalledItCoreTests` is the existing hostless iOS XCTest target. Its sources are
+exactly `Shared/`, `Tests/`, `TestSupport/`; `TEST_HOST` and `BUNDLE_LOADER` are
+empty. Tests call real Shared implementations directly, without a test-local
+decoder/router/session implementation or an invented product import. No `App/`
+or `Extension/` symbol is currently assumed present in that target.
 
-The native owner owns `project.yml`, configurations, shared implementations,
-entitlements, accessibility and runtime injection. No wiring was changed here.
+`CalledItUITests` compiles `UITests/` and `TestSupport/` against the actual host.
+Use existing scheme `CalledItMessages`, configuration `QA`. Actual QA IDs are
+host `com.mikunad.calledit.qa.host` and extension
+`com.mikunad.calledit.qa.host.messages`. Existing test bundle IDs are
+`com.mikunad.calledit.messages.coretests` and `.uitests`; neither is an app target.
+Release excludes test/support sources. Native owns all project/config edits.
 
-1. Provide `CalledItCoreTests`, an iOS simulator XCTest unit-test bundle in an
-   explicit QA/Test configuration, with bundle ID
-   `com.mikunad.calledit.qa.coretests`. For the **baseline regression sources**,
-   compile `Tests/CardSerializationTests.swift`, `Tests/ConversationLinksTests.swift`,
-   `Tests/NativeSafetyContractTests.swift`, `TestSupport/NativeQARun.swift` and the
-   actual `Extension/**/*.swift` sources into the test bundle. All extension source
-   membership is required today because `Cards` and `Links` are declared in
-   `AppModel.swift`, which references the real controller and views. Link the iOS
-   Messages/UIKit/SwiftUI/Security/CryptoKit frameworks. Do not compile `App/` or
-   instantiate a production host; use a hostless test bundle (`TEST_HOST` and
-   `BUNDLE_LOADER` empty). No product module is mocked or imported under an invented
-   name. If hostless UIKit rendering is unsupported by the selected Xcode runner,
-   the owner must supply an inert QA-only test host with the same isolation; that
-   is a blocked wiring dependency, not permission to run the release app.
-2. Add the real `Shared/**/*.swift` implementation to the unit target once its API
-   is published. Shared config/locator/session/account tests must call that real
-   implementation. The existing Cards/Links regressions are not a replacement for
-   those pending tests. If source extraction changes those symbols, update the
-   test call sites against the published API; do not add a test-local policy copy,
-   conditional compilation that silently removes cases, or weaken expectations.
-3. Provide `CalledItUITests` with `UITests/**/*.swift` and
-   `TestSupport/NativeQARun.swift` only. Use QA host bundle
-   `com.mikunad.calledit.qa.host`, embedded Messages extension
-   `com.mikunad.calledit.qa.host.messages`, and runner bundle
-   `com.mikunad.calledit.qa.uitests` (Xcode may append `.xctrunner`). UI tests must
-   not link a replacement extension view tree into the runner.
-4. Make the test scheme/configuration explicitly QA-only. Add neither test source,
-   TestSupport, fixture adapters, fake OTP, diagnostic fields nor test routes to a
-   Release/TestFlight artifact. A scheme test-plan check must prove their absence
-   from the distributed candidate. Do not keep the old `PAIR_CODE` runner setting.
+Old d23f9e7 Cards/Links/Config tests and old test contract are preserved under
+`tests/baseline/native/` for archaeology only. They are **not** target sources and
+refer to removed APIs. Their old `CALLEDIT_QA_*` contract is not the active seam.
 
-The fixed QA bundle names and card origin above are **requested owner contracts**,
-not a claim these build variants already exist. Renaming them requires updating
-the runner's exact allowlist, not accepting an arbitrary bundle through the env.
+## Real Shared assertions
 
-## Fail-closed provisioning and injection
-
-Use only a newly created/erased dedicated simulator, no personal device, no Apple
-account/history, and one synthetic conversation per run. An authorized external
-Mac provisioner/operator must attest erasure, OS/UDID, installed bundle inventory,
-and the actual synthetic conversation before running tests. An environment string
-does not prove erasure or real transport. Do not attach this runner to a personal
-Messages session, even if someone supplies matching environment values.
-
-The scheme must forward these variables into the **test runner**, not merely the
-shell or MobileSMS launch environment:
-
-| Variable | Required value |
+| Source | Assertion IDs / what is checked |
 |---|---|
-| `CALLEDIT_QA_ALLOW_EXECUTION` | `DEDICATED_CLEAN_SIMULATOR_ONLY` |
-| `CALLEDIT_QA_RUN_ID` | fresh `e2e_` plus 8–64 lowercase alphanumeric/underscore characters |
-| `CALLEDIT_QA_SIMULATOR_UDID` | the executing `SIMULATOR_UDID`, a valid UUID |
-| `CALLEDIT_QA_ERASED_FOR_RUN` | the exact run ID, after the provisioner verified erasure |
-| `CALLEDIT_QA_HOST_BUNDLE` | `com.mikunad.calledit.qa.host` |
-| `CALLEDIT_QA_EXTENSION_BUNDLE` | `com.mikunad.calledit.qa.host.messages` |
-| `CALLEDIT_QA_CARD_ORIGIN` | `https://calledit.qa.invalid` (reserved, never live hosting) |
-| `CALLEDIT_QA_ENDPOINT` | explicit loopback adapter origin with a port; `http`/`https`, only `localhost`, `127.0.0.1`, `[::1]`; no credentials/path/query/fragment |
-| `CALLEDIT_QA_CONVERSATION` | `CalledIt QA <exact run ID>` |
-| `CALLEDIT_QA_SCENARIO` | the one selected UI case's scenario below |
+| `RuntimeConfigurationTests.swift` | `NATIVE-CONFIG-01..12`, `NATIVE-ATTEST-01..03`: required typed config, independently pinned native/backend revisions, exact HTTPS hosts, no ordinary fixture/HTTP bypass, matching v0.2 attestation; normal mode rejects test adapters |
+| `CardLocatorTests.swift` | `NATIVE-LOCATOR-01..08`: actual opaque `/c/<locator>` round trip; wrong origin/scheme/port/query/fragment/credentials/encoded path tricks rejected; decoded persisted values revalidated before use |
+| `SharedSessionAndLinksTests.swift` | `NATIVE-SESSION-01..02`, `NATIVE-LINK-01..05`, `NATIVE-CLEAR-01..03`: strict session expiry/account/token/environment; no last-room fallback; account/conversation separation; explicit unlink; targeted cache/pending-locator cleanup |
+| `NativeBetTests.swift` | `NATIVE-LOCK-01..09`, `NATIVE-FORMAT-01..08`, `NATIVE-PICK-01..03`, `NATIVE-VARIANT-01..02`: real sealed/unavailable/bet decoder, absent private keys even when null, two outcomes across canonical formats, bounded confidence and invalid variant/state rejection |
+| `ClockNotificationAndProofTests.swift` | `NATIVE-CLOCK-01..03`, `NATIVE-NOTIFY-01..03`, `NATIVE-PROOF-01..05`: monotonic countdown is not reveal authorization; known neutral notification navigation; actual `$bytes` decoder, exact 512 KiB bound, no public URL fallback |
+| `NativeQAGateTests.swift` | `NATIVE-QA-01..12`: independent **runner safety gate**, not product QA seam coverage; raw manifest hashing, exact fields, numeric loopback, bounded lifetime/size, matching simulator/run and credential rejection |
+| `APITransportTests.swift` | `NATIVE-TRANSPORT-01..03`: actual API rejects legacy paths, unsupported kind and client `now` before bundle/config/network. HTTP/envelope scenarios depend on the owner seam below |
 
-Strip deployment/provider credentials and `PAIR_CODE` from the Mac runner's
-environment. `NativeQARun` rejects inherited deployment/LLM/APNs/pair credentials,
-nonloopback adapters, production bundle IDs and the existing live deployment.
-It has no network API and does not create or reset data.
+Pure model unit fixtures use reserved `.invalid` URLs and fresh UUID-namespaced
+UserDefaults suites. They do not call API transport, SessionStore/Keychain or
+Messages. Suite deletion is limited to the suite the test created. The deliberately
+unregistered unit Keychain string is never used for a Keychain operation and is
+not a claim of registered entitlements. Installed QA apps must use the fixed real
+QA entitlement groups, not these unit-only configuration values.
 
-The native owner must inject the same resolved endpoint into **both** QA host and
-extension (`Config.api` in the baseline), and the reserved QA card origin into
-the real locator implementation. `Config.web` semantics await the owner's
-runtime contract; it is not assumed to mean the card origin. There is no safe runtime override in
-the baseline. The QA binaries must start inert and fail before networking unless
-their compiled QA identity and explicit isolated configuration match. Enforce
-loopback-only egress in the QA adapter/runtime; displaying a diagnostic label is
-not an egress control. The runner checks the loaded runtime before any tap.
-Passing environment to `XCUIApplication(MobileSMS)` does not configure an embedded
-extension; the native owner must supply an actual QA-only shared-container/config
-path with production keychain/app-group separation.
+Two expectations intentionally capture stricter privacy/schema requirements
+that current source inspection does not satisfy: sealed DTOs containing
+`token`/`proof`/`proofMediaId` must reject (`NATIVE-LOCK-09`), and `over_under`
+without `line` must reject (`NATIVE-FORMAT-08`). No execution result is claimed.
 
-No backend endpoint names, seed/reset route, clock override or public OTP bypass
-are introduced by these tests. The loopback adapter must implement the actual
-published backend contract or record/replay its synthetic fixtures. Its server
-owns reveal scheduling. Provision fixtures externally, never through production
-routes. Auth uses synthetic numbers `+12025550101` (friend) and `+12025550102`
-(outsider), code `000000`, only in the disabled-in-Release fake provider. No SMS
-is sent, and no real pairing/phone identity is claimed.
+## Pending exact transport and host seams
 
-## Actual-extension runtime and accessibility contract
+At c3250ca, `API` has a private static URLSession/private request decoder and
+loads Bundle.main internally. The native owner is adding a configuration +
+URLSession overload of **the same `API.run` path**. Tests must wait for its real
+signature. Do not register a global URLProtocol, copy the envelope decoder, bypass
+attestation or mutate Bundle.main. An injected ephemeral URLSession will use a
+strict custom URLProtocol that rejects all requests it cannot satisfy locally.
+No request from that lane may leave the process.
 
-Each UI test is a separate `-only-testing` invocation. The provisioner/operator
-must already have the actual extension open in the prepared synthetic conversation
-and the QA host installed; there is no asserted public API for opening an arbitrary
-Messages conversation from the host. If this cannot be provided, mark the case
-blocked. Do not replace it with a standalone host render. Tests query only
-`calledit.extension.root` after the safety gate; they do not navigate the inbox.
+Required transport cases: real request method/path/header/body; supported Convex
+`format:"convex_encoded_json"` and `args:[convexToJson(args)]` equivalent;
+structured object, JSON-string and null `errorData`; documented non-200 UDF
+error status/envelope; malformed success, HTML proxy 4xx/5xx, offline, valid
+success/null, attestation mismatch and authenticated 512 KiB `$bytes` request/
+response round trip. Assertions must exercise the real encoder/decoder, not a
+test implementation. `v0Auth:redeemPair` is an **action**. URLProtocol tests are
+transport **units**, not real Convex HTTP/provider evidence.
 
-Expose the root as an accessibility container retaining real children. Exact IDs
-below must identify the **real controls/state**, never a mock screen. Dynamic
-diagnostics use `accessibilityValue` (a fixed neutral label is fine). Do not put
-credentials into any diagnostic. QA diagnostics are absent from Release.
+`HostAuthenticationModel` lives at `App/HostAuthenticationModel.swift`, outside
+the current unit target. Owner request: add that exact file (not `CalledItApp.swift`
+or notification/UI entry points) to `CalledItCoreTests`. Native is also publishing
+configuration/session-persistence injection with the real secure defaults retained.
+Wait for actual signatures before writing call sites. Then use `PhoneAuthenticating`
+protocol mocks only for view-model tests: normalize/reject phone input, busy state,
+failed/expired code, verified session persistence, account-switch cleanup,
+`AUTH_REQUIRED` cleanup versus `POLICY_PENDING` preservation, and pending locator
+continuity. No fake OTP service is backend E2E evidence; no hostless test should
+read Bundle.main credentials or a real Keychain access group.
 
-| IDs | Required values/source |
-|---|---|
-| `qa.runtime.contract`, `.mode`, `.run`, `.simulator` | `calledit-native-qa-v1`, `QA`, exact run ID, actual simulator UUID |
-| `qa.runtime.endpoint`, `.hostBundle`, `.extensionBundle`, `.cardOrigin` | actual resolved runtime config, not a copy of requested env values |
-| `qa.runtime.conversation` | exact QA conversation registration; external provisioner must bind it to the actual device-local conversation identity (the extension cannot read a chat title/history) |
-| `qa.runtime.networkPolicy`, `.livePairing` | enforced `loopback-only`, `disabled` |
-| `qa.scenario`, `qa.actor.id` | provisioned scenario, actual stable account ID or `anonymous` |
-| `qa.room.id`, `qa.bet.id`, `qa.bet.format`, `qa.bet.state` | actual view-model IDs/canonical format (`yes_no`, `over_under`, `this_that`); `sealed` or `revealed`; absent room is `none` |
-| `qa.pending.bet`, `qa.selected.bet` | pending locator and actual selected-message bet, respectively |
-| `qa.response.cardJSON` | actual last card response object before decoding; not a privacy pass/fail flag; synthetic QA data only |
-| `qa.response.revealTransitionCount` | actual sealed-to-revealed transition count for this view |
-| `qa.fixture.phase` (host) | actual isolated adapter phase; reveal scenarios transition within 25s without client clock overrides |
-| `qa.links.writeCount` | observed mapping writes since scenario start |
-| `qa.pick.option`, `.count`, `.user`, `.bet`, `.version` | readback from the isolated store after the real save; not optimistic UI state |
-| `qa.mutations.veto`, `qa.outbox.transcriptCount`, `.pushCount`, `.sentCount` | actual adapter/transport observations since scenario start |
-| `qa.draft.bet`, `.room`, `.insertCount`, `.reusesSelectedSession` | actual MSMessage selected/created for insertion; compare MSSession objects, not an invented MSSession UUID/property |
-| `qa.draft.metadataJSON` | all actual MSMessage/template text fields: `url`, `summaryText`, `accessibilityLabel`, `caption`, `subcaption`, `trailingCaption`, `trailingSubcaption`, `imageTitle`, `imageSubtitle`; include JSON nulls, never a computed privacy verdict |
-| `qa.preferences.noBets`, `.topics`, `qa.control.result`, `qa.board.room` | acknowledged persisted data or completed state from the adapter |
+Actual MSMessage serialization/artwork and bet-specific MSSession selection still
+live in `Extension/AppModel.swift`, outside Shared-only unit membership. Need a
+native-owner rendering target or explicit real-source observation seam for these
+assertions. Do not import obsolete Cards APIs, fabricate `qa.draft.*` verdicts or
+infer session binding from a host launch. The `Get the app` copy is now present
+in actual Cards.message source; rendering/transport remains unverified.
 
-Expose those runtime fields in the QA host too. Required product control IDs:
+## Exact UI launch contract and blocked dependencies
 
-- `calledit.bet.countdown`, `.lockedSurface`, `.question`, `.unavailable`, `.veto`,
-  `.option.0`, `.option.1`, `.sendUpdate`, `.sendResult`, `.revealAccessible`.
-- `calledit.pick.confidence` (real confidence slider), `.save`;
-  `calledit.link.required`; `calledit.navigation.home`;
-  `calledit.recent.bet.<bet ID>`; `calledit.draft.status` with `Draft ready`, not
-  a sent claim. Post/update/result inserts a draft only; the suite never sends it.
-- `calledit.auth.openHost`, `.phone`, `.requestCode`, `.code`, `.verify`;
-  `calledit.account.signOut`. Auth controls are in the actual host; returning to
-  Messages must share its entitled session without a second pairing screen.
-- `calledit.controls.open`, `.noBets`, `.topics`, `.leave`, `.delete`, `.back`;
-  `calledit.control.<name>.screen`; `calledit.control.noBets.toggle`;
-  `calledit.control.topics.input`, `.save`;
-  `calledit.control.leave.confirm`, `calledit.control.delete.confirm`.
-  Current tests request in-extension controls; if the native design opens host
-  settings instead, publish that real navigation contract and update the container
-  assertions before claiming coverage. Do not add a test-only copy of settings.
-- `calledit.board.open`, `.send`, `.points.<account ID>`.
+The active contract is Captain handoff `handoffs/release-v0/qa-launch-contract.md`.
+The runner passes only `CALLED_IT_QA_RUN_ID` (UUID) and
+`CALLED_IT_QA_MANIFEST_BASE64` (at most 16,384 decoded raw JSON bytes) to the QA
+host. It hashes the **raw** decoded bytes. The manifest pins native/backend source,
+run/simulator/deployment/config/fixture set, issue/expiry and explicit isolation
+claims; origins are only `http://127.0.0.1:<1024..65535>`. This HTTP exception is
+only for a validated simulator QA seam; release card locators remain HTTPS.
+The runner does not inject a token, phone or OTP in configuration.
 
-## Synthetic scenario inventory and assertion IDs
+The external provisioner must actually create/erase a dedicated simulator,
+record installed bundle/OS/UDID evidence, and open the actual embedded extension
+in a synthetic conversation. Manifest booleans do not prove these facts. The
+suite never launches Messages, searches contacts/inbox/history, pairs or sends.
+It activates MobileSMS only if it is already running after this provisioning.
 
-All IDs come from `NativeQARun`: `<run>_g1`, `_g2`, `_bet_a`, `_bet_b`, `_friend`,
-`_subject`, `_outsider`. The private question/options/context/proof/token markers
-are synthetic strings derived from the same run, never copied user content.
+The QA host validates and shares the activation using the fixed QA App Group;
+the extension must revalidate it, not depend on MobileSMS inheriting environment.
+The adapter must deny outbound network, handle actual `/api/query|mutation|action`
+transport against isolated real handlers, and attest matching raw-manifest hash
+and run headers with `testAdapters:true`. No public seed/reset/time routes are
+invented here. Sign-in uses actual API transport to a synthetic local provider;
+the UI fixture provider uses reserved synthetic numbers and code `000000`.
 
-| Scenario / tests | Assertions / coverage |
-|---|---|
-| Unit config and safety tests | `NATIVE-CONFIG-01`, `NATIVE-SAFETY-01..05`: actual API config must be QA-only; malformed safety gates reject |
-| Unit initial/update/result/veto/board/fallback | `NATIVE-CARD-*`, `NATIVE-RESULT-01..02`, `NATIVE-VETO-*`, `NATIVE-BOARD-01..04`, `NATIVE-FALLBACK-01..03`: real MSMessage text fields/HTTPS opaque locator; result and board remain neutral; changed board names/scores cannot change shared pixels; install instruction exists |
-| Unit conversation/session | `NATIVE-LINK-01..04`, `NATIVE-SESSION-01..02`: no last-room fallback, independent explicit links, new vs explicitly supplied MSSession objects |
-| `subject_locked`, `subject_veto` | `NATIVE-LOCK-*`, `NATIVE-CONTROL-01..06`: use a pre-reveal This/That card with private sentinels, inspect locked tree + raw response, no opacity-only hiding; one-tap quiet veto |
-| `friend_yesno`, `friend_overunder`, `friend_multi` | `NATIVE-FORMAT-*`, `NATIVE-PICK-*`: exactly two real options, authorized question, confidence save <10s after option tap, edit replaces one persisted pick. Options: Yes/No, Over 2.5/Under 2.5, private A/B sentinels |
-| `unknown_conversation`, `mismatched_locator` | `NATIVE-CHAT-*`, `NATIVE-ROUTE-*`: preload a different last mapping, then an unknown conversation; also supply G2 + bet A from G1. Neither may link/render a foreign room |
-| `host_handoff`, `account_switch` | `NATIVE-AUTH-*`, `NATIVE-ACCOUNT-*`: original pending bet survives host fake-provider sign-in; host/extension session shared; sign-out and outsider sign-in clear prior content/mappings and deny old bet |
-| `same_bet_update`, `different_bet_update`, `different_bet_result` | `NATIVE-SESSION-03..09`, `NATIVE-RESULT-03..05`, `NATIVE-DRAFT-*`: selected A may update A, never B; fixture with selected A and navigation to settled B for result; real draft metadata inspected, insertion not delivery |
-| `reveal_active`, `reveal_resume` | `NATIVE-REVEAL-*`, `NATIVE-RESUME-*`: start sealed; isolated server reveals within 25s; active refresh and background/reactivation, accessible reveal, no pick controls; no production test clock |
-| `controls`, `preferences`, `leave_group`, `delete_account` | `NATIVE-CONTROL-07..10`, `NATIVE-PREFERENCES-*`, `NATIVE-ERASE-*`: control destinations in two taps, persisted preferences, confirmed leave/delete clear current content/access |
-| `board_g1`, `board_g2` | `NATIVE-BOARD-05..13`: one account in two groups, independent read-only seeded board values (17 and 4), no foreign-room marker; neutral board draft. Values test rendering/scoping only, **not an approved scoring formula** |
-| `app_absent`, `install_return` | `NATIVE-FALLBACK-04..05`, `NATIVE-INSTALL-01..02`: explicit **BLOCKED failing tests**, not simulated transport passes. Need an authorized install-inventory/fallback-selector contract and real Store/TestFlight original-card return evidence |
+`MessagesDriveTests.swift` uses actual native IDs (`bet.sealed`, `bet.question`,
+`bet.option.0/1`, `bet.confidence`, `bet.savePick`, `bet.veto`,
+`bet.revealWithoutRubbing`, `auth.*`, `navigation.*`, `settings.*`, `board.row.*`).
+Published QA diagnostics are `qa.runtime.buildChannel/bundleID/fixtureMode/`
+`endpointPolicy/sessionStorage/runID/manifestSHA256/simulatorUDID/fixtureSetID/`
+`attestationState/apiOrigin/cardOrigin`. At c3250ca only the first host diagnostics
+exist; full manifest-bound diagnostics, actual adapter and provisioner are still
+blocked pending the native seam commit. Missing fields fail, never skip.
 
-Shared account-scope and mismatched-session **model** tests await the owner's real
-Shared API. UI contracts above cover those expectations separately. Backend
-authorization, settlement/challenge math, notifications, membership/deletion
-cascades and fixture accuracy need their own real handler/contract tests. Raw
-response/transport diagnostics must be wired to actual I/O; labels alone are not
-proof. Template pixel comparison does not prove VoiceOver, OS snapshots, APNs,
-forwarding or physical rendering. Those require the dedicated QA transport lane.
+Run one UI method per matching manifest `fixtureSetID`:
 
-The unit result fixture still uses the baseline `BetCard.kind` values
-`yesno`/`overunder`/`multi` because those are real existing native API values, not
-the future Shared contract. The UI contract requires canonical V0 formats; the
-owner must migrate the real DTO/view-model and then the baseline unit call sites.
-Neither source set claims the migration already works.
+- `synthetic-v0-subject-locked`, `synthetic-v0-subject-veto`: locked tree/privacy
+  and one-tap unavailable result (`NATIVE-UI-LOCK-*`, `NATIVE-UI-VETO-*`). Backend
+  outbox assertions separately prove veto is quiet; UI text alone does not.
+- `synthetic-v0-friend-yes-no/over-under/this-that`: two options, save/edit/readback
+  acknowledgement and <10 seconds (`NATIVE-UI-FORMAT-*`, `NATIVE-UI-PICK-*`).
+  Durable pick count/account/version needs independent handler/store assertions.
+- `synthetic-v0-reveal-active`, `synthetic-v0-unknown-conversation`: actual polling,
+  accessible reveal and explicit group selection (`NATIVE-UI-REVEAL-*`, `CHAT-*`).
+- `synthetic-v0-host-handoff`, `synthetic-v0-account-switch`: pending card,
+  transported synthetic phone sign-in/shared session and stale-content denial
+  (`NATIVE-UI-AUTH-*`, `ACCOUNT-*`). Fixture setup must retain the original selected
+  card; no automatic after-install return is assumed.
+- `synthetic-v0-controls/preferences/board-g1/board-g2`: real control IDs,
+  acknowledged no-bets and independent read-only seeded board values
+  (`NATIVE-UI-CONTROLS-*`, `PREFERENCES-*`, `BOARD-*`). Values 17/4 assert rendering,
+  not an approved scoring formula. “QA Finn” is the synthetic row alias.
+- Session-binding/rendering, suspended reveal observation, app-absent fallback,
+  and actual install-return methods contain explicit `NATIVE-UI-*-BLOCKED`
+  failures until their real observation/provisioning contracts exist. They must
+  not be removed from the evidence inventory or counted as passes.
 
-The canonical API handoff now requires `${V0_CARD_ORIGIN}/c/<random locator>` with
-zero query/fragment. Serializer assertions follow that navigation contract, not
-the baseline's `r`/`b` query encoding. Baseline Cards APIs cannot accept a locator
-DTO yet; their call-site migration awaits the real native implementation. The
-static `Get the app` assertion retains the user acceptance requirement. The
-canonical neutral caption/accessibility copy and useful install instructions must
-both be satisfied (possibly on separate fallback surfaces); any copy conflict
-needs Captain resolution, not deleting the installation assertion.
+Question fixture marker is `SECRET_QUESTION_<manifest runID>`; private This/That
+options are `PRIVATE_OPTION_A_<runID>` and `PRIVATE_OPTION_B_<runID>`. Context,
+proof and synthetic token markers are defined in `NativeQARun`. Use no real data.
 
-## Execution after dependencies land (Mac only)
-
-First provision and attest a fresh dedicated simulator and externally seed one
-scenario through the isolated adapter. Record candidate SHA, backend/adapter
-build, QA bundle versions, run ID, fixture IDs, simulator UDID/OS, case/assertion
-IDs, timestamps and the resulting `.xcresult`. Supply the environment table using
-the owner's QA test plan; the current scheme does not forward it.
-
-After the native owner adds the requested QA scheme (name requested here:
-`CalledItQA`), a unit invocation is:
+## Mac invocation after owner seams/provisioning land
 
 ```sh
 cd native-imessage
 xcodegen generate
-xcodebuild test -project CalledItMessages.xcodeproj -scheme CalledItQA \
-  -configuration QA -destination "platform=iOS Simulator,id=$CALLEDIT_QA_SIMULATOR_UDID" \
-  -only-testing:CalledItCoreTests -resultBundlePath "$ARTIFACTS/native-unit.xcresult"
+xcodebuild test -project CalledItMessages.xcodeproj -scheme CalledItMessages \
+  -configuration QA -destination "platform=iOS Simulator,id=$QA_SIMULATOR_UDID" \
+  -only-testing:CalledItCoreTests -resultBundlePath "$ARTIFACTS/native-core.xcresult"
 ```
 
-For UI, prepare the real extension, set exactly the matching scenario in the QA
-test plan, then run one method (do not run all scenarios against one fixture):
-
-```sh
-xcodebuild test -project CalledItMessages.xcodeproj -scheme CalledItQA \
-  -configuration QA -destination "platform=iOS Simulator,id=$CALLEDIT_QA_SIMULATOR_UDID" \
-  -only-testing:CalledItUITests/MessagesDriveTests/testLockedSubjectCannotExposePrivateAccessibilityContent \
-  -resultBundlePath "$ARTIFACTS/subject-locked.xcresult"
-```
-
-These commands depend on owner wiring; they do not work in the current baseline.
-Run the same cases in accessible text sizes/VoiceOver/Reduce Motion under an
-owner-supported test plan. No physical account/device sends are automated here.
-App-absent fallback, supported after-install return and three-party transport need
-separately authorized operator evidence on the exact signed candidate. A host-only
-Revyl launch or an old screenshot cannot satisfy any of those cases.
+For UI, forward the two approved activation variables into the XCTest runner,
+prepare exactly one fixture set/actual extension, then select one method with
+`-only-testing:CalledItUITests/MessagesDriveTests/<method>`. The current scheme
+does not yet document runner-variable forwarding; native owner must supply it.
+Record exact candidate/backend/config/fixture/UDID/OS and `.xcresult` evidence.
+No green unit lane substitutes for signed shared storage, three-phone forwarding/
+privacy, provider OTP/APNs, app-absent transport or real distribution evidence.
