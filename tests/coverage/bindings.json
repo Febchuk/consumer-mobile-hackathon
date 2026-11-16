@@ -1,0 +1,165 @@
+{
+  "SEC1.read-matrix.B": [
+    "SEC1.read.ext.card.anonymous",
+    "SEC1.read.chat.thread.anonymous",
+    "SEC1.read.chat.market.anonymous",
+    "SEC1.read.market.market.anonymous",
+    "SEC1.read.market.people.anonymous",
+    "SEC1.read.game.today.anonymous",
+    "SEC1.read.game.leaderboard.anonymous",
+    "SEC1.read.reveal.dropResults.anonymous",
+    "SEC1.read.groups.get.anonymous",
+    "SEC1.read.ext.board.anonymous",
+    "SEC1.read.ext.card.outsider",
+    "SEC1.read.chat.thread.outsider",
+    "SEC1.read.chat.market.outsider",
+    "SEC1.read.market.market.outsider",
+    "SEC1.read.market.people.outsider",
+    "SEC1.read.game.today.outsider",
+    "SEC1.read.game.leaderboard.outsider",
+    "SEC1.read.reveal.dropResults.outsider",
+    "SEC1.read.groups.get.outsider",
+    "SEC1.read.ext.board.outsider",
+    "SEC1.read.ext.card.alias",
+    "SEC1.read.chat.thread.alias",
+    "SEC1.read.chat.market.alias",
+    "SEC1.read.market.market.alias",
+    "SEC1.read.market.people.alias",
+    "SEC1.read.game.today.alias",
+    "SEC1.read.game.leaderboard.alias",
+    "SEC1.read.reveal.dropResults.alias",
+    "SEC1.read.groups.get.alias",
+    "SEC1.read.ext.board.alias",
+    "SEC1.read.ext.card.revoked",
+    "SEC1.read.chat.thread.revoked",
+    "SEC1.read.chat.market.revoked",
+    "SEC1.read.market.market.revoked",
+    "SEC1.read.market.people.revoked",
+    "SEC1.read.game.today.revoked",
+    "SEC1.read.game.leaderboard.revoked",
+    "SEC1.read.reveal.dropResults.revoked",
+    "SEC1.read.groups.get.revoked",
+    "SEC1.read.ext.board.revoked",
+    "SEC1.read.ext.card.new",
+    "SEC1.read.chat.thread.new",
+    "SEC1.read.chat.market.new",
+    "SEC1.read.market.market.new",
+    "SEC1.read.market.people.new",
+    "SEC1.read.game.today.new",
+    "SEC1.read.game.leaderboard.new",
+    "SEC1.read.reveal.dropResults.new",
+    "SEC1.read.groups.get.new",
+    "SEC1.read.ext.board.new",
+    "SEC1.read.ext.card.left",
+    "SEC1.read.chat.thread.left",
+    "SEC1.read.chat.market.left",
+    "SEC1.read.market.market.left",
+    "SEC1.read.market.people.left",
+    "SEC1.read.game.today.left",
+    "SEC1.read.game.leaderboard.left",
+    "SEC1.read.reveal.dropResults.left",
+    "SEC1.read.groups.get.left",
+    "SEC1.read.ext.board.left"
+  ],
+  "SEC1.subject-lock.B": [
+    "SEC1.subject.ext.card",
+    "SEC1.subject.chat.thread",
+    "SEC1.subject.chat.market",
+    "SEC1.subject.market.market",
+    "SEC1.subject.market.people",
+    "SEC1.subject.game.today",
+    "SEC1.subject.game.leaderboard",
+    "SEC1.subject.reveal.dropResults",
+    "SEC1.subject.groups.get",
+    "SEC1.subject.ext.board"
+  ],
+  "SEC1.eligible-members.B": [
+    "SEC1.eligible.creator",
+    "SEC1.eligible.friend"
+  ],
+  "SEC1.revocation.B": [
+    "SEC1.revoked-session"
+  ],
+  "SEC3.locked-fields.B": [
+    "SEC3.locked-fields"
+  ],
+  "SEC4.cutoff-matrix.B": [
+    "SEC4.cutoff.chat.stake.0",
+    "SEC4.cutoff.chat.stake.599999",
+    "SEC4.cutoff.chat.stake.600000",
+    "SEC4.cutoff.chat.stake.600001",
+    "SEC4.cutoff.game.placeStake.0",
+    "SEC4.cutoff.game.placeStake.599999",
+    "SEC4.cutoff.game.placeStake.600000",
+    "SEC4.cutoff.game.placeStake.600001"
+  ],
+  "SEC4.global-wallet.B": [
+    "SEC4.global-wallet.chat.stake",
+    "SEC4.global-wallet.game.placeStake"
+  ],
+  "SEC4.wrong-settler.B": [
+    "SEC4.wrong-settler"
+  ],
+  "SEC4.invalid-pick.B": [
+    "SEC4.invalid-pick.chat.stake.-1",
+    "SEC4.invalid-pick.chat.stake.0.5",
+    "SEC4.invalid-pick.chat.stake.2",
+    "SEC4.invalid-pick.game.placeStake.-1",
+    "SEC4.invalid-pick.game.placeStake.0.5",
+    "SEC4.invalid-pick.game.placeStake.2"
+  ],
+  "SEC4.invalid-settlement.B": [
+    "SEC4.invalid-settlement.-1",
+    "SEC4.invalid-settlement.0.5",
+    "SEC4.invalid-settlement.2"
+  ],
+  "SEC4.mixed-routes.B": [
+    "SEC4.mixed-routes"
+  ],
+  "SEC4.exactly-once.B": [
+    "SEC4.exactly-once"
+  ],
+  "SEC4.left-settler.B": [
+    "SEC4.left-settler"
+  ],
+  "J3.3.edit.chat.stake.B": [
+    "J3.3.edit.chat.stake"
+  ],
+  "J3.3.edit.game.placeStake.B": [
+    "J3.3.edit.game.placeStake"
+  ],
+  "J3.3.duplicate.chat.stake.B": [
+    "J3.3.duplicate.chat.stake"
+  ],
+  "J3.3.duplicate.game.placeStake.B": [
+    "J3.3.duplicate.game.placeStake"
+  ],
+  "J4.3.quiet-veto.B": [
+    "J4.3.quiet-veto"
+  ],
+  "J5.1.future-clock.B": [
+    "J5.1.future-clock"
+  ],
+  "J5.1.stale-clock.B": [
+    "J5.1.stale-clock"
+  ],
+  "J7.2.group-board.B": [
+    "J7.2.group-board"
+  ],
+  "J9.1.no-forward-enrollment.B": [
+    "SEC1.no-enrollment"
+  ],
+  "SEC2.no-username-admission.B": [
+    "SEC2.username-admission",
+    "SEC2.invite-recipient"
+  ],
+  "SEC5.admin-denied.B": [
+    "SEC5.admin-denied"
+  ],
+  "J6.3.manual-edit-filter.B": [
+    "SEC5.manual-safety.health",
+    "SEC5.manual-safety.appearance",
+    "SEC5.manual-safety.money",
+    "SEC5.manual-safety.relationship"
+  ]
+}

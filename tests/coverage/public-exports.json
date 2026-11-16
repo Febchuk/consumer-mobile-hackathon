@@ -1,0 +1,320 @@
+[
+  {
+    "path": "admin:addBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:adjustCounter",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:check",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:createRound",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:deleteBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:editBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:lockBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:overview",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:setRoundTimes",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:settle",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:settleFromCounter",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "admin:settlePreview",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ai:draftBets",
+    "kind": "action",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ai:suggest",
+    "kind": "action",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:createBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:createGroup",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:declare",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:demoReplay",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:demoRestore",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:demoRevealAt",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:demoStatus",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:enter",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:home",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:join",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:market",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:stake",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:thread",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "chat:veto",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ext:board",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ext:card",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ext:createPair",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ext:me",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "ext:redeemPair",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "game:leaderboard",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "game:myHistory",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "game:placeStake",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "game:today",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:addBet",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:addMember",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:create",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:get",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:mine",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:searchUsers",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "groups:settle",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "hosting:serve",
+    "kind": "httpAction",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "market:market",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "market:people",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "reveal:dropResults",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "reveal:myScorecards",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "users:join",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "users:me",
+    "kind": "query",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "users:ping",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  },
+  {
+    "path": "users:setProfile",
+    "kind": "mutation",
+    "requiredPolicy": "legacy-disable-or-apply-full-v0-policy",
+    "verification": "blocked-runtime-policy-matrix"
+  }
+]
