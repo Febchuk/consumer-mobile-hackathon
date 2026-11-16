@@ -36,7 +36,9 @@ struct LinkRoomView: View {
             }
         }
         if model.linkedRoomId != nil {
-            Footnote(text: "This conversation is already linked. A different group's card won't replace that link. Open its own conversation instead.")
+            Footnote(text: "This conversation is already linked. A different group's card won't replace that link. Unlink explicitly before choosing another group.")
+            Button("Unlink only this conversation", role: .destructive) { Task { await model.unlink() } }
+                .frame(minHeight: 44).accessibilityIdentifier("group.unlink")
         }
         SectionTitle(text: "Invitations for your verified phone")
         InsetGroup {

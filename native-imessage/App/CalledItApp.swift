@@ -22,7 +22,10 @@ struct CalledItApp: App {
                     Task { await HostNotifications.shared.refresh() }
                 }
             }
-            .onChange(of: authentication.session) { _, _ in Task { await HostNotifications.shared.refresh() } }
+            .onChange(of: authentication.session) { previous, next in
+                if previous != nil && next == nil { HostNotifications.shared.clearDestination() }
+                Task { await HostNotifications.shared.refresh() }
+            }
         }
     }
 }
@@ -33,6 +36,19 @@ struct ContainerView: View {
 
     var body: some View {
         Form {
+            #if QA
+            Section("QA runtime diagnostics") {
+                Text(Bundle.main.object(forInfoDictionaryKey: "CalledItBuildChannel") as? String ?? "missing")
+                    .accessibilityIdentifier("qa.runtime.buildChannel")
+                Text(Bundle.main.bundleIdentifier ?? "unknown").accessibilityIdentifier("qa.runtime.bundleID")
+                Text((Bundle.main.object(forInfoDictionaryKey: "CalledItFixtureMode") as? Bool).map { $0 ? "true" : "false" } ?? "missing")
+                    .accessibilityIdentifier("qa.runtime.fixtureMode")
+                Text((try? Config.load()) == nil ? "unconfigured" : "attestation_required")
+                    .accessibilityIdentifier("qa.runtime.endpointPolicy")
+                Text((Bundle.main.object(forInfoDictionaryKey: "CalledItKeychainGroup") as? String)?.contains(".qa.") == true ? "qa_shared_keychain" : "invalid")
+                    .accessibilityIdentifier("qa.runtime.sessionStorage")
+            }
+            #endif
             Section {
                 Text("Private predictions with your group, inside Messages.")
                 Text("V0 reads no chats, contacts or photo library. You choose any proof you share. Cards are sent only when you tap Send in Messages.")
@@ -76,11 +92,21 @@ struct ContainerView: View {
                 }
                 Section("Notifications") {
                     Text(notifications.status).accessibilityIdentifier("notifications.status")
-                    Button("Allow notifications") { Task { await notifications.requestPermission() } }
-                        .accessibilityIdentifier("notifications.enable")
+                    if let enabled = notifications.enabled {
+                        Toggle("Group reminders, reveals and recaps", isOn: Binding(get: { enabled }, set: { value in Task { await notifications.setEnabled(value) } }))
+                            .disabled(notifications.changingPreferences)
+                            .accessibilityIdentifier("notifications.enable")
+                    }
                     if let error = notifications.error { Text(error).font(.footnote).foregroundStyle(.red) }
                     Text("Turn, reveal and recap alerts are neutral. Delivery time isn't guaranteed, and alerts never send an iMessage or open a particular conversation for you.")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+                if let tap = notifications.tap {
+                    Section("Opened from a notification") {
+                        HostNotificationView(tap: tap)
+                            .id(authentication.session?.accountID)
+                        Button("Close notification") { notifications.clearDestination() }
+                    }
                 }
             }
             if authentication.hasPendingCard {

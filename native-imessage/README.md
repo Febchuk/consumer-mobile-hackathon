@@ -1,13 +1,13 @@
 # Called It native app
 
-The Swift host app embeds the real Messages extension. `Shared/` contains the v0.1 transport, configuration, session and DTO code. `App/` owns phone-code sign-in and push registration; `Extension/` owns private card views and manual Messages drafts. There is no web-account pairing requirement or legacy token migration.
+The Swift host app embeds the real Messages extension. `Shared/` contains the v0.2 transport, configuration, session and DTO code. `App/` owns phone-code sign-in and push registration; `Extension/` owns private card views and manual Messages drafts. There is no web-account pairing requirement or legacy token migration.
 
 ## Configuration
 
 Generate the project with XcodeGen before building. Debug/QA use `Configuration/QA.xcconfig`; distribution uses `Configuration/Release.xcconfig`. Both intentionally have no default endpoint. Supply nonsecret deployment pins through ignored `*.local.xcconfig` files or build settings:
 
 - `CALLED_IT_API_URL`, `CALLED_IT_WEB_URL`, and their `CALLED_IT_EXPECTED_API_HOST` / `CALLED_IT_EXPECTED_CARD_HOST` matches.
-- `CALLED_IT_ENVIRONMENT` (`local`, `staging`, or `production`), `CALLED_IT_SOURCE_REVISION` (native artifact), `CALLED_IT_EXPECTED_BACKEND_REVISION`, `CALLED_IT_DEPLOYMENT_ID`, `CALLED_IT_CONFIG_VERSION`.
+- `CALLED_IT_BUILD_CHANNEL` (`qa` or `release`), `CALLED_IT_ENVIRONMENT` (`local`, `staging`, or `production`), `CALLED_IT_SOURCE_REVISION` (native artifact), `CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION`, `CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID`, `CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION`.
 - `CALLED_IT_APP_GROUP`, `CALLED_IT_KEYCHAIN_GROUP`, and the configured HTTPS `CALLED_IT_SUPPORT_URL`.
 
 In xcconfig files, encode an HTTPS value as `https:/$()/example.invalid` so `//` is not treated as a comment. Placeholder values are not a runnable backend. Runtime checks reject missing configuration, origin mismatches, wrong attestation pins and production attestation in QA. Authenticated traffic is never redirected. Only the v0 API namespace is allowed; no device clock override is sent.
@@ -38,4 +38,4 @@ The host preserves an installed-app locator during sign-in. It tells people to r
 
 ## Implementation status
 
-The current branch is an integration checkpoint, not a release candidate. It has native adapters/screens for the published auth, invitations, bets, confidence picks, veto, answer/challenge, board/history/goal and privacy controls. Policy-dependent creation/goals stay disabled while rules are pending. Proof media, creator-turn/pass, weekly recap and notification preference/tap routing require the remaining canonical API additions. Provider access, attested nonproduction deployment, current assertive tests, visual inspection, signed capabilities and physical transport are separate verification gates.
+The current branch is an integration checkpoint, not a release candidate. It has native adapters/screens for auth, invitations, bets, confidence picks, quiet veto, answer/challenge, optional authenticated image/audio proof, board/history/goal, creator-turn/pass, weekly recap, notification preferences/tap routing and privacy controls. Policy-dependent creation/goals/turn passing stay disabled while rules are pending. Economics aren't calculated locally. Provider access, attested nonproduction deployment, current assertive tests, visual inspection, signed capabilities and physical transport are separate verification gates.

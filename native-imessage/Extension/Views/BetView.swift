@@ -110,6 +110,7 @@ struct BetView: View {
             }
             if ["revealed", "provisional", "finalized"].contains(bet.state) {
                 positions(details)
+                ProofView(betID: bet.betId, canUpload: details.canAnswer)
             }
             if details.canAnswer {
                 Text("What happened?").font(.title2.bold())
@@ -120,7 +121,7 @@ struct BetView: View {
                     }
                     .accessibilityIdentifier("bet.answer.\(index)")
                 }
-                Footnote(text: "Self-declare honestly. Your answer stays provisional through the server's challenge window. Proof media isn't connected in this build.")
+                Footnote(text: "Self-declare honestly. Proof is optional; upload it before answering. Your answer stays provisional through the server's challenge window.")
             }
             if let provisional = details.provisionalOutcome {
                 Text("Provisional: \(details.options[safe: provisional] ?? "—")").font(.headline)

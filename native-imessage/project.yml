@@ -25,6 +25,7 @@ settings:
     QA:
       DEVELOPMENT_TEAM: 6555P5TAV6
       CODE_SIGN_STYLE: Automatic
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) QA"
     Release:
       DEVELOPMENT_TEAM: $(CALLED_IT_DEVELOPMENT_TEAM)
       CODE_SIGN_STYLE: Manual
@@ -37,12 +38,12 @@ targetTemplates:
         CalledItWebURL: $(CALLED_IT_WEB_URL)
         CalledItExpectedAPIHost: $(CALLED_IT_EXPECTED_API_HOST)
         CalledItExpectedCardHost: $(CALLED_IT_EXPECTED_CARD_HOST)
-        CalledItChannel: $(CALLED_IT_CHANNEL)
+        CalledItBuildChannel: $(CALLED_IT_BUILD_CHANNEL)
         CalledItReleaseEnvironment: $(CALLED_IT_ENVIRONMENT)
         CalledItSourceRevision: $(CALLED_IT_SOURCE_REVISION)
-        CalledItExpectedBackendRevision: $(CALLED_IT_EXPECTED_BACKEND_REVISION)
-        CalledItDeploymentID: $(CALLED_IT_DEPLOYMENT_ID)
-        CalledItConfigVersion: $(CALLED_IT_CONFIG_VERSION)
+        CalledItExpectedBackendSourceRevision: $(CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION)
+        CalledItExpectedBackendDeploymentID: $(CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID)
+        CalledItExpectedBackendConfigVersion: $(CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION)
         CalledItAppGroup: $(CALLED_IT_APP_GROUP)
         CalledItKeychainGroup: $(CALLED_IT_KEYCHAIN_GROUP)
         CalledItSupportURL: $(CALLED_IT_SUPPORT_URL)
@@ -74,6 +75,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Configuration/Host.entitlements
       configs:
+        QA:
+          PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.qa.host
         Release:
           PROVISIONING_PROFILE_SPECIFIER: $(CALLED_IT_HOST_PROFILE)
     dependencies:
@@ -98,6 +101,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: iMessage App Icon
         CODE_SIGN_ENTITLEMENTS: Configuration/Shared.entitlements
       configs:
+        QA:
+          PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.qa.host.messages
         Release:
           PROVISIONING_PROFILE_SPECIFIER: $(CALLED_IT_EXTENSION_PROFILE)
   CalledItCoreTests:
@@ -108,6 +113,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.messages.coretests
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
       configs:
         QA:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: QA

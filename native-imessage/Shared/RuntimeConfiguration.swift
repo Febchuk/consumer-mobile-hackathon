@@ -31,7 +31,7 @@ struct RuntimeConfiguration: Equatable {
             }
             return url
         }
-        guard let channel = Channel(rawValue: try required("CalledItChannel")) else {
+        guard let channel = Channel(rawValue: try required("CalledItBuildChannel")) else {
             throw NativeError.configuration
         }
         self.channel = channel
@@ -39,9 +39,9 @@ struct RuntimeConfiguration: Equatable {
         guard ["local", "staging", "production"].contains(environmentID),
               channel != .qa || environmentID != "production" else { throw NativeError.configuration }
         sourceRevision = try required("CalledItSourceRevision")
-        backendRevision = try required("CalledItExpectedBackendRevision")
-        deploymentID = try required("CalledItDeploymentID")
-        configVersion = try required("CalledItConfigVersion")
+        backendRevision = try required("CalledItExpectedBackendSourceRevision")
+        deploymentID = try required("CalledItExpectedBackendDeploymentID")
+        configVersion = try required("CalledItExpectedBackendConfigVersion")
         apiURL = try endpoint("CalledItAPIURL")
         cardBaseURL = try endpoint("CalledItWebURL")
         guard apiURL.host == (try required("CalledItExpectedAPIHost")),

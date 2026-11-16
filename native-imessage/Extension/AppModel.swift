@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var pendingBet: NativeBet?
     @Published var activeTick = 0
     @Published var isActive = false
+    @Published private(set) var requestedSubjectID: String?
     weak var controller: MessagesViewController?
     private var conversationKey: String?
     private var sessions: [String: MSSession] = [:]
@@ -66,6 +67,7 @@ final class AppModel: ObservableObject {
         me = nil
         linkedRoomId = nil
         pendingBet = nil
+        requestedSubjectID = nil
         sessions = [:]
         screen = .home
     }
@@ -136,6 +138,26 @@ final class AppModel: ObservableObject {
             else { screen = .home }
             error = nil
         } catch { handle(error) }
+    }
+
+    func unlink() async {
+        guard let token, let accountID = session?.accountID, let conversationKey else { return }
+        do {
+            let _: Ignored? = try await API.mutation("v0Groups:unlinkConversation", [
+                "token": token, "conversationKey": conversationKey, "requestId": UUID().uuidString,
+            ])
+            guard self.token == token, self.conversationKey == conversationKey else { return }
+            try ConversationLinks.set(nil, for: conversationKey, accountID: accountID, configuration: Config.load())
+            linkedRoomId = nil
+            pendingBet = nil
+            sessions = [:]
+            screen = .groups
+        } catch { handle(error) }
+    }
+
+    func compose(subjectID: String? = nil) {
+        requestedSubjectID = subjectID
+        go(.newBet)
     }
 
     private func open(_ message: MSMessage) async {
