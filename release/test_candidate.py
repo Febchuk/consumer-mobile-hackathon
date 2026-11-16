@@ -14,7 +14,7 @@ import candidate
 
 def config():
     return {
-        "source_revision": "a" * 40, "version": "1.0", "build": "17",
+        "source_revision": "a" * 40, "version": "1.0", "build": "17", "build_channel": "release",
         "environment": "staging", "api_url": "https://synthetic-stage.convex.cloud",
         "web_url": "https://synthetic-stage.convex.site", "team_id": "SYNTHETIC1",
         "app_identifier_prefix": "SYNTHETIC1", "host_id": "com.synthetic.calledit",
@@ -52,6 +52,10 @@ def signed(c, role="host"):
         "CFBundleShortVersionString": c["version"], "CalledItAPIURL": c["api_url"],
         "CalledItWebURL": c["web_url"], "CalledItReleaseEnvironment": c["environment"],
         "CalledItSourceRevision": c["source_revision"], "CalledItFixtureMode": False,
+        "CalledItBuildChannel": c["build_channel"],
+        "CalledItExpectedBackendSourceRevision": c["backend"]["source_revision"],
+        "CalledItExpectedBackendDeploymentID": c["backend"]["deployment"],
+        "CalledItExpectedBackendConfigVersion": c["backend"]["config_version"],
     }
     if role == "extension":
         info["NSExtension"] = {"NSExtensionPointIdentifier": "com.apple.message-payload-provider"}
@@ -66,6 +70,9 @@ class CandidateTests(unittest.TestCase):
 
     def test_valid_configuration_and_local_export_only(self):
         c = candidate.validate_config(config())
+        self.assertEqual(c["build_channel"], "release")
+        self.assertEqual(c["environment"], "staging")
+        self.assertNotEqual(c["source_revision"], c["backend"]["source_revision"])
         options = plistlib.loads(plistlib.dumps(candidate.export_options(c)))
         self.assertEqual(options["destination"], "export")
         self.assertEqual(options["method"], "app-store-connect")
@@ -78,7 +85,8 @@ class CandidateTests(unittest.TestCase):
                            ("api_url", "https://localhost"), ("web_url", "https://127.0.0.1"),
                            ("api_url", "https://user:pass@example.org"),
                            ("api_url", "https://example.org/?token=redacted"),
-                           ("extension_id", "com.other.ext"), ("keychain_group", "WRONG.session")):
+                           ("extension_id", "com.other.ext"), ("keychain_group", "WRONG.session"),
+                           ("build_channel", "staging")):
             with self.subTest(key=key, value=value):
                 c = config()
                 c[key] = value
@@ -104,6 +112,22 @@ class CandidateTests(unittest.TestCase):
             with self.subTest(key=key, value=value), self.assertRaises(candidate.GateError):
                 candidate.validate_attestation(c, {**actual, key: value})
 
+    def test_qa_channel_cannot_make_app_store_candidate(self):
+        c = config()
+        c["build_channel"] = "qa"
+        candidate.validate_config(c)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = root / "config.json"
+            att = root / "attestation.json"
+            cfg.write_text(json.dumps(c))
+            att.write_text("{}")
+            with patch("sys.argv", ["candidate.py", "archive", "--config", str(cfg), "--attestation", str(att)]), \
+                    patch("candidate.validate_attestation"), patch("candidate.run") as child:
+                with self.assertRaisesRegex(candidate.GateError, "requires release channel"):
+                    candidate.main()
+                child.assert_not_called()
+
     def test_entitlement_and_profile_failures(self):
         c = config()
         changes = (
@@ -118,6 +142,10 @@ class CandidateTests(unittest.TestCase):
             ("info", "CalledItFixtureMode", True), ("info", "CalledItFixtureMode", "false"),
             ("info", "CalledItAPIURL", "https://other-stage.convex.cloud"),
             ("info", "CFBundleVersion", "18"), ("info", "CalledItSourceRevision", "c" * 40),
+            ("info", "CalledItBuildChannel", "qa"),
+            ("info", "CalledItExpectedBackendSourceRevision", "a" * 40),
+            ("info", "CalledItExpectedBackendDeploymentID", "other-stage"),
+            ("info", "CalledItExpectedBackendConfigVersion", "other-version"),
         )
         for section, key, value in changes:
             with self.subTest(section=section, key=key):
