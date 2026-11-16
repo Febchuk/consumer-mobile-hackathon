@@ -82,7 +82,7 @@ struct RubToReveal<Content: View>: View {
                             Text("Rub to uncover").font(.footnote.weight(.semibold)).foregroundStyle(Theme.sub).padding(10)
                         }
                     }
-                    .gesture(
+                    .highPriorityGesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 strokes.append(value.location)

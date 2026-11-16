@@ -90,14 +90,23 @@ final class MessagesDriveTests: XCTestCase {
         continueAfterFailure = true
         openExtension()
         linkIfNeeded()
+        tap("New bet")
+        sleep(2)
+        tap("Cancel")
+        sleep(3)
         if !tap("octopus", wait: 4) { tap("A bet about you") }
         sleep(6)
         dump("v1-verdict-covered")
         let ink = el("Covered by invisible ink")
         if ink.waitForExistence(timeout: 5) {
-            for i in 0..<6 {
+            for i in 0..<70 where ink.exists {
+                ink.coordinate(withNormalizedOffset: CGVector(dx: 0.1 + Double(i % 10) * 0.09, dy: 0.2 + Double(i / 10) * 0.1)).tap()
+                if i == 30 { dump("v1b-rubbing") }
+            }
+            for i in 0..<0 where ink.exists {
                 let y = 0.2 + Double(i) * 0.12
-                ink.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: y)).press(forDuration: 0.05, thenDragTo: ink.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: y)))
+                ink.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: y)).press(forDuration: 0.1, thenDragTo: ink.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: y)), withVelocity: .slow, thenHoldForDuration: 0.1)
+                if i == 1 { dump("v1b-rubbing") }
             }
         }
         sleep(2)
@@ -106,12 +115,14 @@ final class MessagesDriveTests: XCTestCase {
         sleep(1)
         dump("v3-verdict-buttons")
         if env["DECLARE"] == "1" {
-            tap(env["DECLARE_LABEL"] ?? "Yeah, guilty")
+            let declare = messages.buttons[env["DECLARE_LABEL"] ?? "Yeah, guilty"].firstMatch
+            if declare.waitForExistence(timeout: 5) { declare.tap() }
             sleep(5)
             dump("v4-declared")
             for _ in 0..<3 { messages.swipeUp() }
             dump("v5-payouts")
-            tap("Send result")
+            let send = messages.buttons["Send result"].firstMatch
+            if send.waitForExistence(timeout: 5) { send.tap() }
             sleep(3)
             dump("v6-result-inserted")
         }
@@ -148,10 +159,10 @@ final class MessagesDriveTests: XCTestCase {
         openExtension()
         tap("New bet")
         sleep(2)
-        tap("Back")
+        tap("Cancel")
         sleep(2)
         dump("b1-home")
-        tap("Leaderboard")
+        tap("Board")
         sleep(4)
         dump("b2-board")
         tap("Send leaderboard")
@@ -164,7 +175,7 @@ final class MessagesDriveTests: XCTestCase {
         openExtension()
         tap("New bet")
         sleep(2)
-        tap("Back")
+        tap("Cancel")
         sleep(3)
         let rows = messages.buttons.matching(NSPredicate(format: "label CONTAINS '%'"))
         let index = Int(env["ROW"] ?? "0") ?? 0
