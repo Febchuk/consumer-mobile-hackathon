@@ -51,7 +51,7 @@ const httpEvidence = [];
 const git = (...args) => execFileSync("git", args, { cwd: root, env, encoding: "utf8" }).trim();
 const sourceFiles = git("ls-files", "convex").split("\n").filter(Boolean).sort();
 const sourceDigest = digest(sourceFiles.map((path) => path + "\n" + readFileSync(resolve(root, path), "utf8")).join("\n"));
-const metadata = { schemaVersion: 1, runId, candidateSha: git("rev-parse", "HEAD"), backendSourceSha: git("log", "-1", "--format=%H", "--", "convex"), backendSourceDigest: sourceDigest, harnessSha256: digest(readFileSync(fileURLToPath(import.meta.url))), fixtureSha256: digest(readFileSync(resolve(root, "tests/local-backend/fixtures/qaRpc.ts.txt"))), backendVersion, binarySha256, convexClientVersion: JSON.parse(readFileSync(resolve(root, "node_modules/convex/package.json"), "utf8")).version, os: { platform: process.platform, architecture: process.arch, node: process.version }, startedAt: new Date().toISOString(), origin, target: "real OSS backend in isolated loopback network namespace", sourceOverlays: ["qaRpc.ts (test-only fixture)", "crons.ts (empty test-only scheduler)"], productionProof: false, nativeTransportExecuted: false, businessHandlerProof: "proof media and session revocation only; no complete journey", providerRunIds: [], signedBuild: null, status: "blocked" };
+const metadata = { schemaVersion: 1, runId, candidateSha: git("rev-parse", "HEAD"), backendSourceSha: git("log", "-1", "--format=%H", "--", "convex"), backendSourceDigest: sourceDigest, harnessSha256: digest(readFileSync(fileURLToPath(import.meta.url))), fixtureSha256: digest(readFileSync(resolve(root, "tests/local-backend/fixtures/qaRpc.ts.txt"))), mediaFixtureSha256: digest(readFileSync(resolve(root, "tests/fixtures/png.mjs"))), mediaContentHashes: [undefined, 257, 512 * 1024].map((length) => { const bytes = makePng(length); return { length: bytes.byteLength, sha256: digest(new Uint8Array(bytes)) }; }), backendVersion, binarySha256, convexClientVersion: JSON.parse(readFileSync(resolve(root, "node_modules/convex/package.json"), "utf8")).version, os: { platform: process.platform, architecture: process.arch, node: process.version }, startedAt: new Date().toISOString(), origin, target: "real OSS backend in isolated loopback network namespace", sourceOverlays: ["qaRpc.ts (test-only fixture)", "crons.ts (empty test-only scheduler)"], productionProof: false, nativeTransportExecuted: false, businessHandlerProof: "proof media and session revocation only; no complete journey", providerRunIds: [], signedBuild: null, status: "blocked" };
 const safeFetch = async (url, options = {}) => {
   const target = new URL(url);
   assert.equal(target.origin, origin);
@@ -214,8 +214,10 @@ try {
   metadata.finishedAt = new Date().toISOString();
   metadata.assertions = results;
   metadata.gates = { realBackendProtocol: results.length === 18 && results.every((r) => r.status === "passing"), nativeTransport: false, canonicalProofHandlers: results.filter((r) => r.id.startsWith("RPC.canonical-proof")).length === 6 && results.filter((r) => r.id.startsWith("RPC.canonical-proof")).every((r) => r.status === "passing"), fullV0Ready: false };
-  writeFileSync(resolve(output, "evidence.json"), JSON.stringify(metadata, null, 2) + "\n", { mode: 0o600 });
   rmSync(state, { recursive: true, force: true });
+  assert.equal(existsSync(state), false, "Private local database/storage state was not removed");
+  metadata.cleanup = { productSourceUnchanged: true, fixtureEndpointAbsent: true, privateStateRemoved: true };
+  writeFileSync(resolve(output, "evidence.json"), JSON.stringify(metadata, null, 2) + "\n", { mode: 0o600 });
   await new Promise((resolve) => process.stdout.write(JSON.stringify({ output, status: metadata.status, assertions: results.length, passing: results.filter((r) => r.status === "passing").length, fullV0Ready: false }) + "\n", resolve));
 }
 process.exit(process.exitCode ?? 0);

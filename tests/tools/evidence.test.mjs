@@ -68,7 +68,7 @@ test("current acceptance bindings use canonical executions without crediting pen
     assert.ok(executions.length > 0);
     assert.equal(new Set(executions).size, executions.length);
     for (const execution of executions) {
-      assert.ok(!execution.startsWith("V0.pending-policy."));
+      assert.ok(!execution.startsWith("V0.pending-policy.") && !execution.includes(".safe-pending."));
       assert.ok(!execution.startsWith("NATIVE-") && !execution.startsWith("RPC."));
     }
   }
