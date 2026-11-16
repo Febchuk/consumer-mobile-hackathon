@@ -41,6 +41,18 @@ describe("J1/J8/J9 real invited groups and controls", () => {
     expect(unknown).toEqual(existing);
   });
 
+  it("[V0.invite-expiry] lists a targeted invitation only before expiry and refuses acceptance at the boundary", async () => {
+    const f = await v0Fixture();
+    const expiresAt = T0 + 60_000;
+    vi.setSystemTime(expiresAt - 1);
+    expect((await f.t.query(api.v0Groups.invitations, { token: f.actors.outsider.token })).map((invite) => invite.id)).toEqual([f.invite]);
+    vi.setSystemTime(expiresAt);
+    expect(await f.t.query(api.v0Groups.invitations, { token: f.actors.outsider.token })).toEqual([]);
+    await expect(f.t.mutation(api.v0Groups.accept, { token: f.actors.outsider.token, inviteId: f.invite, requestId: `${f.runId}_expired` })).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+    expect(await f.t.run((ctx) => ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.outsider.id)).collect())).toEqual([]);
+    expect((await f.t.run((ctx) => ctx.db.get(f.invite)))?.acceptedAt).toBeUndefined();
+  });
+
   it("[V0.link-device-scope] isolates accounts/devices/conversations and refuses a silent conflicting link", async () => {
     const f = await v0Fixture();
     const tokenB = `synthetic_${f.runId}_creator_device_b`;
@@ -196,6 +208,10 @@ describe("J1/J8/J9 real invited groups and controls", () => {
   it("[V0.delete-cascade] removes private serving data and revokes sessions with honest pending provider cleanup", async () => {
     const f = await v0Fixture();
     const g2Before = await f.t.query(api.v0Groups.board, { token: f.actors.creator.token, groupId: f.g2 });
+    await f.t.run(async (ctx) => {
+      const member = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.friend.id)).unique();
+      await ctx.db.insert("v0Picks", { groupId: f.g1, betId: f.bet, accountId: f.actors.friend.id, membershipId: member!._id, option: 0, confidence: 0.5, placedAt: T0, updatedAt: T0 });
+    });
     const response = await f.t.mutation(api.v0Controls.deleteAccount, { token: f.actors.subject.token, requestId: `${f.runId}_delete` });
     expect(response).toMatchObject({ deleted: true, providerCleanup: "pending" });
     expect(response.copyDeletionCaveat).toContain("cannot erase cards");
@@ -204,6 +220,7 @@ describe("J1/J8/J9 real invited groups and controls", () => {
     expect(data.sessions).toEqual([]);
     expect(data.phones).toEqual([]);
     expect(data.proofs).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
     expect(data.outbox).toEqual([]);
     expect(data.media).toBeNull();
     expect(data.cleanup).toHaveLength(1);

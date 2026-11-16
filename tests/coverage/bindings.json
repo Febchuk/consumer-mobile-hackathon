@@ -1,167 +1,4 @@
 {
-  "SEC1.read-matrix.B": [
-    "SEC1.read.ext.card.anonymous",
-    "SEC1.read.chat.thread.anonymous",
-    "SEC1.read.chat.market.anonymous",
-    "SEC1.read.market.market.anonymous",
-    "SEC1.read.market.people.anonymous",
-    "SEC1.read.game.today.anonymous",
-    "SEC1.read.game.leaderboard.anonymous",
-    "SEC1.read.reveal.dropResults.anonymous",
-    "SEC1.read.groups.get.anonymous",
-    "SEC1.read.ext.board.anonymous",
-    "SEC1.read.ext.card.outsider",
-    "SEC1.read.chat.thread.outsider",
-    "SEC1.read.chat.market.outsider",
-    "SEC1.read.market.market.outsider",
-    "SEC1.read.market.people.outsider",
-    "SEC1.read.game.today.outsider",
-    "SEC1.read.game.leaderboard.outsider",
-    "SEC1.read.reveal.dropResults.outsider",
-    "SEC1.read.groups.get.outsider",
-    "SEC1.read.ext.board.outsider",
-    "SEC1.read.ext.card.alias",
-    "SEC1.read.chat.thread.alias",
-    "SEC1.read.chat.market.alias",
-    "SEC1.read.market.market.alias",
-    "SEC1.read.market.people.alias",
-    "SEC1.read.game.today.alias",
-    "SEC1.read.game.leaderboard.alias",
-    "SEC1.read.reveal.dropResults.alias",
-    "SEC1.read.groups.get.alias",
-    "SEC1.read.ext.board.alias",
-    "SEC1.read.ext.card.revoked",
-    "SEC1.read.chat.thread.revoked",
-    "SEC1.read.chat.market.revoked",
-    "SEC1.read.market.market.revoked",
-    "SEC1.read.market.people.revoked",
-    "SEC1.read.game.today.revoked",
-    "SEC1.read.game.leaderboard.revoked",
-    "SEC1.read.reveal.dropResults.revoked",
-    "SEC1.read.groups.get.revoked",
-    "SEC1.read.ext.board.revoked",
-    "SEC1.read.ext.card.new",
-    "SEC1.read.chat.thread.new",
-    "SEC1.read.chat.market.new",
-    "SEC1.read.market.market.new",
-    "SEC1.read.market.people.new",
-    "SEC1.read.game.today.new",
-    "SEC1.read.game.leaderboard.new",
-    "SEC1.read.reveal.dropResults.new",
-    "SEC1.read.groups.get.new",
-    "SEC1.read.ext.board.new",
-    "SEC1.read.ext.card.left",
-    "SEC1.read.chat.thread.left",
-    "SEC1.read.chat.market.left",
-    "SEC1.read.market.market.left",
-    "SEC1.read.market.people.left",
-    "SEC1.read.game.today.left",
-    "SEC1.read.game.leaderboard.left",
-    "SEC1.read.reveal.dropResults.left",
-    "SEC1.read.groups.get.left",
-    "SEC1.read.ext.board.left"
-  ],
-  "SEC1.subject-lock.B": [
-    "SEC1.subject.ext.card",
-    "SEC1.subject.chat.thread",
-    "SEC1.subject.chat.market",
-    "SEC1.subject.market.market",
-    "SEC1.subject.market.people",
-    "SEC1.subject.game.today",
-    "SEC1.subject.game.leaderboard",
-    "SEC1.subject.reveal.dropResults",
-    "SEC1.subject.groups.get",
-    "SEC1.subject.ext.board"
-  ],
-  "SEC1.eligible-members.B": [
-    "SEC1.eligible.creator",
-    "SEC1.eligible.friend"
-  ],
-  "SEC1.revocation.B": [
-    "SEC1.revoked-session"
-  ],
-  "SEC3.locked-fields.B": [
-    "SEC3.locked-fields"
-  ],
-  "SEC4.cutoff-matrix.B": [
-    "SEC4.cutoff.chat.stake.0",
-    "SEC4.cutoff.chat.stake.599999",
-    "SEC4.cutoff.chat.stake.600000",
-    "SEC4.cutoff.chat.stake.600001",
-    "SEC4.cutoff.game.placeStake.0",
-    "SEC4.cutoff.game.placeStake.599999",
-    "SEC4.cutoff.game.placeStake.600000",
-    "SEC4.cutoff.game.placeStake.600001"
-  ],
-  "SEC4.global-wallet.B": [
-    "SEC4.global-wallet.chat.stake",
-    "SEC4.global-wallet.game.placeStake"
-  ],
-  "SEC4.wrong-settler.B": [
-    "SEC4.wrong-settler"
-  ],
-  "SEC4.invalid-pick.B": [
-    "SEC4.invalid-pick.chat.stake.-1",
-    "SEC4.invalid-pick.chat.stake.0.5",
-    "SEC4.invalid-pick.chat.stake.2",
-    "SEC4.invalid-pick.game.placeStake.-1",
-    "SEC4.invalid-pick.game.placeStake.0.5",
-    "SEC4.invalid-pick.game.placeStake.2"
-  ],
-  "SEC4.invalid-settlement.B": [
-    "SEC4.invalid-settlement.-1",
-    "SEC4.invalid-settlement.0.5",
-    "SEC4.invalid-settlement.2"
-  ],
-  "SEC4.mixed-routes.B": [
-    "SEC4.mixed-routes"
-  ],
-  "SEC4.exactly-once.B": [
-    "SEC4.exactly-once"
-  ],
-  "SEC4.left-settler.B": [
-    "SEC4.left-settler"
-  ],
-  "J3.3.edit.chat.stake.B": [
-    "J3.3.edit.chat.stake"
-  ],
-  "J3.3.edit.game.placeStake.B": [
-    "J3.3.edit.game.placeStake"
-  ],
-  "J3.3.duplicate.chat.stake.B": [
-    "J3.3.duplicate.chat.stake"
-  ],
-  "J3.3.duplicate.game.placeStake.B": [
-    "J3.3.duplicate.game.placeStake"
-  ],
-  "J4.3.quiet-veto.B": [
-    "J4.3.quiet-veto"
-  ],
-  "J5.1.future-clock.B": [
-    "J5.1.future-clock"
-  ],
-  "J5.1.stale-clock.B": [
-    "J5.1.stale-clock"
-  ],
-  "J7.2.group-board.B": [
-    "J7.2.group-board"
-  ],
-  "J9.1.no-forward-enrollment.B": [
-    "SEC1.no-enrollment"
-  ],
-  "SEC2.no-username-admission.B": [
-    "SEC2.username-admission",
-    "SEC2.invite-recipient"
-  ],
-  "SEC5.admin-denied.B": [
-    "SEC5.admin-denied"
-  ],
-  "J6.3.manual-edit-filter.B": [
-    "SEC5.manual-safety.health",
-    "SEC5.manual-safety.appearance",
-    "SEC5.manual-safety.money",
-    "SEC5.manual-safety.relationship"
-  ],
   "SEC1.legacy-retirement.B": [
     "RETIRE.admin:addBet.anonymous",
     "RETIRE.admin:addBet.creator",
@@ -631,5 +468,481 @@
     "RETIRE.users:setProfile.revoked",
     "RETIRE.users:setProfile.new",
     "RETIRE.users:setProfile.left"
+  ],
+  "SEC1.public-export-policy.B": [
+    "HARNESS.runtime-export-inventory",
+    "V0.policy-inventory"
+  ],
+  "SEC1.read-matrix.B": [
+    "V0.auth.v0Auth:me.anonymous",
+    "V0.auth.v0Auth:me.revoked",
+    "V0.auth.v0Groups:invitations.anonymous",
+    "V0.auth.v0Groups:invitations.revoked",
+    "V0.auth.v0Groups:members.anonymous",
+    "V0.auth.v0Groups:members.revoked",
+    "V0.scope.v0Groups:members.outsider",
+    "V0.scope.v0Groups:members.unadmittedAlias",
+    "V0.scope.v0Groups:members.new",
+    "V0.scope.v0Groups:members.left",
+    "V0.auth.v0Groups:resolveConversation.anonymous",
+    "V0.auth.v0Groups:resolveConversation.revoked",
+    "V0.auth.v0Groups:turn.anonymous",
+    "V0.auth.v0Groups:turn.revoked",
+    "V0.scope.v0Groups:turn.outsider",
+    "V0.scope.v0Groups:turn.unadmittedAlias",
+    "V0.scope.v0Groups:turn.new",
+    "V0.scope.v0Groups:turn.left",
+    "V0.auth.v0Groups:recap.anonymous",
+    "V0.auth.v0Groups:recap.revoked",
+    "V0.scope.v0Groups:recap.outsider",
+    "V0.scope.v0Groups:recap.unadmittedAlias",
+    "V0.scope.v0Groups:recap.new",
+    "V0.scope.v0Groups:recap.left",
+    "V0.auth.v0Groups:board.anonymous",
+    "V0.auth.v0Groups:board.revoked",
+    "V0.scope.v0Groups:board.outsider",
+    "V0.scope.v0Groups:board.unadmittedAlias",
+    "V0.scope.v0Groups:board.new",
+    "V0.scope.v0Groups:board.left",
+    "V0.auth.v0Bets:get.anonymous",
+    "V0.auth.v0Bets:get.revoked",
+    "V0.scope.v0Bets:get.outsider",
+    "V0.scope.v0Bets:get.unadmittedAlias",
+    "V0.scope.v0Bets:get.new",
+    "V0.scope.v0Bets:get.left",
+    "V0.auth.v0Bets:list.anonymous",
+    "V0.auth.v0Bets:list.revoked",
+    "V0.scope.v0Bets:list.outsider",
+    "V0.scope.v0Bets:list.unadmittedAlias",
+    "V0.scope.v0Bets:list.new",
+    "V0.scope.v0Bets:list.left",
+    "V0.auth.v0Bets:history.anonymous",
+    "V0.auth.v0Bets:history.revoked",
+    "V0.scope.v0Bets:history.outsider",
+    "V0.scope.v0Bets:history.unadmittedAlias",
+    "V0.scope.v0Bets:history.new",
+    "V0.scope.v0Bets:history.left",
+    "V0.auth.v0Proof:list.anonymous",
+    "V0.auth.v0Proof:list.revoked",
+    "V0.scope.v0Proof:list.outsider",
+    "V0.scope.v0Proof:list.unadmittedAlias",
+    "V0.scope.v0Proof:list.new",
+    "V0.scope.v0Proof:list.left",
+    "V0.auth.v0Controls:get.anonymous",
+    "V0.auth.v0Controls:get.revoked",
+    "V0.auth.v0Notifications:preferences.anonymous",
+    "V0.auth.v0Notifications:preferences.revoked"
+  ],
+  "SEC1.subject-lock.B": [
+    "V0.subject.v0Bets:get.subject",
+    "V0.subject.v0Bets:list.subject",
+    "V0.subject.v0Bets:history.subject",
+    "V0.subject.v0Bets:get.alias",
+    "V0.subject.v0Bets:list.alias",
+    "V0.subject.v0Bets:history.alias"
+  ],
+  "SEC1.eligible-members.B": [
+    "V0.eligible.creator",
+    "V0.eligible.friend"
+  ],
+  "SEC1.revocation.B": [
+    "SEC2.session-unknown",
+    "SEC2.session-revoked",
+    "SEC2.session-expired",
+    "SEC2.session-future",
+    "SEC2.session-inverted",
+    "SEC2.session-deleted",
+    "SEC2.revoke-one-device",
+    "SEC2.revoke-all-devices"
+  ],
+  "SEC1.membership-interval.B": [
+    "V0.future-member-hidden.members",
+    "V0.future-member-hidden.board",
+    "V0.current-member-boundary",
+    "V0.duplicate-membership",
+    "V0.block-interval.caller",
+    "V0.block-interval.target",
+    "V0.block-replay-after-leave.caller",
+    "V0.block-replay-after-leave.target",
+    "V0.block-other-current-group",
+    "V0.scope.v0Groups:invite.new",
+    "V0.scope.v0Groups:invite.left",
+    "V0.scope.v0Groups:members.new",
+    "V0.scope.v0Groups:members.left",
+    "V0.scope.v0Groups:linkConversation.new",
+    "V0.scope.v0Groups:linkConversation.left",
+    "V0.scope.v0Groups:turn.new",
+    "V0.scope.v0Groups:turn.left",
+    "V0.scope.v0Groups:passTurn.new",
+    "V0.scope.v0Groups:passTurn.left",
+    "V0.scope.v0Groups:recap.new",
+    "V0.scope.v0Groups:recap.left",
+    "V0.scope.v0Groups:board.new",
+    "V0.scope.v0Groups:board.left",
+    "V0.scope.v0Groups:proposeGoal.new",
+    "V0.scope.v0Groups:proposeGoal.left",
+    "V0.scope.v0Groups:confirmGoal.new",
+    "V0.scope.v0Groups:confirmGoal.left",
+    "V0.scope.v0Bets:get.new",
+    "V0.scope.v0Bets:get.left",
+    "V0.scope.v0Bets:list.new",
+    "V0.scope.v0Bets:list.left",
+    "V0.scope.v0Bets:history.new",
+    "V0.scope.v0Bets:history.left",
+    "V0.scope.v0Bets:create.new",
+    "V0.scope.v0Bets:create.left",
+    "V0.scope.v0Bets:pick.new",
+    "V0.scope.v0Bets:pick.left",
+    "V0.scope.v0Bets:veto.new",
+    "V0.scope.v0Bets:veto.left",
+    "V0.scope.v0Bets:answer.new",
+    "V0.scope.v0Bets:answer.left",
+    "V0.scope.v0Bets:challenge.new",
+    "V0.scope.v0Bets:challenge.left",
+    "V0.scope.v0Proof:upload.new",
+    "V0.scope.v0Proof:upload.left",
+    "V0.scope.v0Proof:list.new",
+    "V0.scope.v0Proof:list.left",
+    "V0.scope.v0Proof:read.new",
+    "V0.scope.v0Proof:read.left",
+    "V0.scope.v0Controls:alias.new",
+    "V0.scope.v0Controls:alias.left",
+    "V0.scope.v0Controls:leave.new",
+    "V0.scope.v0Controls:leave.left",
+    "V0.scope.v0Controls:report.new",
+    "V0.scope.v0Controls:report.left",
+    "V0.scope.v0Controls:block.new",
+    "V0.scope.v0Controls:block.left",
+    "V0.scope.v0Suggestions:get.new",
+    "V0.scope.v0Suggestions:get.left"
+  ],
+  "SEC2.wrong-expired-replay.B": [
+    "SEC2.otp-wrong-code",
+    "SEC2.otp-expiry",
+    "SEC2.otp-replay",
+    "SEC2.otp-expiry-during-provider",
+    "SEC2.pair-one-use",
+    "SEC2.pair-strict-expiry-300000",
+    "SEC2.pair-strict-expiry-12345",
+    "SEC2.pair-origin-revoked",
+    "SEC2.pair-origin-deleted"
+  ],
+  "SEC2.bounded-attempts.B": [
+    "SEC2.otp-wrong-code",
+    "SEC5.otp-global-start-bound",
+    "SEC5.otp-global-check-bound",
+    "SEC5.otp-start-bounds",
+    "SEC5.otp-phone-check-bounds",
+    "SEC5.pair-durable-code-quota",
+    "SEC5.pair-device-start-bounds",
+    "SEC5.pair-malformed-and-global-bound"
+  ],
+  "SEC2.stable-account.B": [
+    "SEC2.verified-stable-identity",
+    "SEC2.account-switch"
+  ],
+  "SEC2.session-revocation.B": [
+    "SEC2.revoke-one-device",
+    "SEC2.revoke-all-devices",
+    "SEC2.account-switch"
+  ],
+  "SEC2.no-username-admission.B": [
+    "SEC2.verified-stable-identity",
+    "V0.no-enumeration",
+    "V0.invite-consent-interval"
+  ],
+  "SEC3.locked-fields.B": [
+    "V0.subject.v0Bets:get.subject",
+    "V0.subject.v0Bets:list.subject",
+    "V0.subject.v0Bets:history.subject",
+    "V0.subject.v0Bets:get.alias",
+    "V0.subject.v0Bets:list.alias",
+    "V0.subject.v0Bets:history.alias"
+  ],
+  "SEC3.neutral-push.B": [
+    "N3.worker-neutral-payload"
+  ],
+  "SEC5.bounded-auth.B": [
+    "SEC5.otp-global-start-bound",
+    "SEC5.otp-global-check-bound",
+    "SEC5.otp-start-bounds",
+    "SEC5.otp-phone-check-bounds",
+    "SEC5.pair-durable-code-quota",
+    "SEC5.pair-device-start-bounds",
+    "SEC5.pair-malformed-and-global-bound"
+  ],
+  "SEC5.admin-denied.B": [
+    "RETIRE.admin:addBet.anonymous",
+    "RETIRE.admin:addBet.creator",
+    "RETIRE.admin:addBet.friend",
+    "RETIRE.admin:addBet.subject",
+    "RETIRE.admin:addBet.outsider",
+    "RETIRE.admin:addBet.alias",
+    "RETIRE.admin:addBet.revoked",
+    "RETIRE.admin:addBet.new",
+    "RETIRE.admin:addBet.left",
+    "RETIRE.admin:adjustCounter.anonymous",
+    "RETIRE.admin:adjustCounter.creator",
+    "RETIRE.admin:adjustCounter.friend",
+    "RETIRE.admin:adjustCounter.subject",
+    "RETIRE.admin:adjustCounter.outsider",
+    "RETIRE.admin:adjustCounter.alias",
+    "RETIRE.admin:adjustCounter.revoked",
+    "RETIRE.admin:adjustCounter.new",
+    "RETIRE.admin:adjustCounter.left",
+    "RETIRE.admin:check.anonymous",
+    "RETIRE.admin:check.creator",
+    "RETIRE.admin:check.friend",
+    "RETIRE.admin:check.subject",
+    "RETIRE.admin:check.outsider",
+    "RETIRE.admin:check.alias",
+    "RETIRE.admin:check.revoked",
+    "RETIRE.admin:check.new",
+    "RETIRE.admin:check.left",
+    "RETIRE.admin:createRound.anonymous",
+    "RETIRE.admin:createRound.creator",
+    "RETIRE.admin:createRound.friend",
+    "RETIRE.admin:createRound.subject",
+    "RETIRE.admin:createRound.outsider",
+    "RETIRE.admin:createRound.alias",
+    "RETIRE.admin:createRound.revoked",
+    "RETIRE.admin:createRound.new",
+    "RETIRE.admin:createRound.left",
+    "RETIRE.admin:deleteBet.anonymous",
+    "RETIRE.admin:deleteBet.creator",
+    "RETIRE.admin:deleteBet.friend",
+    "RETIRE.admin:deleteBet.subject",
+    "RETIRE.admin:deleteBet.outsider",
+    "RETIRE.admin:deleteBet.alias",
+    "RETIRE.admin:deleteBet.revoked",
+    "RETIRE.admin:deleteBet.new",
+    "RETIRE.admin:deleteBet.left",
+    "RETIRE.admin:editBet.anonymous",
+    "RETIRE.admin:editBet.creator",
+    "RETIRE.admin:editBet.friend",
+    "RETIRE.admin:editBet.subject",
+    "RETIRE.admin:editBet.outsider",
+    "RETIRE.admin:editBet.alias",
+    "RETIRE.admin:editBet.revoked",
+    "RETIRE.admin:editBet.new",
+    "RETIRE.admin:editBet.left",
+    "RETIRE.admin:lockBet.anonymous",
+    "RETIRE.admin:lockBet.creator",
+    "RETIRE.admin:lockBet.friend",
+    "RETIRE.admin:lockBet.subject",
+    "RETIRE.admin:lockBet.outsider",
+    "RETIRE.admin:lockBet.alias",
+    "RETIRE.admin:lockBet.revoked",
+    "RETIRE.admin:lockBet.new",
+    "RETIRE.admin:lockBet.left",
+    "RETIRE.admin:overview.anonymous",
+    "RETIRE.admin:overview.creator",
+    "RETIRE.admin:overview.friend",
+    "RETIRE.admin:overview.subject",
+    "RETIRE.admin:overview.outsider",
+    "RETIRE.admin:overview.alias",
+    "RETIRE.admin:overview.revoked",
+    "RETIRE.admin:overview.new",
+    "RETIRE.admin:overview.left",
+    "RETIRE.admin:setRoundTimes.anonymous",
+    "RETIRE.admin:setRoundTimes.creator",
+    "RETIRE.admin:setRoundTimes.friend",
+    "RETIRE.admin:setRoundTimes.subject",
+    "RETIRE.admin:setRoundTimes.outsider",
+    "RETIRE.admin:setRoundTimes.alias",
+    "RETIRE.admin:setRoundTimes.revoked",
+    "RETIRE.admin:setRoundTimes.new",
+    "RETIRE.admin:setRoundTimes.left",
+    "RETIRE.admin:settle.anonymous",
+    "RETIRE.admin:settle.creator",
+    "RETIRE.admin:settle.friend",
+    "RETIRE.admin:settle.subject",
+    "RETIRE.admin:settle.outsider",
+    "RETIRE.admin:settle.alias",
+    "RETIRE.admin:settle.revoked",
+    "RETIRE.admin:settle.new",
+    "RETIRE.admin:settle.left",
+    "RETIRE.admin:settleFromCounter.anonymous",
+    "RETIRE.admin:settleFromCounter.creator",
+    "RETIRE.admin:settleFromCounter.friend",
+    "RETIRE.admin:settleFromCounter.subject",
+    "RETIRE.admin:settleFromCounter.outsider",
+    "RETIRE.admin:settleFromCounter.alias",
+    "RETIRE.admin:settleFromCounter.revoked",
+    "RETIRE.admin:settleFromCounter.new",
+    "RETIRE.admin:settleFromCounter.left",
+    "RETIRE.admin:settlePreview.anonymous",
+    "RETIRE.admin:settlePreview.creator",
+    "RETIRE.admin:settlePreview.friend",
+    "RETIRE.admin:settlePreview.subject",
+    "RETIRE.admin:settlePreview.outsider",
+    "RETIRE.admin:settlePreview.alias",
+    "RETIRE.admin:settlePreview.revoked",
+    "RETIRE.admin:settlePreview.new",
+    "RETIRE.admin:settlePreview.left"
+  ],
+  "J1.2.unknown-chat.B": [
+    "V0.link-device-scope"
+  ],
+  "J1.2.same-participants-distinct-chat.B": [
+    "V0.link-device-scope"
+  ],
+  "J2.2.verified-otp.B": [
+    "SEC2.otp-wrong-code",
+    "SEC2.otp-replay",
+    "SEC2.verified-stable-identity",
+    "SEC2.otp-start-mismatch-account",
+    "SEC2.otp-start-mismatch-service",
+    "SEC2.otp-start-mismatch-channel",
+    "SEC2.otp-start-mismatch-recipient",
+    "SEC2.otp-start-mismatch-malformed-sid",
+    "SEC2.otp-start-mismatch-status",
+    "SEC2.otp-check-mismatch-account",
+    "SEC2.otp-check-mismatch-service",
+    "SEC2.otp-check-mismatch-channel",
+    "SEC2.otp-check-mismatch-recipient",
+    "SEC2.otp-check-mismatch-malformed-sid",
+    "SEC2.otp-check-mismatch-challenge"
+  ],
+  "J2.2.logout-expiry.B": [
+    "SEC2.revoke-one-device",
+    "SEC2.revoke-all-devices",
+    "SEC2.session-expired"
+  ],
+  "J2.3.clear-stale-data.B": [
+    "SEC2.account-switch"
+  ],
+  "J2.3.outsider-denied.B": [
+    "V0.no-enumeration",
+    "V0.scope.v0Bets:get.outsider",
+    "V0.scope.v0Bets:get.unadmittedAlias"
+  ],
+  "J4.1.token-free.B": [
+    "V0.eligible.creator",
+    "V0.eligible.friend"
+  ],
+  "J4.2.locked-response.B": [
+    "V0.subject.v0Bets:get.subject",
+    "V0.subject.v0Bets:get.alias"
+  ],
+  "J4.3.quiet-veto.B": [
+    "V0.quiet-veto"
+  ],
+  "J4.3.exactly-once-void.B": [
+    "V0.quiet-veto"
+  ],
+  "J4.3.neutral-old-open.B": [
+    "V0.quiet-veto"
+  ],
+  "J5.1.pick-controls-closed.B": [
+    "V0.server-reveal"
+  ],
+  "J7.2.group-board.B": [
+    "V0.no-foreign-board",
+    "V0.future-member-hidden.board",
+    "V0.current-member-boundary",
+    "V0.duplicate-membership"
+  ],
+  "J7.2.no-global-wallet.B": [
+    "V0.no-foreign-board"
+  ],
+  "J8.1.existing-bet-policy.B": [
+    "V0.no-bets-server"
+  ],
+  "J8.1.veto.B": [
+    "V0.quiet-veto"
+  ],
+  "J8.2.cancel-subject-bets.B": [
+    "V0.subject-leave-cascade"
+  ],
+  "J8.2.revoke-reads-push.B": [
+    "V0.subject-leave-cascade",
+    "N3.suppress-after-leave"
+  ],
+  "J8.2.isolate-g2.B": [
+    "V0.subject-leave-cascade",
+    "V0.delete-cascade"
+  ],
+  "J8.3.revoke-sessions.B": [
+    "V0.delete-cascade"
+  ],
+  "J8.3.delete-context-proof-picks.B": [
+    "V0.delete-cascade"
+  ],
+  "J8.3.suppress-queued-push.B": [
+    "V0.delete-cascade",
+    "N3.suppress-after-delete"
+  ],
+  "J8.3.honest-transcript-limit.B": [
+    "V0.delete-cascade"
+  ],
+  "J9.1.no-forward-enrollment.B": [
+    "V0.no-enumeration",
+    "V0.invite-consent-interval"
+  ],
+  "J9.1.one-use-expiring-invite.B": [
+    "V0.invite-consent-interval",
+    "V0.invite-expiry"
+  ],
+  "J9.1.account-consent.B": [
+    "V0.invite-consent-interval"
+  ],
+  "J9.1.no-prejoin-history.B": [
+    "V0.invite-consent-interval"
+  ],
+  "J9.4.no-last-room.B": [
+    "V0.link-device-scope"
+  ],
+  "J9.4.account-scoped.B": [
+    "V0.link-device-scope",
+    "SEC2.account-switch"
+  ],
+  "J9.4.mismatch-denied.B": [
+    "V0.link-device-scope"
+  ],
+  "N2.stale-event-denied.B": [
+    "N3.suppress-after-preferences",
+    "N3.suppress-after-leave",
+    "N3.suppress-after-delete",
+    "N3.suppress-after-revoke",
+    "N3.suppress-after-block",
+    "N3.suppress-after-veto",
+    "N3.owner-change-before-send",
+    "N3.authorize-revoked-session"
+  ],
+  "N2.neutral-payload.B": [
+    "N3.worker-neutral-payload"
+  ],
+  "N3.token-refresh.B": [
+    "N3.registration-unique",
+    "N3.unregister-device",
+    "N3.owner-change-before-send",
+    "N3.authorize-refresh"
+  ],
+  "N3.invalid-token-cleanup.B": [
+    "N3.invalid-device-cleanup",
+    "N3.apns-invalid-token-400",
+    "N3.apns-invalid-token-410",
+    "N3.apns-preserve-rotated-registration",
+    "N3.apns-preserve-older-invalidation"
+  ],
+  "N3.outage-backoff.B": [
+    "N3.worker-backoff",
+    "N3.partial-device-retry",
+    "N3.stale-lease-recovery",
+    "N3.adapter-release-lease",
+    "N3.duplicate-device-result",
+    "N1.concurrent-workers"
+  ],
+  "N3.logout-switch.B": [
+    "SEC2.revoke-one-device",
+    "SEC2.revoke-all-devices",
+    "SEC2.account-switch",
+    "N3.suppress-after-revoke",
+    "N3.owner-change-before-send"
+  ],
+  "N3.leave-delete-suppression.B": [
+    "N3.suppress-after-leave",
+    "N3.suppress-after-delete"
   ]
 }
