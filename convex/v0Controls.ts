@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { blockInteractions, cancelSubjectBets, deleteAccountData, leaveGroup } from "./v0Cleanup";
-import { fail, once, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
+import { activeMember, fail, once, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
 
 const copyDeletionCaveat = "Called It cannot erase cards or copies already received in other people's Messages. Provider deletion may require additional processing.";
 
@@ -65,15 +65,23 @@ export const block = mutation({
   handler: async (ctx, { token, accountId: blockedId, requestId }) => {
     const { account } = await requireSession(ctx, token);
     if (account._id === blockedId) fail("INVALID_INPUT", "Choose another member.");
+    const target = await ctx.db.get(blockedId);
+    if (!target || target.deletedAt !== undefined) fail("NOT_AVAILABLE");
+    const mine = await ctx.db.query("v0Memberships").withIndex("by_account", (q) => q.eq("accountId", account._id)).collect();
+    let eligible = false;
+    for (const groupId of new Set(mine.map((member) => member.groupId))) {
+      if (!(await ctx.db.get(groupId))) continue;
+      const [callerMember, targetMember] = await Promise.all([
+        activeMember(ctx, groupId, account._id),
+        activeMember(ctx, groupId, blockedId),
+      ]);
+      if (callerMember && targetMember) {
+        eligible = true;
+        break;
+      }
+    }
+    if (!eligible) fail("NOT_AVAILABLE");
     return await once(ctx, account._id, "controls.block", requestId, { accountId: blockedId }, async () => {
-      const target = await ctx.db.get(blockedId);
-      if (!target || target.deletedAt !== undefined) fail("NOT_AVAILABLE");
-      const mine = await ctx.db.query("v0Memberships").withIndex("by_account", (q) => q.eq("accountId", account._id)).collect();
-      const theirs = await ctx.db.query("v0Memberships").withIndex("by_account", (q) => q.eq("accountId", blockedId)).collect();
-      const shared = mine.filter((member) => member.leftAt === undefined && theirs.some((other) => other.leftAt === undefined && other.groupId === member.groupId));
-      let eligible = false;
-      for (const member of shared) if (await ctx.db.get(member.groupId)) eligible = true;
-      if (!eligible) fail("NOT_AVAILABLE");
       await rateLimit(ctx, `controls.block:${account._id}`, 30, 3_600_000);
       const existing = await ctx.db.query("v0Blocks").withIndex("by_pair", (q) => q.eq("accountId", account._id).eq("blockedId", blockedId)).unique();
       if (!existing) await ctx.db.insert("v0Blocks", { accountId: account._id, blockedId, createdAt: Date.now() });

@@ -126,7 +126,7 @@ export const members = query({
     const memberships = await ctx.db.query("v0Memberships").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect();
     const result = [];
     for (const member of memberships) {
-      if (member.leftAt !== undefined || await isBlocked(ctx, account._id, member.accountId)) continue;
+      if ((await activeMember(ctx, groupId, member.accountId))?._id !== member._id || await isBlocked(ctx, account._id, member.accountId)) continue;
       const person = await ctx.db.get(member.accountId);
       if (person && person.deletedAt === undefined) result.push({ accountId: person._id, alias: member.alias, noBets: person.noBets });
     }
@@ -231,7 +231,7 @@ export const board = query({
     const memberships = await ctx.db.query("v0Memberships").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect();
     const rows = [];
     for (const member of memberships) {
-      if (member.leftAt !== undefined || await isBlocked(ctx, account._id, member.accountId)) continue;
+      if ((await activeMember(ctx, groupId, member.accountId))?._id !== member._id || await isBlocked(ctx, account._id, member.accountId)) continue;
       const person = await ctx.db.get(member.accountId);
       if (person && person.deletedAt === undefined) rows.push({ accountId: person._id, alias: member.alias, points: member.points, streak: member.streak });
     }

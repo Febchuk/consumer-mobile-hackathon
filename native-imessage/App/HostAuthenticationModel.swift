@@ -74,10 +74,13 @@ final class HostAuthenticationModel: ObservableObject {
             let configuration = try configuration()
             guard verified.isUsable(in: configuration) else { throw NativeError.sessionExpired }
             if let previous = session, previous.accountID != verified.accountID {
+                hasPendingCard = false
                 try persistence.clearAccount(previous.accountID, configuration: configuration)
             }
             try persistence.save(verified, configuration: configuration)
             session = verified
+            hasPendingCard = false
+            hasPendingCard = try persistence.pendingCard(configuration: configuration) != nil
             phone = ""
             resetChallenge()
         } catch {
