@@ -138,6 +138,8 @@ describe("J1/J8/J9 real invited groups and controls", () => {
   it("[V0.block-other-current-group] permits a shared current group without accepting a future-only interval", async () => {
     const f = await v0Fixture();
     await f.t.run(async (ctx) => {
+      const future = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.new.id)).unique();
+      await ctx.db.patch(future!._id, { joinedAt: T0 + 1000 });
       await ctx.db.insert("v0Memberships", { groupId: f.g2, accountId: f.actors.new.id, alias: "Synthetic current G2", joinedAt: T0 - 1000, points: 0, streak: 0 });
     });
     expect(await f.t.mutation(api.v0Controls.block, { token: f.actors.new.token, accountId: f.actors.creator.id, requestId: `${f.runId}_g2` })).toEqual({ blocked: true });
