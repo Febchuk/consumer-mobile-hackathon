@@ -1,4 +1,5 @@
-import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
+import { mutation, query } from "./v0Legacy";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { START_POINTS, percents, requireAdmin, requireUser, userByToken } from "./lib";

@@ -6,7 +6,7 @@ export const attestation = query({
   handler: async () => ({
     app: "called-it",
     contractVersion,
-    schemaVersion: "v0.1",
+    schemaVersion: "v0.2",
     environment: ["local", "staging", "production"].includes(process.env.V0_ENVIRONMENT ?? "")
       ? process.env.V0_ENVIRONMENT
       : "unconfigured",

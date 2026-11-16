@@ -7,7 +7,7 @@ export const betState = v.union(v.literal("open"), v.literal("locked"), v.litera
 export const v0Tables = {
   v0Accounts: defineTable({
     displayName: v.string(), createdAt: v.number(), noBets: v.boolean(),
-    blockedTopics: v.array(v.string()), hostedAiConsentAt: v.optional(v.number()), deletedAt: v.optional(v.number()),
+    blockedTopics: v.array(v.string()), hostedAiConsentAt: v.optional(v.number()), notificationsEnabled: v.optional(v.boolean()), deletedAt: v.optional(v.number()),
   }),
   v0Phones: defineTable({ accountId: v.id("v0Accounts"), phoneHash: v.string(), lastFour: v.string(), verifiedAt: v.number() })
     .index("by_hash", ["phoneHash"]).index("by_account", ["accountId"]),
@@ -30,10 +30,14 @@ export const v0Tables = {
     .index("by_bet", ["betId"]).index("by_account", ["accountId"]).index("by_bet_account", ["betId", "accountId"]),
   v0Challenges: defineTable({ betId: v.id("v0Bets"), accountId: v.id("v0Accounts"), createdAt: v.number() })
     .index("by_bet", ["betId"]).index("by_bet_account", ["betId", "accountId"]),
+  v0Proofs: defineTable({ accountId: v.id("v0Accounts"), betId: v.id("v0Bets"), storageId: v.id("_storage"), contentType: v.union(v.literal("image/jpeg"), v.literal("image/png"), v.literal("audio/mp4")), sha256: v.string(), requestId: v.string(), createdAt: v.number() })
+    .index("by_bet", ["betId"]).index("by_account", ["accountId"]).index("by_request", ["accountId", "requestId"]),
   v0Ledger: defineTable({ groupId: v.id("v0Groups"), betId: v.id("v0Bets"), accountId: v.optional(v.id("v0Accounts")), membershipId: v.optional(v.id("v0Memberships")), points: v.number(), streakBefore: v.number(), streakAfter: v.number(), policyVersion: v.string(), createdAt: v.number() })
     .index("by_group", ["groupId"]).index("by_bet", ["betId"]).index("by_account", ["accountId"]),
   v0Turns: defineTable({ groupId: v.id("v0Groups"), localDate: v.string(), creatorId: v.id("v0Accounts"), subjectId: v.id("v0Accounts"), status: v.union(v.literal("assigned"), v.literal("passed"), v.literal("created"), v.literal("expired")), assignedAt: v.number(), passAt: v.number(), betId: v.optional(v.id("v0Bets")) })
     .index("by_group_date", ["groupId", "localDate"]),
+  v0Recaps: defineTable({ groupId: v.id("v0Groups"), startsAt: v.number(), endsAt: v.number(), createdAt: v.number() })
+    .index("by_group", ["groupId"]),
   v0PushTokens: defineTable({ accountId: v.id("v0Accounts"), deviceId: v.string(), token: v.string(), environment: v.union(v.literal("sandbox"), v.literal("production")), updatedAt: v.number() })
     .index("by_account", ["accountId"]).index("by_device", ["accountId", "deviceId"]),
   v0Outbox: defineTable({ key: v.string(), accountId: v.id("v0Accounts"), groupId: v.optional(v.id("v0Groups")), betId: v.optional(v.id("v0Bets")), kind: v.union(v.literal("turn"), v.literal("reveal"), v.literal("result"), v.literal("recap")), state: v.union(v.literal("pending"), v.literal("delivering"), v.literal("sent"), v.literal("failed")), attempts: v.number(), availableAt: v.number(), leaseUntil: v.optional(v.number()), sentAt: v.optional(v.number()) })
@@ -45,6 +49,8 @@ export const v0Tables = {
     .index("by_account", ["accountId"]).index("by_pair", ["accountId", "blockedId"]),
   v0Reports: defineTable({ reporterId: v.id("v0Accounts"), groupId: v.id("v0Groups"), betId: v.optional(v.id("v0Bets")), reason: v.string(), createdAt: v.number(), status: v.union(v.literal("open"), v.literal("reviewed")) })
     .index("by_reporter", ["reporterId"]),
+  v0ProviderCleanup: defineTable({ accountId: v.id("v0Accounts"), provider: v.literal("twilio_verify"), references: v.array(v.string()), state: v.union(v.literal("pending"), v.literal("manual_required"), v.literal("complete")), attempts: v.number(), availableAt: v.number(), createdAt: v.number() })
+    .index("by_account", ["accountId"]).index("by_state_available", ["state", "availableAt"]),
   v0Goals: defineTable({ groupId: v.id("v0Groups"), proposerId: v.id("v0Accounts"), label: v.string(), targetPoints: v.number(), confirmedBy: v.array(v.id("v0Accounts")), state: v.union(v.literal("proposed"), v.literal("confirmed")), createdAt: v.number() })
     .index("by_group", ["groupId"]),
 };

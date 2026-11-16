@@ -21,5 +21,11 @@ export type BetView = {
   | { view: "bet"; question: string; format: BetFormat; options: string[]; line?: number; canPick: boolean; canAnswer: boolean; canChallenge: boolean; answerDeadline?: number; challengeDeadline?: number; outcome?: number; provisionalOutcome?: number; myPick: { option: number; confidence: number; riskPoints?: number } | null; picks: { accountId: Id<"v0Accounts">; alias: string; option: number; confidence: number; riskPoints?: number }[] }
 );
 export type Suggestion = { subjectId: Id<"v0Accounts">; question: string; format: BetFormat; options: string[]; line?: number; source: "template" | "history" | "hosted_ai" };
+export type ProofRef = { id: Id<"v0Proofs">; contentType: "image/jpeg" | "image/png" | "audio/mp4"; createdAt: number };
+export type PrivateProof = ProofRef & { bytes: Uint8Array };
+export type Turn = { id: Id<"v0Turns">; groupId: Id<"v0Groups">; localDate: string; creatorId: Id<"v0Accounts">; subjectId: Id<"v0Accounts">; status: "assigned" | "passed" | "created" | "expired"; assignedAt: number; passAt: number; canPass: boolean };
+export type Recap = { id: Id<"v0Recaps">; groupId: Id<"v0Groups">; startsAt: number; endsAt: number; rows: { accountId: Id<"v0Accounts">; alias: string; points: number }[]; policy: PolicyStatus };
+export type NotificationPreferences = { enabled: boolean };
+export type NotificationTap = { kind: "turn" | "reveal" | "result" | "recap"; groupId?: Id<"v0Groups">; locator?: string };
 export type PolicyStatus = { status: "pending"; missing: string[] } | { status: "approved"; version: string };
-export const contractVersion = "v0.1";
+export const contractVersion = "v0.2";
