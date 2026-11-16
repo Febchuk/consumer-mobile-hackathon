@@ -5,7 +5,7 @@ import { action, internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { GroupSummary, Session } from "./v0Contract";
 import { checkVerification, requireOtpProvider, startVerification } from "./v0AuthProvider";
-import { fail, hash, normalizePhone, once, phoneHash, policyStatus, randomToken, rateLimit, requireSession } from "./v0Policy";
+import { activeMember, fail, hash, normalizePhone, once, phoneHash, policyStatus, randomToken, rateLimit, requireSession } from "./v0Policy";
 
 const minute = 60_000;
 const hour = 60 * minute;
@@ -150,7 +150,7 @@ export const me = query({
     const groups: GroupSummary[] = [];
     const seen = new Set<Id<"v0Groups">>();
     for (const membership of memberships) {
-      if (membership.leftAt !== undefined || membership.joinedAt > Date.now() || seen.has(membership.groupId)) continue;
+      if (seen.has(membership.groupId) || (await activeMember(ctx, membership.groupId, account._id))?._id !== membership._id) continue;
       const group = await ctx.db.get(membership.groupId);
       if (!group) continue;
       groups.push({ id: group._id, name: group.name, timezone: group.timezone, alias: membership.alias, points: membership.points, streak: membership.streak });
