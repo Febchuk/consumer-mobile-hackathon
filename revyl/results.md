@@ -62,3 +62,13 @@ No crashes. Fonts, ink texture, blue/grey bubbles and the AI ✦ avatar render c
 | 8 | True picked | file_01M7GSPK96JHS1MWDTY3RQMHYG |
 | 8 | "It was Yes" message | file_01M7GSPVW9JZ9D9VB0T07TSHCT |
 | 9 | Group details | file_01M7GSQ58MTQ6QPR116BQH12V6 |
+
+## Status note (added 4:32 PM PT; the run above is unchanged)
+- This run covers build 01M7GRRNEX1RSRDVYYJR0M39D2 at commit b2bd010. The steps were executed by hand on the Revyl cloud iPhone, not by Revyl's own runner, which needs REVYL_API_KEY. Results for later commits (7fb596e, 1746d51, 4feab75) are not covered by this run.
+- Findings changed in code since then, NOT yet rechecked on device:
+  - Swipe-back during rub (journey 8): gestureEnabled is now false on the chat route (7fb596e). Native rebuild required.
+  - Stale "5:00" labels: they now read the group's reveal time (7fb596e).
+  - Market sheet stays open after staking: it now closes (7fb596e).
+  - Context pill clipping: the text now wraps (7fb596e).
+  - Onboarding friends hardcoded: it now uses real group members (77837f7).
+- Still open: This-or-That label typing goes to the wrong field while the keyboard is up (bug 5).
