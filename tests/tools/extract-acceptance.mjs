@@ -42,7 +42,7 @@ if (args.includes("--decision-addendum")) {
   for (const assertion of policy.plannedAssertions) {
     if (!assertion.id || !assertion.status || !Array.isArray(assertion.caseIds) || assertion.caseIds.some((id) => !inventory.cases.some((item) => item.id === id))) throw new Error("Decision assertion must map to existing acceptance cases");
   }
-  policyAddenda.push({ version: policy.version, decisionDate: policy.decisionDate, sourcePath: path, sha256: hash(raw), baselinePreserved: true, assertions: policy.plannedAssertions.map(({ id, status, caseIds }) => ({ id, status, caseIds })), executionCredit: "none; versioned decisions and planned assertions are not executed evidence" });
+  policyAddenda.push({ version: policy.version, decisionDate: policy.decisionDate, sourcePath: path, sha256: hash(raw), baselinePreserved: true, assertions: policy.plannedAssertions.map(({ id, status, caseIds }) => ({ id, status, caseIds })), executionCredit: "none; decision metadata is not execution evidence" });
 }
 const document = { schemaVersion: 1, sourceDigests: Object.fromEntries(Object.entries(sources).map(([name, text]) => [name, hash(text)])), acceptanceCheckboxCount: actualAcceptanceLines.length, requirements, ...(policyAddenda.length ? { policyAddenda } : {}) };
 writeFileSync(output, JSON.stringify(document, null, 2) + "\n", { mode: 0o600 });
