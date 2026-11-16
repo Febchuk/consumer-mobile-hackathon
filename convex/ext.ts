@@ -96,9 +96,12 @@ export const card = query({
     const stakes = await ctx.db.query("stakes").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect();
     const bettorIds = [...new Set(stakes.map((s) => s.userId))];
     const bettors = [];
+    const who = [];
     for (const uid of bettorIds) {
       const u = await ctx.db.get(uid);
-      if (u) bettors.push(u.emoji);
+      if (!u) continue;
+      bettors.push(u.emoji);
+      who.push({ name: u.name, emoji: u.emoji, amount: stakes.filter((s) => s.userId === uid).reduce((a, s) => a + s.amount, 0) });
     }
     const subject = bet.subjectUserId ? await ctx.db.get(bet.subjectUserId) : null;
     const revealAt = betRevealAt(bet, group);
@@ -107,7 +110,7 @@ export const card = query({
     const room = { _id: group._id, name: group.name };
     const subj = subject ? { _id: subject._id, name: subject.name, emoji: subject.emoji } : null;
     const isSubject = bet.subjectUserId === user._id;
-    if (isSubject && !revealed) return { access: "sealed" as const, room, subject: subj, revealAt, bettors, friends: bettorIds.length, total };
+    if (isSubject && !revealed) return { access: "sealed" as const, room, subject: subj, revealAt, bettors, who, friends: bettorIds.length, total };
     const author = bet.createdBy ? await ctx.db.get(bet.createdBy) : null;
     const mine = stakes.filter((s) => s.userId === user._id);
     return {
