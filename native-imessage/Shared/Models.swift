@@ -1,5 +1,17 @@
 import Foundation
 
+private struct DTOField: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+}
+
+private func requireDTOKeys(_ decoder: Decoder, allowed: Set<String>) throws {
+    let values = try decoder.container(keyedBy: DTOField.self)
+    guard Set(values.allKeys.map(\.stringValue)).isSubset(of: allowed) else { throw NativeError.invalidLink }
+}
+
 struct Account: Decodable, Equatable { let id: String; let displayName: String }
 struct PolicyStatus: Decodable {
     let status: String
@@ -39,6 +51,19 @@ struct CardMetadata: Decodable {
     let subjectAlias: String
     let bettorCount: Int
     let bettorInitials: [String]
+
+    enum CodingKeys: String, CodingKey { case url, caption, accessibilityLabel, subjectAlias, bettorCount, bettorInitials }
+    init(from decoder: Decoder) throws {
+        try requireDTOKeys(decoder, allowed: ["url", "caption", "accessibilityLabel", "subjectAlias", "bettorCount", "bettorInitials"])
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        url = try values.decode(String.self, forKey: .url)
+        caption = try values.decode(String.self, forKey: .caption)
+        accessibilityLabel = try values.decode(String.self, forKey: .accessibilityLabel)
+        subjectAlias = try values.decode(String.self, forKey: .subjectAlias)
+        bettorCount = try values.decode(Int.self, forKey: .bettorCount)
+        bettorInitials = try values.decode([String].self, forKey: .bettorInitials)
+        guard bettorCount >= 0, bettorInitials.count <= bettorCount else { throw NativeError.invalidLink }
+    }
 }
 struct GroupGoal: Decodable {
     let id: String
@@ -65,6 +90,15 @@ struct ConfidencePick: Decodable {
     let option: Int
     let confidence: Double
     let riskPoints: Double?
+
+    enum CodingKeys: String, CodingKey { case option, confidence, riskPoints }
+    init(from decoder: Decoder) throws {
+        try requireDTOKeys(decoder, allowed: ["option", "confidence", "riskPoints"])
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        option = try values.decode(Int.self, forKey: .option)
+        confidence = try values.decode(Double.self, forKey: .confidence)
+        riskPoints = try values.decodeIfPresent(Double.self, forKey: .riskPoints)
+    }
 }
 struct VisiblePick: Decodable, Identifiable {
     let accountId: String
@@ -73,6 +107,17 @@ struct VisiblePick: Decodable, Identifiable {
     let confidence: Double
     let riskPoints: Double?
     var id: String { accountId }
+
+    enum CodingKeys: String, CodingKey { case accountId, alias, option, confidence, riskPoints }
+    init(from decoder: Decoder) throws {
+        try requireDTOKeys(decoder, allowed: ["accountId", "alias", "option", "confidence", "riskPoints"])
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        accountId = try values.decode(String.self, forKey: .accountId)
+        alias = try values.decode(String.self, forKey: .alias)
+        option = try values.decode(Int.self, forKey: .option)
+        confidence = try values.decode(Double.self, forKey: .confidence)
+        riskPoints = try values.decodeIfPresent(Double.self, forKey: .riskPoints)
+    }
 }
 struct BetDetails: Decodable {
     let question: String
@@ -107,8 +152,6 @@ struct NativeBet: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case serverTime, groupId, betId, state, cutoffAt, revealAt, card, view, canVeto
-        case question, options, picks, myPick, outcome, provisionalOutcome, contextLine, media, suggestions, format, line
-        case answerDeadline, challengeDeadline
     }
 
     init(from decoder: Decoder) throws {
@@ -125,14 +168,16 @@ struct NativeBet: Decodable, Identifiable {
             throw NativeError.invalidLink
         }
         let view = try values.decode(String.self, forKey: .view)
+        let base: Set<String> = ["serverTime", "groupId", "betId", "state", "cutoffAt", "revealAt", "card", "view"]
         if view == "sealed" || view == "unavailable" {
-            let privateKeys: [CodingKeys] = [.question, .options, .picks, .myPick, .outcome, .provisionalOutcome, .contextLine, .media, .suggestions, .format, .line, .answerDeadline, .challengeDeadline]
-            guard !privateKeys.contains(where: values.contains) else { throw NativeError.invalidLink }
+            try requireDTOKeys(decoder, allowed: view == "sealed" ? base.union(["canVeto"]) : base)
             content = view == "sealed" ? .sealed(canVeto: try values.decode(Bool.self, forKey: .canVeto)) : .unavailable
         } else if view == "bet" {
+            try requireDTOKeys(decoder, allowed: base.union(["question", "format", "options", "line", "canPick", "canAnswer", "canChallenge", "answerDeadline", "challengeDeadline", "outcome", "provisionalOutcome", "myPick", "picks"]))
             let details = try BetDetails(from: decoder)
             guard details.options.count == 2, details.options[0] != details.options[1],
-                  ["yes_no", "over_under", "this_that"].contains(details.format) else { throw NativeError.invalidLink }
+                  ["yes_no", "over_under", "this_that"].contains(details.format),
+                  details.format != "over_under" || details.line?.isFinite == true else { throw NativeError.invalidLink }
             guard details.myPick.map({ (0...1).contains($0.option) && $0.confidence.isFinite && (0...1).contains($0.confidence) }) ?? true,
                   details.picks.allSatisfy({ (0...1).contains($0.option) && $0.confidence.isFinite && (0...1).contains($0.confidence) }),
                   details.line?.isFinite ?? true else { throw NativeError.invalidLink }
