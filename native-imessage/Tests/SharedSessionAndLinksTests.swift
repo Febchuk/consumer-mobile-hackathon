@@ -44,14 +44,18 @@ final class SharedSessionAndLinksTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: configuration.appGroup) }
         try ConversationLinks.set("g1", for: "chat", accountID: "friend", configuration: configuration)
         try ConversationLinks.set("g2", for: "chat", accountID: "outsider", configuration: configuration)
-        defaults.set(["b1": true], forKey: "reveals.staging.friend")
-        defaults.set(Data("synthetic".utf8), forKey: "pendingCard")
-        defaults.set(Data("synthetic".utf8), forKey: "pendingNotification")
+        let revealKey = "reveals." + configuration.storageNamespace + ".friend"
+        let otherRevealKey = "reveals." + configuration.storageNamespace + ".outsider"
+        let pendingKeys = [configuration.storageKey("pendingCard"), configuration.storageKey("pendingNotification")]
+        defaults.set(["b1": true], forKey: revealKey)
+        defaults.set(["b2": true], forKey: otherRevealKey)
+        for key in pendingKeys { defaults.set(Data("synthetic".utf8), forKey: key) }
         try SharedState.clearAccount("friend", configuration: configuration)
         XCTAssertNil(try ConversationLinks.room(for: "chat", accountID: "friend", configuration: configuration), "[NATIVE-CLEAR-01]")
         XCTAssertEqual(try ConversationLinks.room(for: "chat", accountID: "outsider", configuration: configuration), "g2", "[NATIVE-CLEAR-02]")
-        for key in ["reveals.staging.friend", "pendingCard", "pendingNotification"] {
+        for key in [revealKey] + pendingKeys {
             XCTAssertNil(defaults.object(forKey: key), "[NATIVE-CLEAR-03] stale private routing removed")
         }
+        XCTAssertNotNil(defaults.object(forKey: otherRevealKey), "[NATIVE-CLEAR-04] another account's reveal state remains")
     }
 }

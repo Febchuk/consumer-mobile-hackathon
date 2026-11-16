@@ -43,6 +43,7 @@ struct NativeUnitFixture {
     func openBet(format: String = "yes_no") -> [String: Any] {
         var result = bet
         result["view"] = "bet"
+        result.removeValue(forKey: "canVeto")
         result["question"] = "SECRET_QUESTION_" + namespace
         result["format"] = format
         result["options"] = ["PRIVATE_A_" + namespace, "PRIVATE_B_" + namespace]
