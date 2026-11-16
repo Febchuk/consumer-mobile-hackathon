@@ -1,6 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { approvedPolicy } from "./v0GamePolicy";
 
 export function fail(code: string, message = "This action is not available."): never {
   throw new ConvexError({ code, message });
@@ -104,7 +105,7 @@ export async function once<T>(ctx: MutationCtx, accountId: Id<"v0Accounts">, sco
   return result;
 }
 
-export const policyStatus = { status: "pending" as const, missing: ["economics", "streaks", "cutoff_limits", "answer_window", "challenge_window", "majority_rule", "creator_rule", "recap_schedule", "goal_confirmation"] };
+export const policyStatus = { status: "pending" as const, version: approvedPolicy.version, approved: approvedPolicy, missing: ["streaks", "reward_rounding", "cutoff_limits", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"] };
 
 export function legacyUnavailable(): never {
   return fail("NOT_AVAILABLE", "This app version is no longer supported. Update Called It and sign in by phone.");
