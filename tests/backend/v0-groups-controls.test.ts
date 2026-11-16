@@ -66,6 +66,85 @@ describe("J1/J8/J9 real invited groups and controls", () => {
     });
   }
 
+  it("[V0.current-member-boundary] exposes members and account groups exactly when their interval starts", async () => {
+    const f = await v0Fixture();
+    const joinedAt = T0 + 1000;
+    await f.t.run(async (ctx) => {
+      const member = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.new.id)).unique();
+      await ctx.db.patch(member!._id, { joinedAt });
+    });
+    for (const now of [joinedAt - 1, joinedAt]) {
+      vi.setSystemTime(now);
+      const visible = now === joinedAt;
+      const members = await f.t.query(api.v0Groups.members, { token: f.actors.friend.token, groupId: f.g1 });
+      const board = await f.t.query(api.v0Groups.board, { token: f.actors.friend.token, groupId: f.g1 });
+      const me = await f.t.query(api.v0Auth.me, { token: f.actors.new.token });
+      expect(members.some((member) => member.accountId === f.actors.new.id)).toBe(visible);
+      expect(board.rows.some((member) => member.accountId === f.actors.new.id)).toBe(visible);
+      expect(me.groups.map((group) => group.id)).toEqual(visible ? [f.g1] : []);
+    }
+  });
+
+  it("[V0.duplicate-membership] fails closed consistently for ambiguous current memberships", async () => {
+    const f = await v0Fixture();
+    await f.t.run(async (ctx) => {
+      await ctx.db.insert("v0Memberships", { groupId: f.g1, accountId: f.actors.friend.id, alias: "Synthetic duplicate", joinedAt: T0 - 1000, points: 0, streak: 0 });
+    });
+    const members = await f.t.query(api.v0Groups.members, { token: f.actors.creator.token, groupId: f.g1 });
+    const board = await f.t.query(api.v0Groups.board, { token: f.actors.creator.token, groupId: f.g1 });
+    expect(members.some((member) => member.accountId === f.actors.friend.id)).toBe(false);
+    expect(board.rows.some((member) => member.accountId === f.actors.friend.id)).toBe(false);
+    expect((await f.t.query(api.v0Auth.me, { token: f.actors.friend.token })).groups).toEqual([]);
+    for (const [caller, target] of [["creator", "friend"], ["friend", "subject"]] as const) {
+      await expect(f.t.mutation(api.v0Controls.block, { token: f.actors[caller].token, accountId: f.actors[target].id, requestId: `${f.runId}_${caller}` })).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+    }
+    expect(await f.t.run((ctx) => ctx.db.query("v0Blocks").collect())).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.query("v0Requests").collect())).toEqual([]);
+  });
+
+  for (const role of ["caller", "target"] as const) {
+    it(`[V0.block-interval.${role}] authorizes both actors at the exact server join boundary`, async () => {
+      const f = await v0Fixture();
+      const joinedAt = T0 + 1000;
+      await f.t.run(async (ctx) => {
+        const member = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.new.id)).unique();
+        await ctx.db.patch(member!._id, { joinedAt });
+      });
+      const args = { token: role === "caller" ? f.actors.new.token : f.actors.friend.token, accountId: role === "caller" ? f.actors.subject.id : f.actors.new.id, requestId: `${f.runId}_boundary` };
+      vi.setSystemTime(joinedAt - 1);
+      await expect(f.t.mutation(api.v0Controls.block, args)).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+      expect(await f.t.run((ctx) => ctx.db.query("v0Blocks").collect())).toEqual([]);
+      expect(await f.t.run((ctx) => ctx.db.query("v0Requests").collect())).toEqual([]);
+      vi.setSystemTime(joinedAt);
+      expect(await f.t.mutation(api.v0Controls.block, args)).toEqual({ blocked: true });
+      expect(await f.t.mutation(api.v0Controls.block, args)).toEqual({ blocked: true });
+      expect(await f.t.run((ctx) => ctx.db.query("v0Blocks").collect())).toHaveLength(1);
+      expect(await f.t.run((ctx) => ctx.db.query("v0Requests").collect())).toHaveLength(1);
+    });
+
+    it(`[V0.block-replay-after-leave.${role}] rechecks current membership before returning cached success`, async () => {
+      const f = await v0Fixture();
+      const args = { token: f.actors.friend.token, accountId: f.actors.creator.id, requestId: `${f.runId}_block` };
+      expect(await f.t.mutation(api.v0Controls.block, args)).toEqual({ blocked: true });
+      expect(await f.t.mutation(api.v0Controls.block, args)).toEqual({ blocked: true });
+      const leaving = role === "caller" ? f.actors.friend : f.actors.creator;
+      expect(await f.t.mutation(api.v0Controls.leave, { token: leaving.token, groupId: f.g1, requestId: `${f.runId}_leave` })).toEqual({ left: true });
+      const before = await f.t.run(async (ctx) => ({ blocks: await ctx.db.query("v0Blocks").collect(), requests: await ctx.db.query("v0Requests").collect() }));
+      await expect(f.t.mutation(api.v0Controls.block, args)).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+      expect(await f.t.run(async (ctx) => ({ blocks: await ctx.db.query("v0Blocks").collect(), requests: await ctx.db.query("v0Requests").collect() }))).toEqual(before);
+    });
+  }
+
+  it("[V0.block-other-current-group] permits a shared current group without accepting a future-only interval", async () => {
+    const f = await v0Fixture();
+    await f.t.run(async (ctx) => {
+      await ctx.db.insert("v0Memberships", { groupId: f.g2, accountId: f.actors.new.id, alias: "Synthetic current G2", joinedAt: T0 - 1000, points: 0, streak: 0 });
+    });
+    expect(await f.t.mutation(api.v0Controls.block, { token: f.actors.new.token, accountId: f.actors.creator.id, requestId: `${f.runId}_g2` })).toEqual({ blocked: true });
+    await expect(f.t.mutation(api.v0Controls.block, { token: f.actors.new.token, accountId: f.actors.subject.id, requestId: `${f.runId}_future_only` })).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+    expect(await f.t.run((ctx) => ctx.db.query("v0Blocks").collect())).toHaveLength(1);
+  });
+
   it("[V0.quiet-veto] voids picks and queued events once while keeping old opens neutral", async () => {
     const f = await v0Fixture();
     await f.t.run(async (ctx) => {
