@@ -5,7 +5,34 @@ the installed official Convex client and a hash-pinned official OSS backend.
 No provider credentials, deployment keys, production URLs or external routes
 enter the worker. It requires Linux user/network namespaces and `ip`.
 
-## Binary and invocation
+## One command
+
+```sh
+env -i PATH="$PATH" HOME="$HOME" npm run test:local-backend
+```
+
+`lane.mjs` is what CI's `local-backend` job runs, on Linux x64 only. It runs the
+loopback guard's unit tests, takes the binary from
+`~/.cache/calledit/convex-local-backend/<release>/` or downloads the Linux x64
+asset pinned in `tests/qa-runtime/binary-pins.json`, checks the archive and the
+extracted executable against their pinned SHA256 before anything executes, then
+runs `run.mjs` with a three-variable environment and a fresh output directory
+under the temp directory. That download from the official release is the lane's
+only network use and happens before the denied-network worker starts. It prints
+each assertion and exits non-zero unless all 18 ran and passed; a missing
+evidence manifest is blocked, never passed. `--binary` and `--output` override
+the binary and evidence locations.
+
+## Loopback guard
+
+`loopback.mjs` refuses any target that is not plain HTTP to `127.0.0.0/8` or
+`[::1]`: hostnames (including `localhost`), other addresses, HTTPS and
+credentialed URLs all throw. `run.mjs` applies it to the backend's bind address,
+to the address the scratch source is pushed to and to every request. After the
+backend is ready it also reads the namespace's listening sockets and stops if
+any is bound beyond loopback.
+
+## Binary and manual invocation
 
 Official release: `precompiled-2026-10-22-1447815`, asset
 `convex-local-backend-x86_64-unknown-linux-gnu.zip`, from the matching release at

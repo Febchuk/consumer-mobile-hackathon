@@ -30,3 +30,22 @@ jobs:
       - name: Allow the unprivileged network namespace the backend runner requires
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: env -i PATH="$PATH" HOME="$HOME" npm run test:backend
+
+  local-backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Cache the checksum-pinned Convex backend binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/calledit/convex-local-backend
+          key: convex-local-backend-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/qa-runtime/binary-pins.json') }}
+      - name: Allow the unprivileged network namespace the loopback lane requires
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: env -i PATH="$PATH" HOME="$HOME" npm run test:local-backend
