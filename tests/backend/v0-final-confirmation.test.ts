@@ -57,6 +57,46 @@ async function rejectsImmutable(operation: Promise<unknown>) {
 }
 
 describe("approved final server confirmation using the published v0Bets.pick protocol", () => {
+  it("[CONFIRM.new-key-rate-bound-cached-retry-free] bounds new-key acknowledgments without charging cached authorized retries", async () => {
+    const f = await confirmationFixture();
+    const original = await confirm(f);
+    const balances = await groupBalances(f);
+    vi.setSystemTime(confirmedAt + 1000);
+    await f.t.run(async (ctx) => {
+      expect(Date.now()).toBe(confirmedAt + 1000);
+      for (let index = 0; index < 80; index++) expect(await ctx.runMutation(api.v0Bets.pick, confirmation(f))).toEqual(original);
+      const rate = () => ctx.db.query("v0RateLimits").withIndex("by_key", (q) => q.eq("key", `pick:${f.actors.friend.id}`)).unique();
+      expect(await rate()).toMatchObject({ count: 1, windowStart: confirmedAt });
+      for (let index = 0; index < 59; index++) expect(await ctx.runMutation(api.v0Bets.pick, confirmation(f, { requestId: `bounded-ack-${index}` }))).toEqual(original);
+      expect(await rate()).toMatchObject({ count: 60, windowStart: confirmedAt });
+      const before = await ctx.db.query("v0Requests").collect();
+      await expectCode(ctx.runMutation(api.v0Bets.pick, confirmation(f, { requestId: "over-new-key-quota" })), "RATE_LIMITED");
+      expect(await ctx.db.query("v0Requests").collect()).toEqual(before);
+      expect(await ctx.runMutation(api.v0Bets.pick, confirmation(f))).toEqual(original);
+      expect(await rate()).toMatchObject({ count: 60, windowStart: confirmedAt });
+      expect(await ctx.db.query("v0Picks").collect()).toHaveLength(1);
+    });
+    expect(await groupBalances(f)).toEqual(balances);
+  });
+
+  it("[CONFIRM.rate-window-preserves-original-receipt] resets only quota bookkeeping after its existing window, never the confirmed pick", async () => {
+    const f = await confirmationFixture();
+    const original = await confirm(f);
+    const balances = await groupBalances(f);
+    await f.t.run(async (ctx) => {
+      const row = await ctx.db.query("v0RateLimits").withIndex("by_key", (q) => q.eq("key", `pick:${f.actors.friend.id}`)).unique();
+      await ctx.db.patch(row!._id, { count: 60 });
+    });
+    vi.setSystemTime(confirmedAt + 60_000);
+    await f.t.run(async (ctx) => {
+      expect(Date.now()).toBe(confirmedAt + 60_000);
+      expect(await ctx.runMutation(api.v0Bets.pick, confirmation(f, { requestId: "next-quota-window" }))).toEqual(original);
+      expect(await ctx.db.query("v0RateLimits").withIndex("by_key", (q) => q.eq("key", `pick:${f.actors.friend.id}`)).unique()).toMatchObject({ count: 1, windowStart: confirmedAt + 60_000 });
+      expect(await ctx.db.query("v0Picks").collect()).toHaveLength(1);
+    });
+    expect(await groupBalances(f)).toEqual(balances);
+  });
+
   it("[CONFIRM.wire-receipt-my-pick-unchanged] returns exactly the existing receipt and myPick fields without a new confirmation discriminator", async () => {
     const f = await confirmationFixture();
     const receipt = await confirm(f);

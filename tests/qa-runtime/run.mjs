@@ -19,7 +19,7 @@ const argv = process.argv.slice(2);
 const option = (name) => argv[argv.indexOf(name) + 1];
 const binaryPins = JSON.parse(readFileSync(resolve(root, "tests/qa-runtime/binary-pins.json"), "utf8"));
 const binarySHA256 = binaryPins.platforms["linux-x64"].executableSHA256;
-const backendRevision = "1c2ea625a3cb2db9871e0fb82a66de083de17086";
+const backendRevision = "7450eed9f957261ab4bcd19cf19cb42506823c32";
 const nativeRevision = "00e5cf219c0d4329d806867f4dcf6aaec54a986d";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 if (!argv.includes("--binary") || !argv.includes("--output")) throw new Error("Require hash-pinned --binary and fresh external --output");

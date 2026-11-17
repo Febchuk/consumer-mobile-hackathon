@@ -24,7 +24,7 @@ Stop if either digest differs. Extraction is not runtime verification. macOS sti
 
 Use installed repository dependencies, Node 24, OpenSSL 3, and a writable short canonical scratch parent outside the repository. The complete scratch path plus 45 bytes must be shorter than 104 bytes because the backend executor uses a Unix socket. Resolve macOS `/var` or `/tmp` symlinks before constructing the fresh scratch path. No dependency installation, download or network-enabled setup belongs inside an isolated run.
 
-`run.mjs` pins backend revision `1c2ea625a3cb2db9871e0fb82a66de083de17086` and independently compares every actual canonical backend file with that commit before execution. Native revision `00e5cf219c0d4329d806867f4dcf6aaec54a986d` is an owner-supplied input, not executed by this Linux lane. Evidence records the candidate, before/after product digests, private fixture-overlay digest and all executed harness hashes. Environment attestation alone does not prove a Git checkout; native build/config provenance is separate.
+`run.mjs` pins backend revision `7450eed9f957261ab4bcd19cf19cb42506823c32` and independently compares every actual canonical backend file with that commit before execution. Native revision `00e5cf219c0d4329d806867f4dcf6aaec54a986d` is an owner-supplied input, not executed by this Linux lane. Evidence records the candidate, before/after product digests, private fixture-overlay digest and all executed harness hashes. Environment attestation alone does not prove a Git checkout; native build/config provenance is separate.
 
 ## Portable lifecycle
 
