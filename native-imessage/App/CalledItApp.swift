@@ -43,7 +43,7 @@ struct ContainerView: View {
             #endif
             Section {
                 Text("Private predictions with your group, inside Messages.")
-                Text("V0 reads no chats, contacts or photo library. You choose any proof you share. Cards are sent only when you tap Send in Messages.")
+                Text(ProofFeature.hostPrivacyNote)
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if authentication.session == nil {
