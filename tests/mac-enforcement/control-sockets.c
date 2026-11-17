@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 #else
     int vsock_family = -1;
 #endif
-    printf("{\"afVsockFromSDK\":%d,\"processes\":[", vsock_family);
+    printf("{\"afVsockFromSDK\":%d,\"sockInfoVsockFromSDK\":%d,\"streamTypeFromSDK\":%d,\"processes\":[", vsock_family, SOCKINFO_VSOCK, SOCK_STREAM);
     for (int index = 1; index < argc; index++) {
         char *end = NULL;
         long parsed = strtol(argv[index], &end, 10);
@@ -59,13 +59,11 @@ int main(int argc, char **argv) {
                    fds[item].proc_fd, socket.psi.soi_family, socket.psi.soi_type, socket.psi.soi_protocol,
                    socket.psi.soi_kind, socket.psi.soi_state,
                    (socket.psi.soi_state & SOI_S_ISCONNECTED) ? "true" : "false");
-#ifdef SOCKINFO_VSOCK
             if (socket.psi.soi_kind == SOCKINFO_VSOCK) {
                 struct vsock_sockinfo *vm = &socket.psi.soi_proto.pri_vsock;
                 printf(",\"localCID\":%u,\"localPort\":%u,\"remoteCID\":%u,\"remotePort\":%u",
                        vm->local_cid, vm->local_port, vm->remote_cid, vm->remote_port);
             }
-#endif
             printf("}");
         }
         struct proc_bsdinfo after;
