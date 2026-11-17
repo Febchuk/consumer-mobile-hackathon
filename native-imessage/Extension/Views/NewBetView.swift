@@ -10,7 +10,6 @@ struct NewBetView: View {
     @State private var optionA = ""
     @State private var optionB = ""
     @State private var line = ""
-    @State private var cutoff = Date()
     @State private var reveal = Date()
     @State private var ideas: [BetSuggestion] = []
     @State private var source = "manual"
@@ -48,16 +47,12 @@ struct NewBetView: View {
                     InsetRow { TextField("This", text: $optionA).accessibilityIdentifier("compose.optionA") }
                     InsetRow { TextField("That", text: $optionB).accessibilityIdentifier("compose.optionB") }
                 }
-                InsetRow {
-                    DatePicker("Picks cutoff", selection: $cutoff).accessibilityIdentifier("compose.cutoff")
-                        .disabled(model.me?.policy.approved != true)
-                }
                 InsetRow(last: true) {
                     DatePicker("Reveal", selection: $reveal).accessibilityIdentifier("compose.reveal")
                         .environment(\.timeZone, TimeZone(identifier: group.timezone) ?? .current)
                 }
             }
-            Footnote(text: "Reveal defaults to 8 PM in \(group.timezone), with per-bet changes allowed. Pick-lock timing still needs confirmation; the server validates every deadline.")
+            Footnote(text: "Reveal defaults to 8 PM in \(group.timezone), with per-bet changes allowed. Each bettor's final Confirm pick locks only their own choice. New confirmations end at reveal; the server validates every deadline.")
             SectionTitle(text: "Suggestions")
             InsetGroup {
                 InsetRow(last: true) {
@@ -81,7 +76,7 @@ struct NewBetView: View {
                 .accessibilityIdentifier("compose.suggestion.\(idea.id)")
             }
             if model.me?.policy.approved != true {
-                Footnote(text: "Reward-only points are confirmed. Creation is waiting for the remaining timing and streak rules.")
+                Footnote(text: "Some group rules still need confirmation. The server decides which actions are available.")
             }
             PrimaryButton(title: "Create card", busy: busy) { Task { await create(group.id) } }
                 .disabled(!valid || model.me?.policy.approved != true)
@@ -108,7 +103,7 @@ struct NewBetView: View {
     }
     private var valid: Bool {
         !subjectID.isEmpty && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            cutoff.timeIntervalSince1970.isFinite && reveal.timeIntervalSince1970.isFinite && options.count == 2 && !options[0].isEmpty && !options[1].isEmpty &&
+            reveal.timeIntervalSince1970.isFinite && options.count == 2 && !options[0].isEmpty && !options[1].isEmpty &&
             options[0] != options[1] && (format != "over_under" || Double(line)?.isFinite == true)
     }
 
@@ -158,11 +153,12 @@ struct NewBetView: View {
         guard let token = model.token, valid, !busy else { return }
         busy = true
         defer { busy = false }
+        let revealAt = reveal.timeIntervalSince1970 * 1000
         var args: [String: Any] = [
             "token": token, "groupId": groupID, "subjectId": subjectID,
             "question": question.trimmingCharacters(in: .whitespacesAndNewlines), "contextLine": context,
-            "format": format, "options": options, "cutoffAt": cutoff.timeIntervalSince1970 * 1000,
-            "revealAt": reveal.timeIntervalSince1970 * 1000, "source": question == suggestedQuestion ? source : "manual",
+            "format": format, "options": options, "cutoffAt": revealAt,
+            "revealAt": revealAt, "source": question == suggestedQuestion ? source : "manual",
         ]
         if format == "over_under", let value = Double(line) { args["line"] = value }
         do {

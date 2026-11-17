@@ -12,6 +12,7 @@ struct BetView: View {
     @State private var error: String?
     @State private var mutationIDs: [String: String] = [:]
     @State private var saveConfirmation: String?
+    @State private var confirmation = PickConfirmationState()
 
     var body: some View {
         Group {
@@ -20,6 +21,13 @@ struct BetView: View {
                 case .sealed(let canVeto): sealed(card, canVeto: canVeto)
                 case .unavailable: unavailable
                 case .bet(let details): opened(card, details)
+                }
+            } else if confirmation.isUncertain {
+                CardBox {
+                    Text("Confirmation couldn't be verified").font(.headline)
+                    Text("Your draft isn't shown as locked. Reconnect and refresh to recover any server-confirmed pick before making changes.")
+                    Button("Refresh confirmation") { Task { await load() } }
+                        .disabled(busy).accessibilityIdentifier("bet.refreshConfirmation")
                 }
             } else if error == nil { ProgressView().frame(maxWidth: .infinity).padding(40) }
             ErrorText(text: error)
@@ -71,14 +79,21 @@ struct BetView: View {
             QuestionBubble(text: details.question).accessibilityIdentifier("bet.question")
         }
         if !details.canAnswer || uncovered {
-            if details.canPick {
-                if model.me?.policy.approved == true {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text(deadline(bet.cutoffAt, prefix: "Server cutoff")).font(.subheadline.monospacedDigit())
-                    }
-                } else {
-                    Footnote(text: "The pick-lock rule is awaiting confirmation. Saving a pick doesn't mean it is finally locked.")
+            if let pick = confirmation.confirmed {
+                CardBox {
+                    Label("Your pick is confirmed and locked", systemImage: "lock.fill")
+                        .font(.headline).accessibilityIdentifier("bet.confirmedPick")
+                    Text("\(details.options[safe: pick.option] ?? "—") · confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100")
+                        .accessibilityIdentifier("bet.savedPick")
+                    Text("Your choice and confidence can't change. Other members have their own confirmation; this doesn't lock the whole bet.")
+                        .font(.footnote).foregroundStyle(Theme.sub)
                 }
+                if let saveConfirmation { Text(saveConfirmation).font(.subheadline).accessibilityIdentifier("bet.saveConfirmation") }
+            } else if details.canPick || confirmation.pending != nil {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(deadline(bet.revealAt, prefix: "New confirmations end at reveal")).font(.subheadline.monospacedDigit())
+                }
+                Footnote(text: "Draft your choice and confidence here. Confirm pick is final once the server records it; neither can change afterward.")
                 InsetGroup {
                     ForEach(0..<2, id: \.self) { index in
                         Button { side = index } label: {
@@ -89,7 +104,7 @@ struct BetView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .disabled(busy)
+                        .disabled(busy || !confirmation.canEdit(serverCanPick: details.canPick))
                         .accessibilityLabel(details.options[index])
                         .accessibilityAddTraits(side == index ? .isSelected : [])
                         .accessibilityIdentifier("bet.option.\(index)")
@@ -98,28 +113,31 @@ struct BetView: View {
                 CardBox {
                     Text("Confidence: \(Int(confidence)) / 100").font(.headline)
                     Slider(value: $confidence, in: ConfidenceInput.range, step: 1)
-                        .disabled(busy)
+                        .disabled(busy || !confirmation.canEdit(serverCanPick: details.canPick))
                         .accessibilityLabel("Confidence")
                         .accessibilityValue("\(Int(confidence)) out of 100")
                         .accessibilityIdentifier("bet.confidence")
                 }
-                PrimaryButton(title: details.myPick == nil ? "Save pick" : "Update pick", busy: busy) {
-                    Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": ConfidenceInput.normalized(confidence)]) }
-                }
-                .accessibilityIdentifier("bet.savePick")
-                if let saveConfirmation { Text(saveConfirmation).font(.subheadline).accessibilityIdentifier("bet.saveConfirmation") }
-                if let pick = details.myPick {
-                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100")
-                        .font(.footnote).accessibilityIdentifier("bet.savedPick")
+                if let pending = confirmation.pending {
+                    Text(confirmation.isUncertain ? "Confirmation hasn't been verified. Retry the same pick or refresh; editing stays disabled until it is resolved." : "Waiting for the server to confirm your pick.")
+                        .font(.subheadline).accessibilityIdentifier("bet.confirmationPending")
+                    PrimaryButton(title: "Retry confirmation", busy: busy) {
+                        Task { await mutate("v0Bets:pick", bet: bet, args: ["option": pending.option, "confidence": pending.confidence]) }
+                    }
+                    .accessibilityIdentifier("bet.retryConfirmation")
+                    Button("Refresh confirmation") { Task { await load() } }
+                        .disabled(busy).accessibilityIdentifier("bet.refreshConfirmation")
+                } else {
+                    PrimaryButton(title: "Confirm pick", busy: busy) {
+                        Task { await mutate("v0Bets:pick", bet: bet, args: ["option": side, "confidence": ConfidenceInput.normalized(confidence)]) }
+                    }
+                    .disabled(!confirmation.canEdit(serverCanPick: details.canPick))
+                    .accessibilityIdentifier("bet.confirmPick")
                 }
                 Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero and don't reduce your group points. The server applies the confirmed scoring rules.")
             } else {
-                Text(bet.state == "locked" ? "Picks closed by the server." : bet.state.capitalized)
+                Text(["open", "locked"].contains(bet.state) ? "The server isn't accepting a new pick from you." : bet.state.capitalized)
                     .font(.headline).accessibilityIdentifier("bet.state")
-                if let pick = details.myPick {
-                    Text("Saved on server: \(details.options[safe: pick.option] ?? "—") · confidence \(ConfidenceInput.displayValue(for: pick.confidence)) / 100")
-                        .accessibilityIdentifier("bet.savedPick")
-                }
             }
             if ["revealed", "provisional", "finalized"].contains(bet.state) {
                 positions(details)
@@ -205,10 +223,12 @@ struct BetView: View {
             guard model.token == token, model.isActive, !Task.isCancelled else { return }
             guard let next, next.groupId == model.linkedRoomId,
                   try model.locator(for: next.card).value == locator else { throw NativeError.invalidLink }
-            let firstLoad = card == nil
             card = next
             serverClock = ServerClock(serverTime: next.serverTime)
-            if firstLoad, case .bet(let details) = next.content, let pick = details.myPick {
+            if case .bet(let details) = next.content {
+                confirmation.resolve(details.myPick)
+            }
+            if let pick = confirmation.confirmed {
                 side = pick.option
                 confidence = ConfidenceInput.controlValue(for: pick.confidence)
             }
@@ -233,10 +253,12 @@ struct BetView: View {
         args["requestId"] = requestID
         do {
             if path == "v0Bets:pick" {
-                guard let receipt: PickReceipt = try await API.mutation(path, args),
-                      receipt.matches(option: args["option"] as? Int, confidence: args["confidence"] as? Double) else { throw APIError(code: "TRANSPORT") }
+                guard let option = args["option"] as? Int, let confidence = args["confidence"] as? Double else { throw APIError(code: "INVALID_INPUT") }
+                try confirmation.begin(option: option, confidence: confidence)
+                guard let receipt: PickReceipt = try await API.mutation(path, args) else { throw APIError(code: "TRANSPORT") }
                 guard model.token == token else { return }
-                saveConfirmation = "Pick saved on the server."
+                try confirmation.accept(receipt)
+                saveConfirmation = "The server confirmed and locked your pick."
             } else {
                 let _: Ignored? = try await API.mutation(path, args)
             }
@@ -246,7 +268,16 @@ struct BetView: View {
         } catch {
             self.error = error.localizedDescription
             model.handle(error)
-            if (error as? APIError)?.code == "CONFLICT" { await load() }
+            if path == "v0Bets:pick" {
+                if let code = (error as? APIError)?.code, code != "TRANSPORT" && code != "UNKNOWN" { confirmation.reject() }
+                else { confirmation.markUncertain() }
+                await load()
+                if model.token == token, let card, case .bet(let details) = card.content, details.myPick != nil {
+                    saveConfirmation = "Your server-confirmed pick was recovered."
+                    self.error = nil
+                    model.error = nil
+                }
+            } else if (error as? APIError)?.code == "CONFLICT" { await load() }
         }
     }
 }
