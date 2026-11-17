@@ -1,7 +1,9 @@
 import json
+import contextlib
 import os
 import plistlib
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -18,6 +20,7 @@ import lease
 import netprobe
 import job
 import launch_provenance
+import status as provisioning_status
 
 
 RUN = "11111111-2222-4333-8444-555555555555"
@@ -353,6 +356,250 @@ class ProvisionerUnitTests(unittest.TestCase):
         with patch.object(launch_provenance.subprocess, "run") as query, self.assertRaises(p.Blocked):
             launch_provenance.verify_trusted_launch(str(path), p.digest(path.read_bytes()), RUN)
         query.assert_not_called()
+
+    def launch_fixture(self):
+        root = self.folder / "UNIT-FABRICATED-ARCHIVE"
+        harness = root / "tests/simulator-provisioner"
+        harness.mkdir(parents=True)
+        for pattern in ("*.py", "*.ts"):
+            for source in HERE.glob(pattern):
+                shutil.copyfile(source, harness / source.name)
+        config = root / "UNIT-config.json"
+        config.write_text(json.dumps({"classification": "UNIT ONLY, NOT ACTUAL LAUNCH OR ISOLATION EVIDENCE"}))
+        nonce = "77777777-8888-4999-AAAA-BBBBBBBBBBBB"
+        provider = "UNIT ONLY: Every remote build runs in a clean, single-use VM. Concurrent builds work in private VMs.\n"
+        provider_hash = p.digest(provider.encode())
+        authority = {"kind": "reviewed-provider-guarantee-and-trusted-tool-route",
+                     "source": {"url": launch_provenance.REVYL_URL, "readableContentSHA256": provider_hash, "snapshot": provider},
+                     "toolRoute": {"documentation": launch_provenance.CAPY_URL, "sourceKind": "workspace",
+                                   "authority": "UNIT mobile.build", "execution": "UNIT Revyl remote build commands"}}
+        files = {str(file.relative_to(root)): p.digest(file.read_bytes()) for file in harness.iterdir()}
+        files[config.name] = p.digest(config.read_bytes())
+        manifest = {"version": 2, "runID": RUN, "launchNonce": nonce, "files": files,
+                    "configurationFiles": {config.name: files[config.name]}}
+        manifest_path = root / "UNIT-source-manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+        now = int(p.time.time() * 1000)
+        plan = {"version": 2, "kind": "trusted-parent-prelaunch-plan", "runID": RUN, "launchNonce": nonce,
+                "sourceManifestSHA256": p.digest(manifest_path.read_bytes()), "issuedAt": now - 1000, "expiresAt": now + 600_000,
+                "scope": dict(launch_provenance.AUTHORITY_SCOPE)}
+        context = {"version": 2, "runID": RUN, "launchNonce": nonce}
+        for key, value in (("reviewedAuthority", authority), ("sourceManifest", manifest), ("launchPlan", plan)):
+            artifact = root / ("UNIT-" + key + ".json")
+            artifact.write_text(json.dumps(value))
+            context[key] = {"file": artifact.name, "sha256": p.digest(artifact.read_bytes())}
+        path = root / "UNIT-context.json"
+        path.write_text(json.dumps(context))
+        return {"root": root, "harness": harness, "config": config, "context": context, "path": path,
+                "plan": plan, "manifest": manifest, "providerHash": provider_hash, "ledger": root / "UNIT-root-ledger"}
+
+    def rewrite_launch(self, fixture, key, value):
+        artifact = fixture["root"] / fixture["context"][key]["file"]
+        artifact.write_text(json.dumps(value))
+        fixture["context"][key]["sha256"] = p.digest(artifact.read_bytes())
+        fixture["path"].write_text(json.dumps(fixture["context"]))
+
+    @contextlib.contextmanager
+    def launch_environment(self, fixture, boot=SIMULATOR, root=True):
+        original_stat = Path.stat
+        def unit_stat(path, *args, **kwargs):
+            info = original_stat(path, *args, **kwargs)
+            if path == fixture["ledger"] or path.parent == fixture["ledger"]:
+                values = list(info)
+                values[4] = 0
+                return os.stat_result(values)
+            return info
+        def query(argv, **_kwargs):
+            if argv == ["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"]:
+                return subprocess.CompletedProcess(argv, 0, (boot + "\n").encode(), b"")
+            self.assertEqual(argv, ["/bin/ps", "-p", str(os.getpid()), "-o", "lstart="])
+            return subprocess.CompletedProcess(argv, 0, b"UNIT FABRICATED root process birth\n", b"")
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(launch_provenance, "__file__", str(fixture["harness"] / "launch_provenance.py")))
+            stack.enter_context(patch.object(launch_provenance, "REVIEWED_READABLE_SHA256", fixture["providerHash"]))
+            stack.enter_context(patch.object(launch_provenance, "NONCE_DIRECTORY", fixture["ledger"]))
+            stack.enter_context(patch.object(launch_provenance.platform, "system", return_value="Darwin"))
+            stack.enter_context(patch.object(launch_provenance.os, "geteuid", return_value=0 if root else 501))
+            stack.enter_context(patch.object(Path, "stat", unit_stat))
+            query_mock = stack.enter_context(patch.object(launch_provenance.subprocess, "run", side_effect=query))
+            yield query_mock
+
+    def verify_launch(self, fixture, consume=False):
+        return launch_provenance.verify_trusted_launch(str(fixture["path"]), p.digest(fixture["path"].read_bytes()), RUN, consume)
+
+    def test_SIM_AUTH_04_prelaunch_seal_uses_observed_boot_without_future_job_or_boot_fields(self):
+        fixture = self.launch_fixture()
+        with self.launch_environment(fixture) as query:
+            result = self.verify_launch(fixture)
+        self.assertEqual(result["guestBootSessionUUID"], SIMULATOR)
+        self.assertEqual(result["launchNonce"], fixture["context"]["launchNonce"])
+        self.assertEqual(result["configurationSHA256"], launch_provenance.sealed_digest(fixture["manifest"]["configurationFiles"]))
+        self.assertEqual(result["guardSHA256"], launch_provenance.sealed_digest({name: fixture["manifest"]["files"][name] for name in launch_provenance.REQUIRED}))
+        self.assertEqual(query.call_count, 1)
+        self.assertFalse(fixture["ledger"].exists())
+        for forbidden in ("buildID", "build_id", "operationID", "bootSessionUUID", "result", "invocation"):
+            self.assertNotIn(forbidden, fixture["plan"])
+            self.assertNotIn(forbidden, result)
+
+    def test_SIM_AUTH_05_future_or_legacy_job_and_boot_claims_are_rejected(self):
+        fixture = self.launch_fixture()
+        for key in ("buildID", "bootSessionUUID", "result", "invocation"):
+            self.rewrite_launch(fixture, "launchPlan", {**fixture["plan"], key: "UNIT INVENTED FUTURE VALUE"})
+            with self.launch_environment(fixture) as query, self.assertRaises(p.Blocked):
+                self.verify_launch(fixture)
+            query.assert_not_called()
+        self.rewrite_launch(fixture, "launchPlan", fixture["plan"])
+        fixture["context"]["version"] = 1
+        fixture["path"].write_text(json.dumps(fixture["context"]))
+        with self.launch_environment(fixture), self.assertRaises(p.Blocked):
+            self.verify_launch(fixture)
+
+    def test_SIM_GUARD_08_preflight_observes_only_explicit_controller_pids_with_bounded_sudo(self):
+        instance = p.Provisioner(unit_request(), self.folder / "UNIT-preflight")
+        def command(argv, **kwargs):
+            if argv == ["/usr/bin/sudo", "-n", "/usr/bin/id", "-u"]:
+                return "0\n"
+            if argv == ["/usr/bin/sudo", "-n", "/sbin/pfctl", "-sr"]:
+                return 'anchor "com.apple/*" all\n'
+            if "/usr/sbin/lsof" in argv:
+                self.assertEqual(argv, ["/usr/bin/sudo", "-n", "/usr/sbin/lsof", "-nP", "-a", "-p", "91", "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"])
+                self.assertEqual(kwargs, {"timeout": 10})
+                return "p91\nccontroller\nu0\nf12u\nPTCP\nn10.0.0.2:50001->203.0.113.7:443\nTST=ESTABLISHED\n"
+            return ""
+        instance.command = Mock(side_effect=command)
+        with patch.object(p.platform, "system", return_value="Darwin"):
+            instance.preflight()
+        self.assertTrue(any("/usr/sbin/lsof" in call.args[0] for call in instance.command.call_args_list))
+        self.assertFalse(any("-F" in call.args[0] or "-E" in call.args[0] for call in instance.command.call_args_list))
+
+    def test_SIM_AUTH_06_generic_shared_or_boolean_scope_never_authorizes_boot_or_pf_query(self):
+        fixture = self.launch_fixture()
+        for scope in ({**launch_provenance.AUTHORITY_SCOPE, "source": "local"}, {**launch_provenance.AUTHORITY_SCOPE, "guest": "shared"},
+                      {"exclusive": True, "dedicated": True, "ephemeral": True}, {**launch_provenance.AUTHORITY_SCOPE, "cache": "runtime-state"}):
+            self.rewrite_launch(fixture, "launchPlan", {**fixture["plan"], "scope": scope})
+            with self.launch_environment(fixture) as query, self.assertRaises(p.Blocked):
+                self.verify_launch(fixture)
+            query.assert_not_called()
+
+    def test_SIM_AUTH_07_nonce_source_configuration_and_plan_freshness_are_sealed(self):
+        fixture = self.launch_fixture()
+        for plan in ({**fixture["plan"], "launchNonce": RUN}, {**fixture["plan"], "sourceManifestSHA256": "0" * 64},
+                     {**fixture["plan"], "expiresAt": 1}):
+            self.rewrite_launch(fixture, "launchPlan", plan)
+            with self.launch_environment(fixture) as query, self.assertRaises(p.Blocked):
+                self.verify_launch(fixture)
+            query.assert_not_called()
+        self.rewrite_launch(fixture, "launchPlan", fixture["plan"])
+        for path in (fixture["config"], fixture["harness"] / "lease.py"):
+            original = path.read_bytes()
+            path.write_bytes(original + b"\nUNIT MUTATION\n")
+            with self.launch_environment(fixture) as query, self.assertRaises(p.Blocked):
+                self.verify_launch(fixture)
+            query.assert_not_called()
+            path.write_bytes(original)
+
+    def test_SIM_AUTH_08_root_records_full_current_chain_once_before_any_pf_command(self):
+        fixture = self.launch_fixture()
+        instance = self.unit_lease()
+        instance.launch_context = str(fixture["path"])
+        instance.launch_sha256 = p.digest(fixture["path"].read_bytes())
+        with self.launch_environment(fixture), self.assertRaises(FileNotFoundError):
+            instance.prepare()
+        instance.pf.assert_not_called()
+        instance.command.assert_not_called()
+        name, authorization = instance.record.call_args.args
+        self.assertEqual(name, "runner-authorized.json")
+        with self.launch_environment(fixture):
+            witness, _ = launch_provenance.root_launch_witness(authorization, os.getpid())
+            self.assertEqual(witness["chain"]["guestBootSessionUUID"], SIMULATOR)
+            self.assertEqual(witness["chainSHA256"], authorization["chainSHA256"])
+            with self.assertRaises(FileExistsError):
+                self.verify_launch(fixture, consume=True)
+
+    def test_SIM_AUTH_09_old_boot_or_other_root_process_cannot_reuse_consumption_witness(self):
+        fixture = self.launch_fixture()
+        with self.launch_environment(fixture):
+            authorization = self.verify_launch(fixture, consume=True)
+            with self.assertRaises(p.Blocked):
+                launch_provenance.root_launch_witness(authorization, os.getpid() + 1)
+        with self.launch_environment(fixture, boot="BBBBBBBB-CCCC-4DDD-8EEE-FFFFFFFFFFFF"), self.assertRaises(p.Blocked):
+            self.verify_launch(fixture)
+        marker = fixture["ledger"] / (fixture["context"]["launchNonce"] + ".json")
+        marker.chmod(0o644)
+        with self.launch_environment(fixture), self.assertRaises(p.Blocked):
+            self.verify_launch(fixture)
+
+    def test_SIM_AUTH_10_nonroot_cannot_consume_and_missing_harness_or_config_seal_is_rejected(self):
+        fixture = self.launch_fixture()
+        with self.launch_environment(fixture, root=False), self.assertRaises(p.Blocked):
+            self.verify_launch(fixture, consume=True)
+        self.assertFalse(fixture["ledger"].exists())
+        for manifest in ({**fixture["manifest"], "configurationFiles": {}},
+                         {**fixture["manifest"], "files": {key: value for key, value in fixture["manifest"]["files"].items() if not key.endswith("test_provisioner.py")}}):
+            self.rewrite_launch(fixture, "sourceManifest", manifest)
+            self.rewrite_launch(fixture, "launchPlan", {**fixture["plan"], "sourceManifestSHA256": fixture["context"]["sourceManifest"]["sha256"]})
+            with self.launch_environment(fixture) as query, self.assertRaises(p.Blocked):
+                self.verify_launch(fixture)
+            query.assert_not_called()
+
+    def live_status_fixture(self):
+        now = int(p.time.time() * 1000)
+        authority = {"chainSHA256": "a" * 64, "launchNonce": "77777777-8888-4999-AAAA-BBBBBBBBBBBB",
+                     "guestBootSessionUUID": SIMULATOR, "classification": "UNIT FABRICATED STATUS INPUT"}
+        ready = {"runID": RUN, "ownerPID": 91, "leasePID": 535, "leaseIdentity": {"birth": "UNIT root birth"},
+                 "leaseExpiresAt": now + 60_000, "recordedAt": now - 100,
+                 "launchContext": str(self.folder / "UNIT-launch.json"), "launchContextSHA256": "b" * 64,
+                 "runnerAuthorization": authority, "rootRules": "UNIT root rules", "activeRules": "UNIT active rules",
+                 "activeFilterTree": "UNIT filter tree", "baselineTranslationTree": "UNIT translation tree",
+                 "anchor": "com.apple/zzzz_calledit_" + RUN.replace("-", "").lower()}
+        witness = {"rootGuard": {"pid": 535, "uid": 0, "birth": "UNIT root birth"}, "consumedAt": now - 200}
+        capture = b"UNIT FABRICATED PCAP; NO ACTUAL KERNEL OR MAC EVIDENCE"
+        proof = {"runID": RUN, "verifiedAt": now, "resolverBroker": {"pcapFile": "resolver-blocked.pcap",
+                 "pcapSHA256": p.digest(capture), "hostname": "unit-fabricated.example.com"}}
+        for name, value in (("lease-ready.json", ready), ("heartbeat.json", {"runID": RUN}), ("network-verified.json", proof)):
+            (self.folder / name).write_text(json.dumps(value))
+        (self.folder / "resolver-blocked.pcap").write_bytes(capture)
+        outputs = {("/bin/ps", "-p", "535", "-o", "uid="): "0\n",
+                   ("/bin/ps", "-p", "535", "-o", "lstart="): "UNIT root birth\n",
+                   ("/usr/bin/sudo", "-n", "/bin/ps", "-p", "535", "-o", "args="):
+                       "UNIT " + str(HERE / "lease.py") + " " + str(self.folder) + " " + RUN}
+        for args, value in ((("-sr",), ready["rootRules"]), (("-a", ready["anchor"], "-sr"), ready["activeRules"]),
+                            (("-a", "*", "-sr"), ready["activeFilterTree"]), (("-a", "*", "-sn"), ready["baselineTranslationTree"]),
+                            (("-s", "info"), "Status: Enabled\n"), (("-ss",), "")):
+            outputs[("/usr/bin/sudo", "-n", "/sbin/pfctl", *args)] = value
+        outputs[("/usr/sbin/tcpdump", "-n", "-e", "-vv", "-r", str(self.folder / "resolver-blocked.pcap"))] = "UNIT unit-fabricated.example.com block out"
+        return authority, ready, witness, proof, outputs
+
+    @contextlib.contextmanager
+    def status_environment(self, authority, witness, outputs):
+        def query(argv, **_kwargs):
+            self.assertIn(tuple(argv), outputs)
+            return subprocess.CompletedProcess(argv, 0, outputs[tuple(argv)].encode(), b"")
+        with patch.object(provisioning_status.platform, "system", return_value="Darwin"), \
+                patch.object(provisioning_status, "verify_trusted_launch", return_value=authority) as launch, \
+                patch.object(provisioning_status, "root_launch_witness", return_value=(witness, "c" * 64)), \
+                patch.object(provisioning_status.subprocess, "run", side_effect=query), \
+                patch.object(provisioning_status, "source_fingerprints", return_value={"classification": "UNIT-FABRICATED"}):
+            yield launch
+
+    def test_SIM_STATUS_01_design_mock_rechecks_current_root_nonce_boot_chain_without_job_id(self):
+        authority, ready, witness, _proof, outputs = self.live_status_fixture()
+        with self.status_environment(authority, witness, outputs) as launch:
+            observed = provisioning_status.live_status(self.folder, RUN, 91)
+        launch.assert_called_once_with(ready["launchContext"], ready["launchContextSHA256"], RUN)
+        self.assertEqual(observed["runnerAuthorization"], authority)
+        self.assertEqual(observed["rootLaunchWitnessSHA256"], "c" * 64)
+
+    def test_SIM_STATUS_02_design_mock_refuses_changed_chain_pid_birth_or_previous_lease_proof(self):
+        authority, ready, witness, proof, outputs = self.live_status_fixture()
+        for replacement, root in (({**authority, "chainSHA256": "0" * 64}, witness),
+                                  (authority, {**witness, "rootGuard": {**witness["rootGuard"], "birth": "UNIT reused PID"}}),
+                                  (authority, {**witness, "consumedAt": ready["recordedAt"] + 1})):
+            with self.status_environment(replacement, root, outputs), self.assertRaises(p.Blocked):
+                provisioning_status.live_status(self.folder, RUN, 91)
+        (self.folder / "network-verified.json").write_text(json.dumps({**proof, "verifiedAt": ready["recordedAt"] - 1}))
+        with self.status_environment(authority, witness, outputs), self.assertRaisesRegex(p.Blocked, "previous run"):
+            provisioning_status.live_status(self.folder, RUN, 91)
 
     def test_SIM_GATE_01_unapproved_workload_never_executes(self):
         (self.folder / "jobs").mkdir()

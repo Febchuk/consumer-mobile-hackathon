@@ -129,8 +129,8 @@ class Provisioner:
         root = self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-sr"])
         states = self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-ss"])
         root_anchor_supported(root)
-        sockets = self.command(["/usr/sbin/lsof", "-nP", "-a", "-p", ",".join(map(str, self.request["controlPIDs"])),
-                                "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"])
+        sockets = self.command(["/usr/bin/sudo", "-n", "/usr/sbin/lsof", "-nP", "-a", "-p", ",".join(map(str, self.request["controlPIDs"])),
+                                "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"], timeout=10)
         flows = controller_flows(sockets, self.request["controlPIDs"])
         require_no_unowned_states(states, flows)
         self.anchor, rules = plan_rules(self.request["runID"], flows)

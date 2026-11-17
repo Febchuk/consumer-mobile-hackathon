@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 
 from provision import clean_environment, digest, regular, require
-from launch_provenance import verify_trusted_launch
+from launch_provenance import root_launch_witness, verify_trusted_launch
 
 
 def source_fingerprints():
@@ -37,10 +37,11 @@ def live_status(folder, run_id, owner_pid):
     require(ready["runID"] == run and ready["ownerPID"] == owner_pid, "live controller identity mismatch")
     require(int(time.time() * 1000) < ready["leaseExpiresAt"], "independent isolation lease expired")
     authorization = verify_trusted_launch(ready["launchContext"], ready["launchContextSHA256"], run)
-    require(authorization["buildID"] == ready["runnerAuthorization"]["buildID"] and authorization["launchNonce"] == ready["runnerAuthorization"]["launchNonce"],
+    require(authorization["chainSHA256"] == ready["runnerAuthorization"]["chainSHA256"],
             "live platform launch authority changed")
-    consumed = Path(ready["launchContext"]).parent / ("consumed-" + authorization["launchNonce"] + ".json")
-    require(consumed.stat().st_uid == 0 and json.loads(regular(str(consumed), 4096))["runID"] == run, "independent root launch consumption witness missing")
+    witness, witness_hash = root_launch_witness(authorization, ready["leasePID"])
+    require(witness["rootGuard"]["birth"] == ready["leaseIdentity"]["birth"] and witness["consumedAt"] <= ready["recordedAt"],
+            "independent root launch consumption must precede this exact lease/process")
     heartbeat = json.loads(regular(str(folder / "heartbeat.json"), 4096))
     require(heartbeat["runID"] == run and 0 <= time.time() - (folder / "heartbeat.json").stat().st_mtime < 8, "live controller heartbeat is stale")
     pid = ready["leasePID"]
@@ -58,7 +59,8 @@ def live_status(folder, run_id, owner_pid):
             not command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-ss"]).strip(), "PF disabled or unexpected state can bypass the stateless policy")
     proof_raw = regular(str(folder / "network-verified.json"))
     proof = json.loads(proof_raw)
-    require(proof["runID"] == run and proof["verifiedAt"] <= int(time.time() * 1000), "kernel proof is not from this run")
+    require(proof["runID"] == run and ready["recordedAt"] <= proof["verifiedAt"] <= int(time.time() * 1000),
+            "kernel proof must follow this nonce/boot-bound lease, not a previous run")
     broker = proof["resolverBroker"]
     require(broker["pcapFile"] == "resolver-blocked.pcap", "unrecognized broker capture path")
     capture = regular(str(folder / "resolver-blocked.pcap"))
@@ -77,6 +79,7 @@ def live_status(folder, run_id, owner_pid):
     return {"runID": run, "ownerPID": owner_pid, "leasePID": pid, "anchor": ready["anchor"], "checkedAt": int(time.time() * 1000),
             "leaseReadySHA256": digest(ready_raw), "networkProofSHA256": digest(proof_raw),
             "runnerAuthorization": authorization,
+            "rootLaunchWitnessSHA256": witness_hash,
             "deviceApprovedSHA256": digest(approved_raw) if approved_raw else None, "device": device,
             "sourceFingerprints": source_fingerprints()}
 
