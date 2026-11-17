@@ -8,10 +8,6 @@ import { validateCandidate } from "./v0Safety";
 import { queueNotification } from "./v0Notifications";
 import { answerDeadlineFor, approvedPolicy, challengeDeadlineFor, nextDefaultRevealAt, stateAt } from "./v0GamePolicy";
 
-function lifecyclePolicy(): never {
-  return fail("POLICY_PENDING", "Pick lock and creator rules are awaiting approval.");
-}
-
 async function cardFor(ctx: QueryCtx, bet: Doc<"v0Bets">): Promise<CardLocator> {
   let origin: URL;
   try {
@@ -44,16 +40,18 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
   const answerDeadline = answerDeadlineFor(bet);
   const challengeDeadline = challengeDeadlineFor(bet);
   const challenge = state === "provisional" && accountId !== bet.subjectId ? await ctx.db.query("v0Challenges").withIndex("by_bet_account", (q) => q.eq("betId", bet._id).eq("accountId", accountId)).unique() : null;
-  const base = { serverTime: now, groupId: bet.groupId, betId: bet._id, state, cutoffAt: bet.cutoffAt, revealAt: bet.revealAt, card: await cardFor(ctx, bet) };
+  const base = { serverTime: now, groupId: bet.groupId, betId: bet._id, state, cutoffAt: bet.revealAt, revealAt: bet.revealAt, card: await cardFor(ctx, bet) };
   if (state === "voided") return { ...base, view: "unavailable" };
   if (accountId === bet.subjectId && now < bet.revealAt) return { ...base, view: "sealed", canVeto: true };
-  const allPicks = (await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()).filter((pick) => pick.voidedAt === undefined);
-  const mine = allPicks.find((pick) => pick.accountId === accountId);
+  const allPicks = await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect();
+  const myPicks = allPicks.filter((pick) => pick.accountId === accountId);
+  const member = await activeMember(ctx, bet.groupId, accountId);
+  const mine = myPicks.length === 1 && myPicks[0].voidedAt === undefined && myPicks[0].membershipId === member?._id ? myPicks[0] : undefined;
   const picks: Extract<BetView, { view: "bet" }>["picks"] = [];
   if (now >= bet.revealAt) {
     for (const pick of allPicks) {
       const member = await activeMember(ctx, bet.groupId, pick.accountId);
-      if (member?._id !== pick.membershipId || await isBlocked(ctx, accountId, pick.accountId)) continue;
+      if (pick.voidedAt !== undefined || member?._id !== pick.membershipId || await isBlocked(ctx, accountId, pick.accountId)) continue;
       picks.push({ accountId: pick.accountId, alias: member.alias, option: pick.option, confidence: pick.confidence });
     }
   }
@@ -64,7 +62,7 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
     format: bet.format,
     options: bet.options,
     ...(bet.line === undefined ? {} : { line: bet.line }),
-    canPick: false,
+    canPick: accountId !== bet.subjectId && state === "open" && now < bet.revealAt && myPicks.length === 0,
     canAnswer: accountId === bet.subjectId && state === "revealed" && now < answerDeadline,
     canChallenge: accountId !== bet.subjectId && state === "provisional" && challengeDeadline !== undefined && now < challengeDeadline && !challenge,
     myPick: mine ? { option: mine.option, confidence: mine.confidence } : null,
@@ -124,7 +122,7 @@ export const history = query({
 });
 
 export const create = mutation({
-  args: { token: v.string(), groupId: v.id("v0Groups"), subjectId: v.id("v0Accounts"), question: v.string(), contextLine: v.string(), format, options: v.array(v.string()), line: v.optional(v.number()), cutoffAt: v.number(), revealAt: v.optional(v.number()), source: v.union(v.literal("manual"), v.literal("template"), v.literal("history"), v.literal("hosted_ai")), requestId: v.string() },
+  args: { token: v.string(), groupId: v.id("v0Groups"), subjectId: v.id("v0Accounts"), question: v.string(), contextLine: v.string(), format, options: v.array(v.string()), line: v.optional(v.number()), cutoffAt: v.optional(v.number()), revealAt: v.optional(v.number()), source: v.union(v.literal("manual"), v.literal("template"), v.literal("history"), v.literal("hosted_ai")), requestId: v.string() },
   handler: async (ctx, args) => {
     const { account } = await requireSession(ctx, args.token);
     await requireMember(ctx, args.groupId, account._id);
@@ -141,8 +139,8 @@ export const create = mutation({
         fail("INVALID_INPUT", "Choose a valid group timezone.");
       }
     }
-    if (!Number.isFinite(args.cutoffAt) || revealAt === undefined || !Number.isFinite(revealAt) || args.cutoffAt <= Date.now() || revealAt <= Date.now()) fail("INVALID_INPUT", "Choose valid future scheduled times.");
-    return lifecyclePolicy();
+    if (revealAt === undefined || !Number.isFinite(revealAt) || revealAt <= Date.now() || (args.cutoffAt !== undefined && (!Number.isFinite(args.cutoffAt) || args.cutoffAt !== revealAt))) fail("INVALID_INPUT", "New confirmations must end at the future reveal time.");
+    return fail("POLICY_PENDING", "Creator rules are awaiting approval.");
   },
 });
 
@@ -151,9 +149,24 @@ export const pick = mutation({
   handler: async (ctx, args) => {
     const { account } = await requireSession(ctx, args.token);
     const bet = await requireBet(ctx, args.betId, account._id);
-    if (bet.subjectId === account._id || stateAt(bet, Date.now()) !== "open") fail("NOT_AVAILABLE");
+    const member = await requireMember(ctx, bet.groupId, account._id);
+    if (bet.subjectId === account._id || stateAt(bet, Date.now()) === "voided") fail("NOT_AVAILABLE");
     if (![0, 1].includes(args.option) || !Number.isFinite(args.confidence) || args.confidence < approvedPolicy.confidenceMin || args.confidence > approvedPolicy.confidenceMax || args.riskPoints !== undefined) fail("INVALID_INPUT");
-    return lifecyclePolicy();
+    const picks = await ctx.db.query("v0Picks").withIndex("by_bet_account", (q) => q.eq("betId", args.betId).eq("accountId", account._id)).collect();
+    if (picks.length > 1) fail("CONFLICT", "This confirmation is unavailable.");
+    const existing = picks[0];
+    if (existing && (existing.groupId !== bet.groupId || existing.membershipId !== member._id || existing.voidedAt !== undefined || !Number.isFinite(existing.updatedAt))) fail("NOT_AVAILABLE");
+    return await once(ctx, account._id, "bets.pick", args.requestId, { betId: args.betId, option: args.option, confidence: args.confidence }, async () => {
+      if (existing) {
+        if (existing.option !== args.option || existing.confidence !== args.confidence) fail("CONFLICT", "Your confirmed pick cannot be changed.");
+        return { saved: true as const, option: existing.option, confidence: existing.confidence, updatedAt: existing.updatedAt };
+      }
+      const now = Date.now();
+      if (stateAt(bet, now) !== "open" || now >= bet.revealAt || now < bet.createdAt) fail("NOT_AVAILABLE");
+      await rateLimit(ctx, `pick:${account._id}`, 60, 60_000);
+      await ctx.db.insert("v0Picks", { betId: bet._id, groupId: bet.groupId, accountId: account._id, membershipId: member._id, option: args.option, confidence: args.confidence, placedAt: now, updatedAt: now });
+      return { saved: true as const, option: args.option, confidence: args.confidence, updatedAt: now };
+    });
   },
 });
 
@@ -220,7 +233,7 @@ export const advance = internalMutation({
 });
 
 export async function advanceBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
-  if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt <= bet.cutoffAt) {
+  if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt < bet.cutoffAt) {
     await voidBet(ctx, bet);
     return "voided" as const;
   }
