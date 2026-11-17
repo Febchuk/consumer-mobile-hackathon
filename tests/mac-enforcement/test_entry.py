@@ -16,6 +16,28 @@ SPEC.loader.exec_module(ENTRY)
 
 
 class FakeArchiveEntryDesignTests(unittest.TestCase):
+    def test_OPERATOR_CONTROL_01_pulse_follows_flushed_output_and_is_not_delivery_authority(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "pulse.json"
+
+            def emitted(name, value):
+                self.assertEqual(name, "CALLED_IT_CONTROL_CHANNEL_PROBE")
+                self.assertFalse(path.exists())
+                self.assertEqual(value, {"version": 1, "runID": "FAKE_RUN", "launchNonce": "FAKE_NONCE", "sequence": 4, "observedAt": 123000})
+
+            with patch.object(ENTRY.time, "time", return_value=123), patch.object(ENTRY, "emit", side_effect=emitted):
+                value = ENTRY.emit_control_pulse(path, "FAKE_RUN", "FAKE_NONCE", 4)
+            self.assertEqual(json.loads(path.read_bytes()), value)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertFalse(path.with_suffix(".next").exists())
+
+    def test_OPERATOR_CONTROL_02_failed_output_does_not_publish_a_pulse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "pulse.json"
+            with patch.object(ENTRY, "emit", side_effect=BrokenPipeError), self.assertRaises(BrokenPipeError):
+                ENTRY.emit_control_pulse(path, "FAKE_RUN", "FAKE_NONCE", 0)
+            self.assertFalse(path.exists())
+
     def test_OPERATOR_CARRIER_01_generates_only_in_private_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary).resolve()

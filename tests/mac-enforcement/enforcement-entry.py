@@ -53,6 +53,19 @@ def build_carrier(root, scratch, environment):
     return destination
 
 
+def emit_control_pulse(path, run_id, nonce, sequence):
+    value = {"version": 1, "runID": run_id, "launchNonce": nonce, "sequence": sequence, "observedAt": int(time.time() * 1000)}
+    emit("CALLED_IT_CONTROL_CHANNEL_PROBE", value)
+    temporary = path.with_suffix(".next")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as file:
+        json.dump(value, file, sort_keys=True)
+        file.flush()
+        os.fsync(file.fileno())
+    os.replace(temporary, path)
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--launch-nonce", required=True)
@@ -80,7 +93,6 @@ def main():
     destination = build_carrier(root, scratch, environment)
     verify_source()
     sys.path.insert(0, str(root / "tests/simulator-provisioner"))
-    from global_pf import controller_flows
     from launch_provenance import verify_trusted_launch
     context = proof / "context.json"
     context_sha = sha(context.read_bytes())
@@ -95,32 +107,22 @@ def main():
         parent, executable = observed.stdout.strip().split(maxsplit=1)
         ancestors.append({"pid": current, "parentPID": int(parent), "executable": executable})
         current = int(parent)
-    selected = []
-    observations = []
-    for record in ancestors:
-        sockets = run(["/usr/bin/sudo", "-n", "/usr/sbin/lsof", "-nP", "-a", "-p", str(record["pid"]), "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"], environment)
-        flows = []
-        if sockets.returncode == 0 and sockets.stdout.strip():
-            try:
-                flows = controller_flows(sockets.stdout, [record["pid"]])
-            except RuntimeError:
-                flows = []
-        observations.append({**record, "socketQueryExit": sockets.returncode, "socketObservationSHA256": sha(sockets.stdout.encode()), "establishedExternalFlows": flows})
-        if flows:
-            selected.append(record["pid"])
-    emit("CALLED_IT_CONTROLLER_OBSERVATIONS", {"runID": config["runID"], "launchNonce": args.launch_nonce, "ancestorsOnly": observations})
-    if not selected:
-        raise RuntimeError("No actual trusted ancestor has an observed established external controller TCP flow; no PF mutation attempted")
+    if not ancestors:
+        raise RuntimeError("Actual controller ancestry unavailable; root must independently prove the approved vsock profile")
+    emit("CALLED_IT_CONTROLLER_CANDIDATES", {"runID": config["runID"], "launchNonce": args.launch_nonce, "ancestorsOnly": ancestors,
+        "admission": "none; independent root must observe and verify actual connected management vsock and kernel tuples"})
     listing = run(["/usr/bin/xcrun", "simctl", "list", "--json"], environment, check=True)
     listing = json.loads(listing.stdout)
     runtimes = [item for item in listing["runtimes"] if item.get("isAvailable") and ".iOS-" in item["identifier"]]
     runtime = max(runtimes, key=lambda item: tuple(map(int, item["version"].split("."))))
     types = {item["name"]: item["identifier"] for item in listing["devicetypes"]}
+    pulse_path = scratch / "control-pulse.json"
     request = {"runID": config["runID"], "nativeSourceRevision": config["nativeSourceRevision"], "backendSourceRevision": config["backendSourceRevision"],
         "fixtureSetID": config["fixtureSetID"], "configVersion": config["configVersion"], "runtimeID": runtime["identifier"],
         "deviceTypeID": types.get("iPhone 17") or types["iPhone 16"], "apiPort": 8199, "cardPort": 3211, "lifetimeSeconds": 180,
         "appPath": str(destination), "nativeBuildRecord": str(scratch / "unused-in-enforcement-only-native-record.json"),
-        "backendBuildRecord": str(scratch / "unused-in-enforcement-only-backend-record.json"), "controlPIDs": selected,
+        "backendBuildRecord": str(scratch / "unused-in-enforcement-only-backend-record.json"), "controlPIDs": [record["pid"] for record in ancestors],
+        "controlPulsePath": str(pulse_path),
         "sourceCardOrigin": "https://cards.qa-runtime.invalid"}
     request_path = scratch / "request.json"
     request_path.write_text(json.dumps(request))
@@ -130,9 +132,13 @@ def main():
         "--trusted-launch-context", str(context), "--trusted-launch-sha256", context_sha, "--enforcement-probe"]
     control_stop = threading.Event()
 
+    emit_control_pulse(pulse_path, config["runID"], args.launch_nonce, 0)
+
     def controller_traffic():
+        sequence = 1
         while not control_stop.wait(2):
-            emit("CALLED_IT_CONTROL_CHANNEL_PROBE", {"runID": config["runID"], "launchNonce": args.launch_nonce})
+            emit_control_pulse(pulse_path, config["runID"], args.launch_nonce, sequence)
+            sequence += 1
 
     traffic = threading.Thread(target=controller_traffic, daemon=True)
     traffic.start()
@@ -163,13 +169,14 @@ def main():
         completion = json.loads(completed.read_bytes())
         restored = json.loads(cleanup.read_bytes())
         passed = completion.get("runID") == config["runID"] and completion.get("status") == "completed-and-owned-isolation-restored" and not restored.get("failures") and restored.get("isolationRetained") is False
-    emit("CALLED_IT_ENFORCEMENT_VERDICT", {"runID": config["runID"], "launchNonce": args.launch_nonce, "status": "passing-enforcement-only" if passed else "blocked", "probeExitCode": result.returncode,
+    emit("CALLED_IT_ENFORCEMENT_VERDICT", {"runID": config["runID"], "launchNonce": args.launch_nonce, "status": "local-gates-pass-parent-tool-continuity-pending" if passed else "blocked", "probeExitCode": result.returncode,
+        "parentToolContinuityVerified": False, "managementChannel": "intentional provider vsock; not proof against arbitrary non-IP/covert channels",
         "testsExecuted": 0, "simulatorCreated": False, "nativeUIExecuted": False, "realProviderExecuted": False, "fullV0Ready": False})
     if not passed:
         raise RuntimeError("Enforcement/restoration probe did not prove its prerequisites; no runtime activation or broader retry")
     evidence = destination / "QAEnforcementProbeEvidence"
     shutil.copytree(output, evidence)
-    (evidence / "README.txt").write_text("Unsigned artifact carrier with actual bounded enforcement-only/restoration evidence. No simulator/native UI/provider/signing/distribution proof. Not an RC.\n")
+    (evidence / "README.txt").write_text("Unsigned evidence carrier: local enforcement/restoration gates only; independent parent must still validate actual retained tool-log continuity. Intentional provider vsock management channel, not arbitrary non-IP/covert-channel proof. No simulator/native UI/provider/signing/distribution proof. Not an RC.\n")
     verify_source()
 
 

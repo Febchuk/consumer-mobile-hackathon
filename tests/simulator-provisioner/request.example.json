@@ -13,5 +13,6 @@
   "nativeBuildRecord": "/REPLACE_WITH_INDEPENDENT_NATIVE_BUILD_RECORD.json",
   "backendBuildRecord": "/REPLACE_WITH_INDEPENDENT_BACKEND_BUILD_RECORD.json",
   "controlPIDs": [0],
+  "controlPulsePath": "/REPLACE_WITH_PRIVATE_OPERATOR_DIRECTORY/control-pulse.json",
   "sourceCardOrigin": "https://cards.qa-runtime.invalid"
 }

@@ -76,6 +76,7 @@ def reject_unreviewed_tree(text, translation=False):
             continue
         require(re.fullmatch(r'(?:scrub-anchor|anchor|nat-anchor|rdr-anchor|dummynet-anchor) "[A-Za-z0-9_./*:-]+" all(?: fragment reassemble)?(?: \{)?', line),
                 "unreviewed existing nested " + ("translation" if translation else "filter") + " rule/quick path; preserve it and refuse mutation")
+    parse_pf_tree(text)
 
 
 def plan_rules(run_id, flows):
@@ -112,6 +113,77 @@ def require_no_unowned_states(states, flows):
             return ("[" + address + "]" if ":" in address else address) + ":" + str(port)
         require(any(tokens == {rendered(flow["localIP"], flow["localPort"]), rendered(flow["remoteIP"], flow["remotePort"])} for flow in flows),
                 "unknown existing PF state; preserve it and block this run instead")
+
+
+def plan_no_ip_rules(run_id):
+    name = "zzzz_calledit_" + uuid.UUID(run_id).hex
+    rules = ['pass quick on lo0 inet from 127.0.0.1 to 127.0.0.1 no state',
+             'pass quick on lo0 inet6 from ::1 to ::1 no state']
+    for family, address, suffix in (("inet", "198.51.100.77", "4"), ("inet6", "2001:db8::77", "6")):
+        for protocol in ("tcp", "udp"):
+            rules.append(f'block drop out quick {family} proto {protocol} to {address} port 65432 label "{name}_probe_{protocol}{suffix}"')
+    rules.extend([f'block drop out log (all, user) quick proto udp to any port 53 label "{name}_dns"',
+                  f'block drop quick all label "{name}_deny"'])
+    return "com.apple/" + name, "\n".join(rules) + "\n"
+
+
+def parse_pf_tree(text):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    index = 0
+    def group(nested=False):
+        nonlocal index
+        result = []
+        while index < len(lines):
+            line = lines[index]
+            index += 1
+            if line == "}":
+                require(nested, "unexpected recursive PF closing brace")
+                return result
+            header = re.fullmatch(r'((?:scrub-anchor|anchor|nat-anchor|rdr-anchor|dummynet-anchor) "([A-Za-z0-9_./*:-]+)" all(?: fragment reassemble)?)( \{)?', line)
+            if header:
+                children = group(True) if header.group(3) else []
+                result.append(("anchor", header.group(1), header.group(2), children))
+            else:
+                require("{" not in line and "}" not in line, "unknown recursive PF serialization")
+                result.append(("rule", line))
+        require(not nested, "truncated recursive PF tree")
+        return result
+    return group()
+
+
+def verify_owned_tree(baseline, active, anchor, rules):
+    reject_unreviewed_tree(baseline)
+    expected = parse_pf_tree(baseline)
+    observed = parse_pf_tree(active)
+    found = []
+    expected_rules = [("rule", line.strip()) for line in rules.splitlines() if line.strip()]
+    require(expected_rules, "canonical owned rules are missing")
+    def remove(nodes, apple=False, depth=0):
+        result = []
+        for node in nodes:
+            if node[0] != "anchor":
+                result.append(node)
+                continue
+            _, header, name, children = node
+            if name in {anchor, anchor.split("/")[-1]}:
+                require(apple and header == 'anchor "' + name + '" all' and children == expected_rules and not found,
+                        "only the exact canonical owned-rule insertion is permitted")
+                found.append(name)
+                continue
+            child_scope = depth == 0 and header in {'anchor "com.apple/*" all', 'anchor "com.apple" all'}
+            result.append(("anchor", header, name, remove(children, child_scope, depth + 1)))
+        return result
+    require(remove(observed) == expected and len(found) == 1, "unowned PF tree changed; never adopt an arbitrary active snapshot")
+
+
+def verify_anchor_insertion(initial, actual, anchor):
+    def names(text):
+        values = [line.strip().split("/")[-1] for line in text.splitlines() if line.strip()]
+        require(len(values) == len(set(values)) and all(re.fullmatch(r"[A-Za-z0-9_.:-]+", value) for value in values), "unknown anchor inventory format")
+        return values
+    before, after = names(initial), names(actual)
+    own = anchor.split("/")[-1]
+    require(own not in before and sorted(after) == sorted([*before, own]) and max(after) == own, "only the final owned anchor may have been inserted")
 
 
 def denial_delta(before, after, run_id):

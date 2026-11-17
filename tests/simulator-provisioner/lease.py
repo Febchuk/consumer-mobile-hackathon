@@ -12,8 +12,10 @@ import time
 import uuid
 from pathlib import Path
 
-from global_pf import controller_flows, plan_rules, require_no_unowned_states, root_anchor_supported, reject_unreviewed_tree
-from launch_provenance import verify_trusted_launch
+from global_pf import plan_no_ip_rules, require_no_unowned_states, root_anchor_supported, reject_unreviewed_tree, verify_owned_tree, verify_anchor_insertion, parse_pf_tree
+from launch_provenance import root_launch_witness, verify_trusted_launch
+from root_capsule import capsule_info
+from vsock_control import RootControl, root_write
 from provision import clean_environment, digest, regular, require
 
 
@@ -56,6 +58,8 @@ class Lease:
         self.reason = "not-started"
         self.enable_attempted = False
         self.owns_pflog = False
+        self.pflog_create_attempted = False
+        self.initial_pflog_exists = None
         self.folder_verified = False
         self.prior_simulators = set()
         self.launch_context = launch_context
@@ -63,6 +67,16 @@ class Lease:
         self.baseline_processes = {}
         self.descendants = {}
         self.escaped = {}
+        self.control = None
+        self.control_audit = []
+        self.last_enforced_observed_at = None
+        self.root = None
+        self.rules = None
+        self.active_filter_tree = None
+        self.baseline_filter_tree = None
+        self.baseline_translation_tree = None
+        self.anchor_inventory = None
+        self.initial_anchor_inventory = None
 
     def command(self, argv, timeout=10, check=True, combined=False):
         result = subprocess.run(argv, env=self.environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -74,6 +88,11 @@ class Lease:
     def record(self, name, content):
         path = self.folder / name
         data = json.dumps(content, sort_keys=True).encode() + b"\n"
+        capsule = capsule_info()
+        require(capsule is not None, "root observations require the protected capsule record store")
+        private = Path(capsule["directory"]) / "root-records" / name
+        private.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_write(private, data)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "wb") as file:
             file.write(data)
@@ -90,10 +109,17 @@ class Lease:
         self.folder_verified = True
         self.authorization = verify_trusted_launch(self.launch_context, self.launch_sha256, self.run_id, consume=True)
         self.record("runner-authorized.json", self.authorization)
-        request = json.loads(regular(str(self.folder / "lease-request.json"), 32_768))
-        require(set(request) == {"runID", "controlPIDs"} and request["runID"] == self.run_id, "exact lease request required")
+        request_raw = regular(str(self.folder / "lease-request.json"), 32_768)
+        request = json.loads(request_raw)
+        require(set(request) == {"runID", "controlPIDs", "controlPulsePath"} and request["runID"] == self.run_id, "exact lease request required")
+        capsule = capsule_info()
+        require(capsule is not None, "root lease must execute only its verified immutable private capsule")
+        _, root_witness_sha = root_launch_witness(self.authorization, os.getpid())
         self.parent_identity = identity(self.owner_pid, self.command)
         require(self.parent_identity["uid"] == self.uid, "lease owner identity mismatch")
+        self.control = RootControl(self.owner_pid, request["controlPIDs"], request["controlPulsePath"], self.uid, self.authorization, root_witness_sha,
+                                   digest(request_raw), str(self.folder))
+        self.record("control-prepared.json", {"controlRuntime": self.control.runtime, "controlRuntimeSHA256": self.control.runtime_sha256})
         directory = self.home / "Library/Developer/CoreSimulator/Devices"
         self.prior_simulators = {path.name.upper() for path in directory.glob("*") if re.fullmatch(r"[A-Fa-f0-9-]{36}", path.name)}
         info = self.pf("-s", "info")
@@ -106,52 +132,79 @@ class Lease:
         reject_unreviewed_tree(self.baseline_translation_tree, translation=True)
         self.command(["/usr/bin/sudo", "-n", "-H", "-u", "#" + str(self.uid), "/usr/bin/xcrun", "simctl", "list", "devices", "--json"], timeout=30)
         self.baseline_processes = self.snapshot()
-        raw = self.command(["/usr/sbin/lsof", "-nP", "-a", "-p", ",".join(map(str, request["controlPIDs"])), "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"])
-        self.flows = controller_flows(raw, request["controlPIDs"])
-        require(all(ipaddress.ip_address(flow["remoteIP"]).version == 4 for flow in self.flows),
-                "IPv6 controller transport needs an explicitly verified neighbor-discovery preservation policy; refusing an unsafe global change")
-        require(all(flow["remotePort"] not in {53, 853} for flow in self.flows), "resolver connections cannot be controller exceptions")
         states = self.pf("-ss")
-        require_no_unowned_states(states, self.flows)
+        require_no_unowned_states(states, [])
         require(not states.strip(), "disabled baseline unexpectedly has PF state; preserve it and refuse this lane")
-        self.anchor, rules = plan_rules(self.run_id, self.flows)
+        self.anchor, rules = plan_no_ip_rules(self.run_id)
         self.initial_anchor_inventory = self.pf("-a", "com.apple", "-s", "Anchors")
         require(self.anchor.split("/")[-1] not in [line.strip().split("/")[-1] for line in self.initial_anchor_inventory.splitlines()],
                 "run anchor namespace already exists; no preexisting anchor may be adopted")
         require(not self.pf("-a", self.anchor, "-sr").strip(), "run anchor already exists")
-        path = self.folder / "owned.pf"
+        path = Path(capsule["directory"]) / "owned.pf"
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as file:
             file.write(rules)
-        self.pf("-n", "-a", self.anchor, "-f", str(path))
+            file.flush()
+            os.fchmod(file.fileno(), 0o400)
+            os.fsync(file.fileno())
+        self.rules = self.pf("-n", "-v", "-a", self.anchor, "-f", str(path))
+        require(bool(self.rules.strip()), "canonical dry-run rule output missing; never adopt a post-load rule snapshot")
         require(time.monotonic() + 30 < self.deadline, "insufficient bounded lease time remains before mutation")
+        self.check_control()
         available = self.command(["/sbin/ifconfig", "-l"]).split()
         self.initial_pflog_exists = "pflog0" in available
         if "pflog0" not in available:
+            self.pflog_create_attempted = True
             self.command(["/sbin/ifconfig", "pflog0", "create"])
             self.owns_pflog = True
+        self.verify_unowned_baseline()
         self.owns_anchor = True
         self.pf("-a", self.anchor, "-f", str(path))
-        self.anchor_inventory = self.pf("-a", "com.apple", "-s", "Anchors")
-        children = [line.strip().split("/")[-1] for line in self.anchor_inventory.splitlines() if line.strip()]
-        require(self.anchor.split("/")[-1] in children and max(children) == self.anchor.split("/")[-1],
-                "run anchor is not the final child under the existing wildcard hook")
+        self.active_filter_tree, self.anchor_inventory = self.verify_owned_insertion(enabled=False)
         self.enable_attempted = True
         output = self.pf("-E", combined=True)
         match = re.search(r"Token\s*:\s*(\d+)", output)
         require(match is not None, "PF enable token missing: retain isolation for administrative cleanup")
         self.token = match.group(1)
-        self.rules = self.pf("-a", self.anchor, "-sr")
-        self.active_filter_tree = self.pf("-a", "*", "-sr")
+        tree, inventory = self.verify_owned_insertion(enabled=True)
+        require(tree == self.active_filter_tree and inventory == self.anchor_inventory, "unowned policy changed across enable")
         require("Enabled" in self.pf("-s", "info"), "kernel PF did not enable")
+        self.last_enforced_observed_at = int(time.time() * 1000)
+        self.check_control()
         self.record("lease-ready.json", {"runID": self.run_id, "ownerPID": self.owner_pid, "ownerIdentity": self.parent_identity,
                     "leasePID": os.getpid(), "leaseIdentity": identity(os.getpid(), self.command), "lifetimeSeconds": self.seconds,
                     "leaseExpiresAt": int(time.time() * 1000 + max(0, self.deadline - time.monotonic()) * 1000),
-                    "runnerAuthorization": self.authorization, "launchContext": self.launch_context, "launchContextSHA256": self.launch_sha256,
-                    "anchor": self.anchor, "activeRules": self.rules, "rootRules": self.root, "controllerFlows": self.flows,
+                    "runnerAuthorization": self.authorization, "launchContext": capsule["info"]["originalContextPath"],
+                    "rootAuthorityContextPath": self.launch_context, "launchContextSHA256": self.launch_sha256,
+                    "anchor": self.anchor, "activeRules": self.rules, "rootRules": self.root, "controllerFlows": [],
+                    "leaseProgram": str(Path(__file__).resolve()), "rootCapsule": capsule,
+                    "controlRuntime": self.control.runtime, "controlRuntimeSHA256": self.control.runtime_sha256,
                     "activeFilterTree": self.active_filter_tree, "baselineTranslationTree": self.baseline_translation_tree,
                     "initialPFInfo": info, "initialStates": states, "preexistingSimulatorUDIDs": sorted(self.prior_simulators),
                     "recordedAt": int(time.time() * 1000), "audit": self.audit[:]})
+
+    def verify_unowned_baseline(self):
+        require(self.pf("-sr") == self.root and self.pf("-a", "*", "-sr") == self.baseline_filter_tree and
+                self.pf("-a", "*", "-sn") == self.baseline_translation_tree and not self.pf("-ss").strip() and
+                self.pf("-a", "com.apple", "-s", "Anchors") == self.initial_anchor_inventory and "Disabled" in self.pf("-s", "info"),
+                "unowned root/tree/translation/state/inventory changed immediately before load")
+
+    def verify_owned_insertion(self, enabled):
+        require(self.pf("-sr") == self.root and self.pf("-a", "*", "-sn") == self.baseline_translation_tree and
+                not self.pf("-ss").strip() and ("Enabled" if enabled else "Disabled") in self.pf("-s", "info") and
+                self.pf("-a", self.anchor, "-sr").strip() == self.rules.strip(), "owned load/enable changed an unowned baseline or differs from canonical dry-run rules")
+        tree = self.pf("-a", "*", "-sr")
+        inventory = self.pf("-a", "com.apple", "-s", "Anchors")
+        verify_owned_tree(self.baseline_filter_tree, tree, self.anchor, self.rules)
+        verify_anchor_insertion(self.initial_anchor_inventory, inventory, self.anchor)
+        return tree, inventory
+
+    def check_control(self):
+        observed = self.control.check()
+        self.control_audit.append({"checkedAt": int(time.time() * 1000), "sequence": observed["localLivenessPulse"]["sequence"],
+                                   "pulseObservedAt": observed["localLivenessPulse"]["observedAt"],
+                                   "observationSHA256": digest(json.dumps(observed["observation"], sort_keys=True).encode())})
+        self.control_audit = self.control_audit[-100:]
 
     def register_jobs(self):
         for path in (self.folder / "jobs").glob("*.json"):
@@ -214,11 +267,17 @@ class Lease:
     def cleanup(self):
         if not self.folder_verified:
             return
-        if not (self.owns_anchor or self.enable_attempted or self.owns_pflog or self.groups or self.device):
+        if not (self.owns_anchor or self.enable_attempted or self.owns_pflog or getattr(self, "pflog_create_attempted", False) or self.groups or self.device):
             self.record("lease-cleanup.json", {"runID": self.run_id, "reason": self.reason, "failures": [], "isolationRetained": False,
-                        "registeredGroups": [], "simulatorUDID": None, "restoration": {"noOwnedMutationAttempted": True}, "audit": self.audit[-100:]})
+                        "registeredGroups": [], "simulatorUDID": None, "restoration": {"noOwnedMutationAttempted": True},
+                        "recordedAt": int(time.time() * 1000), "audit": self.audit[-100:]})
             return
         failures = []
+        run_failures = []
+        if getattr(self, "pflog_create_attempted", False) and not self.owns_pflog:
+            failures.append("PFLOG create outcome/ownership unproven; never adopt or destroy an unowned interface")
+        release_started = None
+        active_policy_verified = False
         restoration = {"mutationStarted": self.owns_anchor or self.enable_attempted or self.owns_pflog}
         snapshot = None
         try:
@@ -277,8 +336,43 @@ class Lease:
             failures.append("all run-owned/escaped descendant termination could not be proven")
         if self.enable_attempted and self.token is None:
             failures.append("PF enable reference token unavailable; never force-disable host PF")
+        try:
+            require(self.root is not None and self.baseline_translation_tree is not None, "pre-release baseline was never fully observed")
+            restoration["beforeReleaseRootRules"] = self.pf("-sr")
+            restoration["beforeReleaseFilterTree"] = self.pf("-a", "*", "-sr")
+            restoration["beforeReleaseTranslationTree"] = self.pf("-a", "*", "-sn")
+            restoration["beforeReleaseStates"] = self.pf("-ss")
+            restoration["beforeReleasePFInfo"] = self.pf("-s", "info")
+            require(restoration["beforeReleaseRootRules"] == self.root and
+                    restoration["beforeReleaseTranslationTree"] == self.baseline_translation_tree and not restoration["beforeReleaseStates"].strip(),
+                    "root/translation/state baseline changed before release")
+            if self.owns_anchor or self.enable_attempted:
+                require(self.rules is not None and self.active_filter_tree is not None and self.anchor_inventory is not None and self.token is not None,
+                        "partial load/enable lacks a fully observed active baseline; retain owned resources")
+                restoration["beforeReleaseOwnedRules"] = self.pf("-a", self.anchor, "-sr")
+                restoration["beforeReleaseAnchorInventory"] = self.pf("-a", "com.apple", "-s", "Anchors")
+                require(restoration["beforeReleaseOwnedRules"] == self.rules and restoration["beforeReleaseFilterTree"] == self.active_filter_tree and
+                        restoration["beforeReleaseAnchorInventory"] == self.anchor_inventory and "Enabled" in restoration["beforeReleasePFInfo"],
+                        "active filtering/anchor ordering/enable state changed before release")
+                verify_owned_tree(self.baseline_filter_tree, restoration["beforeReleaseFilterTree"], self.anchor, self.rules)
+                verify_anchor_insertion(self.initial_anchor_inventory, restoration["beforeReleaseAnchorInventory"], self.anchor)
+                self.last_enforced_observed_at = int(time.time() * 1000)
+                active_policy_verified = True
+            else:
+                require(restoration["beforeReleaseFilterTree"] == self.baseline_filter_tree and "Disabled" in restoration["beforeReleasePFInfo"],
+                        "PFLOG-only cleanup baseline changed")
+        except Exception as error:
+            failures.append("pre-release owned-state verification failed: " + str(error))
+        if getattr(self, "control", None) is not None:
+            try:
+                self.check_control()
+                restoration["finalControlCheck"] = self.control_audit[-1]
+            except Exception as error:
+                run_failures.append("final control continuity unproven: " + str(error))
         if not failures:
             try:
+                if self.owns_anchor or self.token:
+                    release_started = int(time.time() * 1000)
                 if self.owns_anchor:
                     self.pf("-a", self.anchor, "-F", "rules")
                     restoration["ownedRulesAfterFlush"] = self.pf("-a", self.anchor, "-sr")
@@ -293,8 +387,11 @@ class Lease:
                 restoration["rootRulesAfterRelease"] = self.pf("-sr")
                 restoration["statesAfterRelease"] = self.pf("-ss")
                 restoration["filterTreeAfterRelease"] = self.pf("-a", "*", "-sr")
+                restoration["translationTreeAfterRelease"] = self.pf("-a", "*", "-sn")
                 require(re.search(r"Status:\s*Disabled", restoration["actualPFInfoAfterRelease"]) and
-                        restoration["rootRulesAfterRelease"] == self.root and not restoration["statesAfterRelease"].strip(),
+                        restoration["rootRulesAfterRelease"] == self.root and not restoration["statesAfterRelease"].strip() and
+                        restoration["translationTreeAfterRelease"] == self.baseline_translation_tree and
+                        parse_pf_tree(restoration["filterTreeAfterRelease"]) == parse_pf_tree(self.baseline_filter_tree),
                         "actual disabled/empty-state baseline not restored; never force-disable another reference")
                 reject_unreviewed_tree(restoration["filterTreeAfterRelease"])
                 if self.owns_pflog:
@@ -302,6 +399,12 @@ class Lease:
                 restoration["pflogPresentAfterCleanup"] = "pflog0" in self.command(["/sbin/ifconfig", "-l"]).split()
                 require(restoration["pflogPresentAfterCleanup"] == self.initial_pflog_exists,
                         "actual PFLOG ownership/baseline not restored")
+                if getattr(self, "control", None) is not None:
+                    try:
+                        self.check_control()
+                        restoration["afterRestoreControlCheck"] = self.control_audit[-1]
+                    except Exception as error:
+                        run_failures.append("post-restore control continuity unproven: " + str(error))
             except Exception as error:
                 failures.append("owned-state restoration query failed: " + str(error))
         isolation_active = False if not self.owns_anchor else None
@@ -309,13 +412,22 @@ class Lease:
             try:
                 restoration["actualOwnedRulesAtExit"] = self.pf("-a", self.anchor, "-sr")
                 restoration["actualPFInfoAtExit"] = self.pf("-s", "info")
-                isolation_active = bool(restoration["actualOwnedRulesAtExit"].strip()) and "Enabled" in restoration["actualPFInfoAtExit"]
+                owned_active = bool(restoration["actualOwnedRulesAtExit"].strip()) and "Enabled" in restoration["actualPFInfoAtExit"]
+                restoration["ownedRulesPresentAndPFEnabledAtExit"] = owned_active
+                isolation_active = False if not owned_active else (True if active_policy_verified and restoration["actualOwnedRulesAtExit"] == self.rules else None)
+                if isolation_active is True:
+                    self.last_enforced_observed_at = int(time.time() * 1000)
             except Exception:
                 failures.append("final isolation state could not be observed")
-        self.record("lease-cleanup.json", {"runID": self.run_id, "reason": self.reason, "failures": failures,
+        self.record("lease-cleanup.json", {"runID": self.run_id, "reason": self.reason, "failures": [*failures, *run_failures],
+                    "resourceRestorationFailures": failures, "runEvidenceFailures": run_failures,
                     "isolationRetained": isolation_active, "registeredGroups": list(self.groups), "simulatorUDID": self.device,
-                    "restoration": restoration, "ownedEnableReference": self.token, "audit": self.audit[-100:]})
-        require(not failures, "lease retained isolation or restoration is unproven; administrative cleanup required")
+                    "restoration": restoration, "ownedEnableReference": self.token, "audit": self.audit[-100:],
+                    "recordedAt": int(time.time() * 1000), "enforcementLastObservedAt": getattr(self, "last_enforced_observed_at", None),
+                    "controlAudit": getattr(self, "control_audit", []),
+                    **({"enforcementReleaseStartedAt": release_started} if release_started is not None else {})})
+        require(not failures, "lease retained isolation or restoration is unproven; inspect actual remaining state")
+        require(not run_failures, "owned resources restored but the run failed its independent continuity/evidence checks")
 
     def run(self):
         require(30 <= self.seconds <= 3600, "bounded independent lease lifetime required")
@@ -348,11 +460,15 @@ class Lease:
                     self.reason = "owner-requested-stop"
                     return
                 if time.monotonic() - checked >= 2:
+                    authorization = verify_trusted_launch(self.launch_context, self.launch_sha256, self.run_id)
+                    require(authorization["chainSHA256"] == self.authorization["chainSHA256"], "current original/private source or boot seal changed")
+                    self.check_control()
                     require(self.pf("-sr") == self.root and self.pf("-a", self.anchor, "-sr") == self.rules and "Enabled" in self.pf("-s", "info"),
                             "kernel isolation rules changed during lease")
                     require(self.pf("-a", "com.apple", "-s", "Anchors") == self.anchor_inventory and self.pf("-a", "*", "-sr") == self.active_filter_tree and
                             self.pf("-a", "*", "-sn") == self.baseline_translation_tree, "PF nested filtering/translation or anchor ordering changed")
                     require(not self.pf("-ss").strip(), "unexpected state could bypass the stateless global-deny rules")
+                    self.last_enforced_observed_at = int(time.time() * 1000)
                     checked = time.monotonic()
                 time.sleep(0.1)
             raise RuntimeError("bounded lease expired")
