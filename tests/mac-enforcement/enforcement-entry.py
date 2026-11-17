@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import pathlib
+import pwd
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,12 @@ def emit(name, value):
 
 def run(argv, environment, **options):
     return subprocess.run(argv, env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30, **options)
+
+
+def build_environment(scratch):
+    user = pwd.getpwuid(os.getuid())
+    return {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin", "HOME": user.pw_dir,
+            "USER": user.pw_name, "LOGNAME": user.pw_name, "TMPDIR": str(scratch), "LANG": "en_US.UTF-8"}
 
 
 def main():
@@ -47,7 +54,7 @@ def main():
 
     verify_source()
     scratch = pathlib.Path(tempfile.mkdtemp(prefix="calledit-enforcement-")).resolve()
-    environment = {"PATH": os.environ["PATH"], "HOME": str(pathlib.Path.home()), "TMPDIR": str(scratch), "LANG": "en_US.UTF-8"}
+    environment = build_environment(scratch)
     native = scratch / "native"
     shutil.copytree(root / "native-imessage", native)
     with (scratch / "compile.log").open("w") as log:

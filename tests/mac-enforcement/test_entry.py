@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 
 SOURCE = pathlib.Path(__file__).with_name("enforcement-entry.py")
@@ -15,6 +16,15 @@ SPEC.loader.exec_module(ENTRY)
 
 
 class FakeArchiveEntryDesignTests(unittest.TestCase):
+    def test_OPERATOR_ENV_01_derives_build_username_without_inheriting_credentials(self):
+        user = SimpleNamespace(pw_name="SYNTHETIC_RUNNER", pw_dir="/synthetic/home")
+        with patch.object(ENTRY.pwd, "getpwuid", return_value=user), patch.dict(ENTRY.os.environ, {"ANTHROPIC_API_KEY": "FAKE_SECRET_MUST_NOT_LEAK", "USER": "UNTRUSTED_NAME"}):
+            environment = ENTRY.build_environment(pathlib.Path("/synthetic/tmp"))
+        self.assertEqual(environment["USER"], "SYNTHETIC_RUNNER")
+        self.assertEqual(environment["LOGNAME"], "SYNTHETIC_RUNNER")
+        self.assertEqual(environment["HOME"], "/synthetic/home")
+        self.assertEqual(set(environment), {"PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG"})
+
     def exercise(self, manifest, nonce="FAKE_NONCE", supplied_sha=None, sealed=b"original"):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary).resolve()
