@@ -61,7 +61,7 @@ export async function isBlocked(ctx: QueryCtx, first: Id<"v0Accounts">, second: 
 }
 
 export async function canReadBet(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accounts">) {
-  if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt <= bet.cutoffAt) return false;
+  if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt < bet.cutoffAt) return false;
   const member = await activeMember(ctx, bet.groupId, accountId);
   return !!member && (member.joinedAt < bet.createdAt || (member.joinedAt === bet.createdAt && member._creationTime < bet._creationTime))
     && !(await isBlocked(ctx, accountId, bet.creatorId))
@@ -105,7 +105,7 @@ export async function once<T>(ctx: MutationCtx, accountId: Id<"v0Accounts">, sco
   return result;
 }
 
-export const policyStatus = { status: "pending" as const, version: approvedPolicy.version, approved: approvedPolicy, missing: ["streaks", "reward_rounding", "cutoff_limits", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"] };
+export const policyStatus = { status: "pending" as const, version: approvedPolicy.version, approved: approvedPolicy, missing: ["streaks", "reward_rounding", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"] };
 
 export function legacyUnavailable(): never {
   return fail("NOT_AVAILABLE", "This app version is no longer supported. Update Called It and sign in by phone.");

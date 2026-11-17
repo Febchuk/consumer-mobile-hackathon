@@ -2,11 +2,13 @@ import type { Doc } from "./_generated/dataModel";
 import type { BetState } from "./v0Contract";
 
 export const approvedPolicy = {
-  version: "v0-policy.1",
+  version: "v0-policy.2",
   economics: "reward_only",
   confidenceMin: 0.01,
   confidenceMax: 1,
   confidencePointScale: 100,
+  pickLock: "final_confirmation",
+  pickAdmissionEnd: "reveal",
   defaultRevealHour: 20,
   challengeDurationMs: 60 * 60_000,
   unansweredDurationMs: 24 * 60 * 60_000,
@@ -24,8 +26,7 @@ export function challengeDeadlineFor(bet: Doc<"v0Bets">) {
 export function stateAt(bet: Doc<"v0Bets">, now: number): BetState {
   if (bet.state === "voided" || bet.state === "finalized" || bet.state === "provisional") return bet.state;
   if (now >= answerDeadlineFor(bet)) return "voided";
-  if (now < bet.cutoffAt) return "open";
-  if (now < bet.revealAt) return "locked";
+  if (now < bet.revealAt) return "open";
   return "revealed";
 }
 
