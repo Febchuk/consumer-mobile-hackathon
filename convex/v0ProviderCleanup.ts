@@ -13,7 +13,7 @@ export const maxCleanupAttempts = 5;
 export const referencesPerAttempt = 8;
 const batchSize = 5;
 const claimRef = makeFunctionReference<"mutation", Record<string, never>, CleanupLease[]>("v0ProviderCleanup:claim");
-const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; rejected: boolean; interrupted: boolean }, null>("v0ProviderCleanup:record");
+const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; refused: string[]; interrupted: boolean }, null>("v0ProviderCleanup:record");
 export const runProviderCleanup = makeFunctionReference<"action", Record<string, never>, { claimed: number }>("v0ProviderCleanup:run");
 
 export function cleanupRetryDelayMs(attempt: number) {
@@ -92,17 +92,17 @@ export const claim = internalMutation({
 });
 
 export const record = internalMutation({
-  args: { id: v.id("v0ProviderCleanup"), attempt: v.number(), removed: v.array(v.string()), rejected: v.boolean(), interrupted: v.boolean() },
-  handler: async (ctx, { id, attempt, removed, rejected, interrupted }) => {
+  args: { id: v.id("v0ProviderCleanup"), attempt: v.number(), removed: v.array(v.string()), refused: v.array(v.string()), interrupted: v.boolean() },
+  handler: async (ctx, { id, attempt, removed, refused, interrupted }) => {
     const row = await ctx.db.get(id);
     if (!row || row.state !== "pending" || row.attempts !== attempt) return null;
-    const references = row.references.filter((reference) => !removed.includes(reference));
-    if (references.length && !rejected && !interrupted) {
-      await ctx.db.patch(id, { references, attempts: attempt - 1, availableAt: Date.now() });
-      return null;
-    }
-    const state = !references.length ? "complete" : rejected || attempt >= maxCleanupAttempts ? "manual_required" : "pending";
-    await ctx.db.patch(id, { references, state });
+    const remaining = row.references.filter((reference) => !removed.includes(reference));
+    const kept = remaining.filter((reference) => refused.includes(reference));
+    const references = [...remaining.filter((reference) => !refused.includes(reference)), ...kept];
+    if (!references.length) await ctx.db.patch(id, { references, state: "complete" });
+    else if (kept.length === references.length) await ctx.db.patch(id, { references, state: "manual_required" });
+    else if (removed.length && !interrupted) await ctx.db.patch(id, { references, attempts: attempt - 1, availableAt: Date.now() });
+    else await ctx.db.patch(id, { references, state: attempt >= maxCleanupAttempts ? "manual_required" : "pending" });
     return null;
   },
 });
@@ -115,18 +115,18 @@ export const run = internalAction({
     const leases = await ctx.runMutation(claimRef, {});
     for (const lease of leases) {
       const removed: string[] = [];
-      let rejected = false;
+      const refused: string[] = [];
       let interrupted = false;
       for (const reference of lease.references) {
         const outcome = await removeVerification(config, reference);
         if (outcome === "removed") removed.push(reference);
-        else if (outcome === "rejected") rejected = true;
+        else if (outcome === "rejected") refused.push(reference);
         else {
           interrupted = true;
           break;
         }
       }
-      await ctx.runMutation(recordRef, { id: lease.id, attempt: lease.attempt, removed, rejected, interrupted });
+      await ctx.runMutation(recordRef, { id: lease.id, attempt: lease.attempt, removed, refused, interrupted });
     }
     return { claimed: leases.length };
   },

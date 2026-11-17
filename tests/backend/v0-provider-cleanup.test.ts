@@ -22,7 +22,7 @@ const aliasSid = sid("3");
 const friendSid = sid("4");
 const syntheticAuthToken = "d".repeat(32);
 const config = { accountSid: syntheticAccountSid, authToken: syntheticAuthToken, serviceSid: syntheticServiceSid };
-const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; rejected: boolean; interrupted: boolean }, null>("v0ProviderCleanup:record");
+const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; refused: string[]; interrupted: boolean }, null>("v0ProviderCleanup:record");
 
 async function snapshot(f: Fixture) {
   return await f.t.run(async (ctx) => {
@@ -246,10 +246,54 @@ describe("J8.3 provider cleanup worker", () => {
     expect(await cleanupRows(f)).toMatchObject([{ state: "complete", references: [] }]);
   });
 
+  it("[J8.3.cleanup.refused-does-not-strand] keeps working through the rest of a long list after one reference is refused", async () => {
+    const provider = fakeProvider();
+    const f = await v0Fixture();
+    const many = Array.from({ length: referencesPerAttempt * 2 + 3 }, (_, index) => `VE${index.toString(16).padStart(32, "a")}`);
+    await f.t.run(async (ctx) => {
+      const digest = await phoneHash(f.actors.subject.phone);
+      for (const [index, providerId] of many.entries()) await ctx.db.insert("v0OtpAttempts", { phoneHash: digest, requestId: `${f.runId}_otp_${index}`, providerId, createdAt: T0 - 30_000, expiresAt: T0 + 570_000, consumedAt: T0 - 10_000, attempts: 1 });
+    });
+    await remove(f);
+    const others = many.filter((reference) => reference !== many[2]);
+    provider.reply({ status: 404 }, { status: 404 }, { status: 400 });
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(await cleanupRows(f)).toMatchObject([{ state: "pending", attempts: 0, references: [...many.slice(referencesPerAttempt), many[2]] }]);
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(await cleanupRows(f)).toMatchObject([{ state: "pending", attempts: 0, references: [...many.slice(referencesPerAttempt * 2), many[2]] }]);
+    provider.reply({ status: 404 }, { status: 404 }, { status: 404 }, { status: 400 });
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(await cleanupRows(f)).toMatchObject([{ state: "manual_required", references: [many[2]] }]);
+    expect(provider.calls.filter((reference) => reference !== many[2]).sort()).toEqual([...others].sort());
+    expect(provider.calls.filter((reference) => reference === many[2])).toHaveLength(2);
+    expect(await work(f)).toEqual({ claimed: 0 });
+  });
+
+  it("[J8.3.cleanup.refused-only-slices] stops after the attempt limit when whole slices are refused", async () => {
+    const provider = fakeProvider();
+    const f = await v0Fixture();
+    const many = Array.from({ length: referencesPerAttempt * (maxCleanupAttempts + 2) }, (_, index) => `VE${index.toString(16).padStart(32, "b")}`);
+    await f.t.run(async (ctx) => {
+      const digest = await phoneHash(f.actors.subject.phone);
+      for (const [index, providerId] of many.entries()) await ctx.db.insert("v0OtpAttempts", { phoneHash: digest, requestId: `${f.runId}_otp_${index}`, providerId, createdAt: T0 - 30_000, expiresAt: T0 + 570_000, consumedAt: T0 - 10_000, attempts: 1 });
+    });
+    await remove(f);
+    for (let attempt = 1; attempt <= maxCleanupAttempts; attempt++) {
+      provider.reply(...Array.from({ length: referencesPerAttempt }, () => ({ status: 400 })));
+      expect(await work(f)).toEqual({ claimed: 1 });
+      vi.setSystemTime((await cleanupRows(f))[0].availableAt);
+    }
+    expect(await cleanupRows(f)).toMatchObject([{ state: "manual_required", attempts: maxCleanupAttempts }]);
+    expect((await cleanupRows(f))[0].references).toHaveLength(many.length);
+    vi.setSystemTime(Date.now() + 30 * 86_400_000);
+    expect(await work(f)).toEqual({ claimed: 0 });
+    expect(provider.calls).toHaveLength(referencesPerAttempt * maxCleanupAttempts);
+  });
+
   it("[J8.3.cleanup.stale-result] ignores a result reported for an attempt that is no longer current", async () => {
     const { f } = await deleted();
     const row = (await cleanupRows(f))[0];
-    await f.t.mutation(recordRef, { id: row._id, attempt: 1, removed: row.references, rejected: false, interrupted: false });
+    await f.t.mutation(recordRef, { id: row._id, attempt: 1, removed: row.references, refused: [], interrupted: false });
     expect(await cleanupRows(f)).toEqual([row]);
   });
 
