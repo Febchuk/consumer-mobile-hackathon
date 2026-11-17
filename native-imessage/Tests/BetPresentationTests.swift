@@ -35,10 +35,14 @@ final class BetPresentationTests: XCTestCase {
         }
     }
 
-    func testActualEncoderRejectsNonfiniteNormalizedValuesBeforeTransport() {
-        for value in [Double.nan, Double.infinity, -Double.infinity] {
+    func testActualNonfiniteConfidenceKeepsConvexWireEncodingButCannotEnterControlRange() throws {
+        for (value, expected) in [(Double.nan, "AAAAAAAA+H8="), (Double.infinity, "AAAAAAAA8H8="), (-Double.infinity, "AAAAAAAA8P8=")] {
+            XCTAssertFalse(ConfidenceInput.range.contains(value), "[NATIVE-CONFIDENCE-11] nonfinite values cannot enter the actual confidence control")
             let arguments: [String: Any] = ["confidence": ConfidenceInput.normalized(value)]
-            XCTAssertThrowsError(try ConvexJSON.encode(arguments), "[NATIVE-CONFIDENCE-11]")
+            let encoded = try XCTUnwrap(try ConvexJSON.encode(arguments) as? [String: Any])
+            let confidence = try XCTUnwrap(encoded["confidence"] as? [String: String])
+            XCTAssertEqual(confidence, ["$float": expected], "[NATIVE-CONFIDENCE-12] canonical IEEE-754 little-endian wire value, not permission to place a pick")
+            XCTAssertTrue(JSONSerialization.isValidJSONObject(encoded), "[NATIVE-CONFIDENCE-13]")
         }
     }
 

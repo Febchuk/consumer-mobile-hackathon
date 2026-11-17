@@ -203,6 +203,14 @@ try {
     const state = await local.inspectFixture();
     assert.equal(state.picks, 0); assert.equal(state.ledger, 0); assert.equal(state.sessions, 4);
   });
+  for (const [name, confidence] of [["nan", NaN], ["infinity", Infinity], ["negative-infinity", -Infinity]]) {
+    await check(`QA-RUNTIME.real-nonfinite-confidence.${name}`, async () => {
+      const before = await local.inspectFixture();
+      await assert.rejects(client.mutation(makeFunctionReference("v0Bets:pick"), { token: sessions.friend.token, betId: fixture.betId, option: 0, confidence, requestId: randomUUID() }), (error) => error.data?.code === "INVALID_INPUT");
+      assert.deepEqual(await local.inspectFixture(), before);
+      assert.equal(before.picks, 0); assert.equal(before.ledger, 0);
+    });
+  }
   metadata.fixtureIdentity.exactRunSentinels = true;
   metadata.status = "passing-limited-real-handler-binding";
 } catch (error) {
