@@ -83,9 +83,6 @@ final class AppModel: ObservableObject {
             guard self.token == token, self.conversationKey == conversationKey, !Task.isCancelled else { return }
             me = result
             linkedRoomId = result.groups.contains(where: { $0.id == link?.groupId }) ? link?.groupId : nil
-            if let accountID = session?.accountID {
-                try ConversationLinks.set(linkedRoomId, for: conversationKey, accountID: accountID, configuration: Config.load())
-            }
             error = nil
         } catch {
             handle(error)
@@ -124,14 +121,13 @@ final class AppModel: ObservableObject {
     }
 
     func link(_ groupID: String) async {
-        guard let token, let conversationKey, let accountID = session?.accountID,
+        guard let token, let conversationKey,
               me?.groups.contains(where: { $0.id == groupID }) == true else { return }
         do {
             let _: Ignored? = try await API.mutation("v0Groups:linkConversation", [
                 "token": token, "groupId": groupID, "conversationKey": conversationKey, "requestId": UUID().uuidString,
             ])
             guard self.token == token, self.conversationKey == conversationKey else { return }
-            try ConversationLinks.set(groupID, for: conversationKey, accountID: accountID, configuration: Config.load())
             linkedRoomId = groupID
             if let pendingBet, pendingBet.groupId == groupID,
                let locator = try? locator(for: pendingBet.card) { screen = .bet(locator.value) }
@@ -141,13 +137,12 @@ final class AppModel: ObservableObject {
     }
 
     func unlink() async {
-        guard let token, let accountID = session?.accountID, let conversationKey else { return }
+        guard let token, let conversationKey else { return }
         do {
             let _: Ignored? = try await API.mutation("v0Groups:unlinkConversation", [
                 "token": token, "conversationKey": conversationKey, "requestId": UUID().uuidString,
             ])
             guard self.token == token, self.conversationKey == conversationKey else { return }
-            try ConversationLinks.set(nil, for: conversationKey, accountID: accountID, configuration: Config.load())
             linkedRoomId = nil
             pendingBet = nil
             sessions = [:]
