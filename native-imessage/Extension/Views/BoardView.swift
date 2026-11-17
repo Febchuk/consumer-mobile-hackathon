@@ -11,24 +11,24 @@ struct BoardView: View {
         Group {
             SheetHeader(leading: "Back", leadingAction: { model.home() }, title: board?.room.name ?? "Board")
             if let board {
-                Text("Today's standings").font(Night.question(28)).tracking(-0.6)
+                Text("Today's standings").font(Night.question(.largeTitle)).tracking(-0.6)
                 SectionTitle(text: "Leaderboard")
                 VStack(spacing: 8) {
                     ForEach(Array(board.rows.enumerated()), id: \.element.id) { index, row in
                         let you = row.id == model.me?.user._id
                         HStack(spacing: 12) {
-                            Text("\(index + 1)").font(Night.mono(15)).foregroundStyle(Theme.sub).frame(width: 20)
+                            Text("\(index + 1)").font(Night.mono(.subheadline)).foregroundStyle(Theme.sub).frame(width: 20)
                             Avatar(name: row.name, size: 32)
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack(spacing: 6) {
-                                    Text(row.name).font(.system(size: 17, weight: index == 0 || you ? .semibold : .regular))
-                                    if row.streak > 0 { Text("🔥\(row.streak)").font(Night.mono(12)) }
+                                    Text(row.name).font(.body.weight(index == 0 || you ? .semibold : .regular))
+                                    if row.streak > 0 { Text("🔥\(row.streak)").font(Night.mono(.caption)) }
                                 }
-                                Text("\(row.correct)/\(row.called) called").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                                Text("\(row.correct)/\(row.called) called").font(.footnote).foregroundStyle(Theme.sub)
                             }
                             Spacer()
                             Text(pts(row.points))
-                                .font(Night.mono(15))
+                                .font(Night.mono(.subheadline))
                                 .foregroundStyle(Night.lime)
                                 .contentTransition(.numericText())
                                 .animation(.snappy, value: row.points)

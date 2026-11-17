@@ -16,12 +16,12 @@ enum Night {
     static let muted = Color(hex: 0x8A968F)
     static let text = Color.white
 
-    static func mono(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+    static func mono(_ style: Font.TextStyle, _ weight: Font.Weight = .bold) -> Font {
+        .system(style, design: .monospaced, weight: weight)
     }
 
-    static func question(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .bold)
+    static func question(_ style: Font.TextStyle) -> Font {
+        .system(style, weight: .bold)
     }
 
     static func side(_ i: Int) -> Color { i == 0 ? lime : red }
@@ -75,12 +75,12 @@ struct PressBounce: ButtonStyle {
 struct MonoLabel: View {
     let text: String
     var color: Color = Night.muted
-    var size: CGFloat = 11
+    var style: Font.TextStyle = .caption2
 
     var body: some View {
         Text(text.uppercased())
-            .font(Night.mono(size, .semibold))
-            .tracking(size * 0.08)
+            .font(Night.mono(style, .semibold))
+            .tracking(0.9)
             .foregroundStyle(color)
             .lineLimit(1)
     }
@@ -113,10 +113,10 @@ struct OddsBar: View {
         let color = Night.side(index)
         let fraction = min(1, max(0, pct / 100))
         HStack {
-            Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(Night.text).lineLimit(1)
+            Text(label).font(.subheadline.weight(.semibold)).foregroundStyle(Night.text).lineLimit(1)
             Spacer(minLength: 8)
             Text("\(Int(pct.rounded()))%")
-                .font(Night.mono(15))
+                .font(Night.mono(.subheadline))
                 .foregroundStyle(color)
                 .contentTransition(.numericText())
                 .animation(.snappy, value: Int(pct.rounded()))
@@ -151,7 +151,7 @@ struct Avatar: View {
                     .font(.system(size: size * 0.45, weight: .semibold))
                     .foregroundStyle(.white)
             } else {
-                Text(emoji ?? "?").font(.system(size: size * 0.5))
+                Image(systemName: "person.fill").font(.system(size: size * 0.45)).foregroundStyle(.white)
             }
         }
         .frame(width: size, height: size)
@@ -198,23 +198,23 @@ struct SheetHeader: View {
     var body: some View {
         ZStack {
             Text(title)
-                .font(Night.mono(12))
+                .font(Night.mono(.caption))
                 .tracking(1)
                 .textCase(.uppercase)
                 .foregroundStyle(Night.text)
                 .lineLimit(1)
                 .padding(.horizontal, 80)
             HStack {
-                if let leading { Button(leading) { leadingAction?() }.font(.system(size: 17)).foregroundStyle(Theme.accent) }
+                if let leading { Button(leading) { leadingAction?() }.font(.body).foregroundStyle(Theme.accent) }
                 Spacer()
                 if let trailing {
                     if let trailingAction {
                         Button(trailing, action: trailingAction)
-                            .font(.system(size: 17, weight: trailingBold ? .semibold : .regular))
+                            .font(.body.weight(trailingBold ? .semibold : .regular))
                             .foregroundStyle(Theme.accent)
                     } else {
                         Text(trailing)
-                            .font(Night.mono(11, .semibold))
+                            .font(Night.mono(.caption2, .semibold))
                             .tracking(0.8)
                             .textCase(.uppercase)
                             .foregroundStyle(Theme.sub)
@@ -279,7 +279,7 @@ struct PrimaryButton: View {
                 Text(title).opacity(busy ? 0 : 1)
                 if busy { ProgressView().tint(.black) }
             }
-            .font(.system(size: 17, weight: .heavy))
+            .font(.system(.headline, weight: .heavy))
             .tracking(0.3)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(color))
@@ -298,7 +298,7 @@ struct SoftButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Night.card))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Night.line, lineWidth: 1))
@@ -323,7 +323,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(Night.mono(11, .semibold))
+            .font(Night.mono(.caption2, .semibold))
             .tracking(0.9)
             .foregroundStyle(Theme.sub)
             .padding(.leading, 16)
@@ -335,7 +335,7 @@ struct Footnote: View {
     let text: String
 
     var body: some View {
-        Text(text).font(.system(size: 13)).foregroundStyle(Theme.sub).padding(.horizontal, 16)
+        Text(text).font(.footnote).foregroundStyle(Theme.sub).padding(.horizontal, 16)
     }
 }
 
@@ -348,7 +348,7 @@ struct Chip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(Night.mono(14))
+                .font(Night.mono(.subheadline))
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
@@ -366,7 +366,7 @@ struct QuestionBubble: View {
 
     var body: some View {
         Text(text)
-            .font(Night.question(17))
+            .font(Night.question(.body))
             .tracking(-0.2)
             .foregroundStyle(Night.text)
             .padding(.horizontal, 14).padding(.vertical, 10)

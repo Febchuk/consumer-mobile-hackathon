@@ -79,7 +79,7 @@ struct NewBetView: View {
                                 Text("Line")
                                 Spacer()
                                 Text(String(format: "%.1f", line))
-                                    .font(Night.mono(17, .semibold))
+                                    .font(Night.mono(.body, .semibold))
                                     .foregroundStyle(Night.lime)
                                     .contentTransition(.numericText())
                                     .animation(.snappy, value: line)
@@ -90,7 +90,7 @@ struct NewBetView: View {
                     InsetRow { Text("Side A"); Spacer(); TextField("This", text: $optionA).multilineTextAlignment(.trailing) }
                     InsetRow { Text("Side B"); Spacer(); TextField("That", text: $optionB).multilineTextAlignment(.trailing) }
                 default:
-                    InsetRow { Text("Sides"); Spacer(); Text("Yes · No").font(Night.mono(14, .semibold)).foregroundStyle(Theme.sub) }
+                    InsetRow { Text("Sides"); Spacer(); Text("Yes · No").font(Night.mono(.subheadline, .semibold)).foregroundStyle(Theme.sub) }
                 }
                 InsetRow(last: true) {
                     DatePicker("Reveal", selection: $revealAt, displayedComponents: [.hourAndMinute, .date])
@@ -110,7 +110,7 @@ struct NewBetView: View {
                     Spacer()
                     if let points = room.members.first(where: { $0.id == me.user._id })?.points {
                         Text("\(pts(points)) left")
-                            .font(Night.mono(12, .medium))
+                            .font(Night.mono(.caption, .medium))
                             .foregroundStyle(Theme.sub)
                             .contentTransition(.numericText())
                             .animation(.snappy, value: points)
@@ -133,6 +133,7 @@ struct NewBetView: View {
                     guard !ready else { return }
                     ready = true
                     if let at = room.revealAt, at > nowMs() { revealAt = Date(timeIntervalSince1970: at / 1000) }
+                    if revealAt.timeIntervalSinceNow < 60 { revealAt = Date().addingTimeInterval(3600) }
                     await loadIdeas(room.id)
                 }
         }
@@ -147,8 +148,8 @@ struct NewBetView: View {
                     Button { apply(idea, friends: friends) } label: {
                         InsetRow(last: index == ideas.count - 1) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(idea.question).font(Night.question(15)).tracking(-0.2).multilineTextAlignment(.leading)
-                                if let why = idea.why { Text(why).font(.system(size: 13)).foregroundStyle(Theme.sub).multilineTextAlignment(.leading) }
+                                Text(idea.question).font(Night.question(.subheadline)).tracking(-0.2).multilineTextAlignment(.leading)
+                                if let why = idea.why { Text(why).font(.footnote).foregroundStyle(Theme.sub).multilineTextAlignment(.leading) }
                             }
                             Spacer()
                             Image(systemName: "plus.circle").foregroundStyle(Night.lime)
@@ -241,7 +242,7 @@ struct NewBetView: View {
             guard let betId: String = try await API.mutation("chat:createBet", args) else { return }
             let card: BetCard? = try? await API.query("ext:card", ["token": token, "betId": betId, "now": nowMs()])
             let subject = card?.subject ?? room.members.first(where: { $0.id == subjectId }).map { Person(_id: $0.id, name: $0.name, emoji: $0.emoji) }
-            let message = Cards.bet(roomId: room.id, betId: betId, subject: subject, revealAt: card?.revealAt ?? revealAt.timeIntervalSince1970 * 1000, bettors: card?.bettors ?? [], session: nil)
+            let message = Cards.bet(roomId: room.id, betId: betId, subject: subject, revealAt: card?.revealAt ?? revealAt.timeIntervalSince1970 * 1000, voters: Cards.voterNames(card), session: nil)
             error = nil
             model.screen = .bet(room: room.id, bet: betId)
             model.send(message)

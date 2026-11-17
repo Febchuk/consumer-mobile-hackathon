@@ -30,7 +30,10 @@ struct BetView: View {
     }
 
     private var noAccess: some View {
-        CardBox { Text("This bet is for another group").font(.headline) }
+        CardBox {
+            Text("This bet is for another group").font(.headline)
+            Button("Join with invite code") { model.screen = .link }
+        }
     }
 
     @ViewBuilder private func sealed(_ card: BetCard) -> some View {
@@ -39,10 +42,10 @@ struct BetView: View {
         SheetHeader(title: "About you", trailing: "Done", trailingBold: true) { model.home() }
         VStack(alignment: .leading, spacing: 6) {
             liveLine("Live · about you")
-            Text("Today's bet is about you").font(Night.question(28)).tracking(-0.6)
+            Text("Today's bet is about you").font(Night.question(.largeTitle)).tracking(-0.6)
             TimelineView(.periodic(from: .now, by: 1)) { t in
                 Text("Unlocks at \(clock(revealAt)) · in \(countdown(to: revealAt, from: t.date))")
-                    .font(Night.mono(12, .medium)).foregroundStyle(Theme.sub)
+                    .font(Night.mono(.caption, .medium)).foregroundStyle(Theme.sub)
             }
         }
         CardBox {
@@ -55,7 +58,7 @@ struct BetView: View {
                 Text((card.bettors?.count ?? 0) == 1 ? "1 friend bet" : "\(card.bettors?.count ?? 0) friends bet").font(.subheadline.weight(.semibold))
                 Spacer()
                 Text("\(pts(card.total ?? 0)) pts in")
-                    .font(Night.mono(13, .semibold)).foregroundStyle(Night.gold)
+                    .font(Night.mono(.footnote, .semibold)).foregroundStyle(Night.gold)
                     .contentTransition(.numericText())
                     .animation(.snappy, value: card.total ?? 0)
             }
@@ -74,7 +77,7 @@ struct BetView: View {
                         Avatar(name: p.name, size: 30)
                         Text(p.name)
                         Spacer()
-                        Text("\(pts(p.amount)) pts").font(Night.mono(14, .semibold)).foregroundStyle(Night.gold)
+                        Text("\(pts(p.amount)) pts").font(Night.mono(.subheadline, .semibold)).foregroundStyle(Night.gold)
                     }
                 }
             }
@@ -142,7 +145,7 @@ struct BetView: View {
                 }
             }
             Text("\(card.bettors?.count ?? 0) in · \(pts(total)) pts")
-                .font(Night.mono(11, .medium))
+                .font(Night.mono(.caption2, .medium))
                 .foregroundStyle(Theme.sub)
                 .contentTransition(.numericText())
                 .animation(.snappy, value: total)
@@ -164,14 +167,14 @@ struct BetView: View {
                                 .foregroundStyle(picked ? Night.lime : Night.line)
                         }
                         Text(options[i] + (card.status == "settled" && card.winningOption == i ? "  ✓ won" : ""))
-                            .font(Night.question(19))
+                            .font(Night.question(.title3))
                             .tracking(-0.3)
                             .foregroundStyle(Night.text)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                         Text("pays \(multiple(total: total, pool: pool))")
-                            .font(Night.mono(12, .medium))
+                            .font(Night.mono(.caption, .medium))
                             .foregroundStyle(Night.muted)
                             .contentTransition(.numericText())
                             .animation(.snappy, value: pool)
@@ -187,33 +190,37 @@ struct BetView: View {
                 .buttonStyle(PressBounce())
             }
         }
-        if open {
+        if open && points < 1 {
+            CardBox { Text("No points left in this group").font(.headline) }
+        } else if open {
             SectionTitle(text: "How sure are you")
             CardBox {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(pts(amount))
-                        .font(Night.mono(40))
+                        .font(Night.mono(.largeTitle))
                         .foregroundStyle(Night.gold)
                         .contentTransition(.numericText())
                         .animation(.snappy, value: amount)
-                    Text("pts").font(Night.mono(17, .semibold)).foregroundStyle(Theme.sub)
+                    Text("pts").font(Night.mono(.body, .semibold)).foregroundStyle(Theme.sub)
                     Spacer()
-                    Text("You have \(pts(points)) left")
-                        .font(Night.mono(12, .medium))
+                    Text("\(pts(points - amount)) left of \(pts(points))")
+                        .font(Night.mono(.caption, .medium))
                         .foregroundStyle(Theme.sub)
                         .contentTransition(.numericText())
+                        .animation(.snappy, value: amount)
                         .animation(.snappy, value: points)
                 }
-                if points > 10 {
-                    Slider(value: $amount, in: 10...points, step: 10).tint(Night.lime)
+                if points > 1 {
+                    Slider(value: $amount, in: 1...points, step: 1).tint(Night.lime).accessibilityIdentifier("stakeSlider")
                 }
                 HStack(spacing: 8) {
-                    ForEach([50.0, 100, 250], id: \.self) { v in
-                        Chip(title: pts(v), on: amount == v) { withAnimation(.snappy) { amount = min(v, points) } }
+                    ForEach([50.0, 100, 250].filter { $0 <= points }, id: \.self) { v in
+                        Chip(title: pts(v), on: amount == v) { withAnimation(.snappy) { amount = v } }
                     }
-                    Chip(title: "All in", on: points > 0 && amount == points) { withAnimation(.snappy) { amount = points } }
+                    Chip(title: "All in", on: amount == points) { withAnimation(.snappy) { amount = points } }
                 }
             }
+            .onChange(of: points) { _, p in amount = min(max(1, amount), max(1, p)) }
             HStack(spacing: 8) {
                 let people = (card.sides ?? []).flatMap { $0 }
                 AvatarStack(people: people.map { (name: $0.name, emoji: $0.emoji) }, size: 26)
@@ -221,7 +228,7 @@ struct BetView: View {
                 Spacer()
                 if let s = chosen {
                     Text("Win ≈ \(pts(win(amount, pool: pools[safe: s] ?? 0, total: total)))")
-                        .font(Night.mono(14))
+                        .font(Night.mono(.subheadline))
                         .foregroundStyle(Night.gold)
                         .contentTransition(.numericText())
                         .animation(.snappy, value: amount)
@@ -236,7 +243,7 @@ struct BetView: View {
             .opacity(chosen == nil || amount < 1 ? 0.5 : 1)
             Footnote(text: "\(name) won't see this bet until \(clock(card.revealAt ?? nowMs())).")
             SoftButton(title: "Send update") {
-                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, bettors: card.bettors ?? [], session: model.selectedSession))
+                model.send(Cards.bet(roomId: roomId, betId: betId, subject: card.subject, revealAt: card.revealAt, voters: Cards.voterNames(card), session: model.selectedSession))
             }
             Footnote(text: "The update card shows who it's about, the reveal time and who's in. Never the question.")
         } else {
@@ -247,7 +254,7 @@ struct BetView: View {
     @ViewBuilder private func verdict(_ card: BetCard) -> some View {
         let options = labels(card)
         SheetHeader(leading: "Close", leadingAction: { model.home() }, title: "Your bet for today")
-        Text("Your friends bet on whether…").font(Night.question(22)).tracking(-0.4)
+        Text("Your friends bet on whether…").font(Night.question(.title2)).tracking(-0.4)
         if card.status == "open" {
             RubToReveal(name: card.subject?.name ?? "you", uncovered: $uncovered) { asker(card) }
         } else {
@@ -256,7 +263,7 @@ struct BetView: View {
         if uncovered || card.status != "open" {
             PositionsBlock(card: card)
             if card.canDeclare == true {
-                Text("So... is it true?").font(Night.question(22)).tracking(-0.4).padding(.top, 6)
+                Text("So... is it true?").font(Night.question(.title2)).tracking(-0.4).padding(.top, 6)
                 HStack(spacing: 10) {
                     ForEach(0..<2, id: \.self) { i in
                         PrimaryButton(title: card.kind == "yesno" ? (i == 0 ? "Yeah, guilty" : "Nope, never") : options[i], color: Theme.verdict(i), busy: busy) {
@@ -309,7 +316,7 @@ struct BetView: View {
         do {
             let next: BetCard? = try await API.query("ext:card", ["token": token, "betId": betId, "now": nowMs()])
             if let next, next.status != "open" { uncovered = true }
-            if card == nil, let points = next?.points, points > 0 { amount = min(100, points) }
+            if let points = next?.points, card?.points != points { amount = max(1, min(card == nil ? 100 : amount, points.rounded(.down))) }
             card = next
             error = nil
         } catch {
@@ -347,13 +354,13 @@ struct PositionsBlock: View {
                 InsetRow(last: i == 1) {
                     VStack(alignment: .leading, spacing: 8) {
                         OddsBar(label: options[safe: i] ?? "", pct: card.pct?[safe: i] ?? 0, index: i)
-                        if people.isEmpty { Text("Nobody").font(Night.mono(12, .medium)).foregroundStyle(Theme.sub) }
+                        if people.isEmpty { Text("Nobody").font(Night.mono(.caption, .medium)).foregroundStyle(Theme.sub) }
                         ForEach(people, id: \.self) { p in
                             HStack(spacing: 8) {
                                 Avatar(name: p.name, size: 24)
                                 Text(p.me == true ? "You" : p.name).font(.subheadline)
                                 Spacer()
-                                Text("\(pts(p.amount)) pts").font(Night.mono(12, .semibold)).foregroundStyle(Night.gold)
+                                Text("\(pts(p.amount)) pts").font(Night.mono(.caption, .semibold)).foregroundStyle(Night.gold)
                             }
                         }
                     }
@@ -370,17 +377,17 @@ struct ResultBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if card.status == "refunded" {
-                Text("Vetoed").font(.system(size: 30, weight: .heavy)).tracking(-0.6).foregroundStyle(Night.lime)
-                Text("Everyone got their points back.").font(Night.mono(12, .medium)).foregroundStyle(Theme.sub)
+                Text("Vetoed").font(.system(.title, weight: .heavy)).tracking(-0.6).foregroundStyle(Night.lime)
+                Text("Everyone got their points back.").font(Night.mono(.caption, .medium)).foregroundStyle(Theme.sub)
             } else if let win = card.winningOption {
                 Text("It was \(card.options?[safe: win] ?? "")")
-                    .font(.system(size: 30, weight: .heavy))
+                    .font(.system(.title, weight: .heavy))
                     .tracking(-0.6)
                     .foregroundStyle(Night.lime)
                     .shadow(color: Night.lime.opacity(0.6), radius: 12)
                 if let net = myNet(win) {
                     Text((net >= 0 ? "+" : "−") + "\(pts(shown)) pts")
-                        .font(Night.mono(34))
+                        .font(Night.mono(.largeTitle))
                         .foregroundStyle(net >= 0 ? Night.gold : Night.red)
                         .contentTransition(.numericText())
                         .onAppear { withAnimation(.easeOut(duration: 1.2)) { shown = abs(net) } }
@@ -390,7 +397,7 @@ struct ResultBlock: View {
                     HStack {
                         Text(row.0)
                         Spacer()
-                        Text(row.1).font(Night.mono(14)).foregroundStyle(row.2 ? Night.gold : Night.red)
+                        Text(row.1).font(Night.mono(.subheadline)).foregroundStyle(row.2 ? Night.gold : Night.red)
                     }
                 }
             }

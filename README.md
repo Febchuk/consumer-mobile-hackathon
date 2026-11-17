@@ -29,13 +29,20 @@ All taken at 390 by 844 on the live site, in a test group with test users (names
 
 ## Native iMessage app
 
-`native-imessage/` is a real Messages extension (SwiftUI in an `MSMessagesAppViewController`, built with XcodeGen) that talks to the same Convex backend. You pair it once with a one-time code from the web app's group details ("Pair iMessage app"). The token lives only in the device Keychain. You then link the conversation to your group.
+`native-imessage/` is a real Messages extension (SwiftUI in an `MSMessagesAppViewController`, built with XcodeGen) that talks to the same Convex backend.
 
-- A friend writes a bet in the extension and inserts a neutral card into the conversation. The card shows who it's about, the reveal time and who's in, never the question. The friend taps Send, so nothing sends automatically.
-- Tapping the card opens a private view. Friends see the question and take a side. The person it's about sees invisible ink, a countdown, and who bet with the sides hidden. The server never sends them the question before the reveal.
-- After the reveal they rub the ink, see everyone's positions, call what happened, and can send a result card. The board shows standings and streaks and can send a top-3 card.
+- **Pair once.** The web app's group details show a one-time account pairing code ("Pair iMessage app"). It proves who you are, and the token lives only in the device Keychain.
+- **Link this chat.** Pick one of your Called It groups, or join one with a group invite code. The invite code is separate from the pairing code. If a new group is made for the chat, the extension explains that it's the chat's private scoreboard.
+- **Send a bet.** A friend writes a bet and inserts a card, then taps Send; nothing sends automatically. The card is an invisible-ink panel showing only the blue @name of the person it's about, "Bet about <name>", the reveal time, and the bettors' initials. The question and options are never on the card or in its URL, which holds only opaque ids.
+- **Open the bet.** Tapping the card opens the private bet view. Friends see the question and stake with a slider capped at their real balance in that group. The person it's about sees ink, a countdown, and who bet with sides hidden. The server never sends them the question before the reveal.
+- **Reveal.** Afterwards they rub the ink, see positions, and call it or veto. A result card and a top-3 leaderboard card can be sent.
 
-What has been verified: every flow above ran live against the backend in the iOS Simulator's Messages app, with two test accounts on two Simulators. The extension is installed on a physical iPhone and appears in the real Messages app drawer. Pairing on that phone and real message delivery between phones are the next things to check. Build and install steps are in [native-imessage/README.md](native-imessage/README.md).
+What has been verified:
+- **Simulator:** every flow above ran live against the backend in the iOS Simulator's Messages app, with two test accounts.
+- **Phones:** the extension is installed on two physical iPhones (Mikun's and Febe's) and opens from the Messages app drawer.
+- **Not yet confirmed:** delivery of a card between the two phones, and the subject-versus-friend view on real devices.
+
+Build and install steps are in [native-imessage/README.md](native-imessage/README.md).
 
 | Card sent in Messages | Friend takes a side | Sealed, about you | Call it after the reveal |
 | --- | --- | --- | --- |

@@ -53,7 +53,7 @@ struct InkBubble: View {
         ZStack(alignment: .topLeading) {
             InkNoise()
             Text("@\(name)")
-                .font(Night.mono(12))
+                .font(Night.mono(.caption))
                 .foregroundStyle(Night.lime)
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(Capsule().fill(Color.black.opacity(0.6)))
@@ -98,7 +98,7 @@ struct RubToReveal<Content: View>: View {
                     }
                     .overlay(alignment: .bottomTrailing) {
                         if strokes.isEmpty {
-                            Text("Rub to uncover").font(Night.mono(11, .medium)).foregroundStyle(Night.muted).padding(10)
+                            Text("Rub to uncover").font(Night.mono(.caption2, .medium)).foregroundStyle(Night.muted).padding(10)
                         }
                     }
                     .highPriorityGesture(
