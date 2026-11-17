@@ -2435,5 +2435,17 @@
     "CONFIRM.ineligible.subject",
     "CONFIRM.ineligible.alias",
     "CONFIRM.unconfirmed-capability"
+  ],
+  "J8.3.confirmed-initiation.B": [
+    "J8.3.initiation.owner-session-only",
+    "J8.3.initiation.request-id-required",
+    "J8.3.initiation.confirmed-and-queued",
+    "J8.3.initiation.unconfigured-manual"
+  ],
+  "J8.3.idempotent-delete.B": [
+    "J8.3.idempotent.repeat-request",
+    "J8.3.idempotent.cascade-rerun",
+    "J8.3.idempotent.worker-rerun",
+    "J8.3.idempotent.provider-already-removed"
   ]
 }
