@@ -42,6 +42,8 @@ export function officialBackendBinding(options: {
     await options.seedFreshFixture(manifest.runID, manifest.fixtureSetID);
     const dispatcher = createPublicDispatcher({ modules, allowlist: options.allowlist, invoke: async ({ kind, path, args, signal }) => {
       if (signal.aborted) throw new AdapterBlocked();
+      await options.verifyIsolation();
+      if (signal.aborted) throw new AdapterBlocked();
       let value: Value;
       if (kind === "query") value = await client.query(makeFunctionReference<"query">(path), args) as Value;
       else if (kind === "mutation") value = await client.mutation(makeFunctionReference<"mutation">(path), args, { skipQueue: true }) as Value;
