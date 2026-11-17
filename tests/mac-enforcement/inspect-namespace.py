@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -41,6 +42,8 @@ def main():
     nonce = str(uuid.UUID(args.nonce)).upper()
     if nonce != args.nonce or uuid.UUID(nonce).version != 4:
         raise RuntimeError("Unique canonical inspection nonce required")
+    if os.geteuid() == 0:
+        raise RuntimeError("Namespace observation entry must run as the nonroot build user")
     root = pathlib.Path(__file__).resolve().parents[2]
     spec = importlib.util.spec_from_file_location("operator_carrier", pathlib.Path(__file__).with_name("enforcement-entry.py"))
     carrier = importlib.util.module_from_spec(spec)

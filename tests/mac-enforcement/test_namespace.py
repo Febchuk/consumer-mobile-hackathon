@@ -13,6 +13,15 @@ SPEC.loader.exec_module(ENTRY)
 
 
 class ReadonlyNamespaceDesignTests(unittest.TestCase):
+    def test_NAMESPACE_00_root_entry_stops_before_carrier_import_scratch_or_queries(self):
+        with patch.object(sys, "argv", ["inspect", "--nonce", "A2222222-2222-4222-8222-222222222222"]), \
+                patch.object(ENTRY.os, "geteuid", return_value=0), \
+                patch.object(ENTRY.importlib.util, "spec_from_file_location", side_effect=AssertionError("no carrier import as root")), \
+                patch.object(ENTRY.subprocess, "run", side_effect=AssertionError("no process as root")), \
+                patch.object(ENTRY.tempfile, "mkdtemp", side_effect=AssertionError("no scratch as root")), \
+                self.assertRaisesRegex(RuntimeError, "nonroot build user"):
+            ENTRY.main()
+
     def test_NAMESPACE_01_invalid_nonce_stops_before_any_process_or_write(self):
         with patch.object(sys, "argv", ["inspect", "--nonce", "not-a-launch-nonce"]), \
                 patch.object(ENTRY.subprocess, "run", side_effect=AssertionError("no process in invalid input design test")), \
