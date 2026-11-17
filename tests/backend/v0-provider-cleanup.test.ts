@@ -5,7 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import crons from "../../convex/crons";
 import { deleteAccountData } from "../../convex/v0Cleanup";
 import { hash, phoneHash } from "../../convex/v0Policy";
-import { cleanupRetryDelayMs, maxCleanupAttempts, removeVerification, runProviderCleanup, type CleanupTransport } from "../../convex/v0ProviderCleanup";
+import { cleanupRetryDelayMs, maxCleanupAttempts, referencesPerAttempt, removeVerification, runProviderCleanup, type CleanupTransport } from "../../convex/v0ProviderCleanup";
 import { expectCode } from "./auth-support/errors";
 import { syntheticAccountSid, syntheticServiceSid } from "./fake-otp";
 import { T0 } from "./fixture";
@@ -22,7 +22,7 @@ const aliasSid = sid("3");
 const friendSid = sid("4");
 const syntheticAuthToken = "d".repeat(32);
 const config = { accountSid: syntheticAccountSid, authToken: syntheticAuthToken, serviceSid: syntheticServiceSid };
-const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; rejected: boolean }, null>("v0ProviderCleanup:record");
+const recordRef = makeFunctionReference<"mutation", { id: Id<"v0ProviderCleanup">; attempt: number; removed: string[]; rejected: boolean; interrupted: boolean }, null>("v0ProviderCleanup:record");
 
 async function snapshot(f: Fixture) {
   return await f.t.run(async (ctx) => {
@@ -221,10 +221,35 @@ describe("J8.3 provider cleanup worker", () => {
     expect(jobs[0].schedule).toEqual({ type: "interval", minutes: 5 });
   });
 
+  it("[J8.3.cleanup.bounded-work] removes a long list a bounded slice at a time, saving each slice without spending an attempt", async () => {
+    const provider = fakeProvider();
+    const f = await v0Fixture();
+    const many = Array.from({ length: referencesPerAttempt * 2 + 3 }, (_, index) => `VE${index.toString(16).padStart(32, "0")}`);
+    await f.t.run(async (ctx) => {
+      const digest = await phoneHash(f.actors.subject.phone);
+      for (const [index, providerId] of many.entries()) await ctx.db.insert("v0OtpAttempts", { phoneHash: digest, requestId: `${f.runId}_otp_${index}`, providerId, createdAt: T0 - 30_000, expiresAt: T0 + 570_000, consumedAt: T0 - 10_000, attempts: 1 });
+    });
+    await remove(f);
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(provider.calls).toEqual(many.slice(0, referencesPerAttempt));
+    expect(await cleanupRows(f)).toMatchObject([{ state: "pending", attempts: 0, references: many.slice(referencesPerAttempt) }]);
+    provider.reply(...Array.from({ length: 3 }, () => ({ status: 404 })), { status: 503 });
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(provider.calls).toHaveLength(referencesPerAttempt + 4);
+    const interrupted = (await cleanupRows(f))[0];
+    expect(interrupted).toMatchObject({ state: "pending", attempts: 1, references: many.slice(referencesPerAttempt + 3) });
+    expect(await work(f)).toEqual({ claimed: 0 });
+    vi.setSystemTime(interrupted.availableAt);
+    expect(await work(f)).toEqual({ claimed: 1 });
+    expect(provider.calls).toHaveLength(many.length + 1);
+    expect(new Set(provider.calls)).toEqual(new Set(many));
+    expect(await cleanupRows(f)).toMatchObject([{ state: "complete", references: [] }]);
+  });
+
   it("[J8.3.cleanup.stale-result] ignores a result reported for an attempt that is no longer current", async () => {
     const { f } = await deleted();
     const row = (await cleanupRows(f))[0];
-    await f.t.mutation(recordRef, { id: row._id, attempt: 1, removed: row.references, rejected: false });
+    await f.t.mutation(recordRef, { id: row._id, attempt: 1, removed: row.references, rejected: false, interrupted: false });
     expect(await cleanupRows(f)).toEqual([row]);
   });
 
