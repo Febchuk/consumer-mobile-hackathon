@@ -21,6 +21,8 @@ import netprobe
 import job
 import launch_provenance
 import status as provisioning_status
+import vsock_control
+import root_capsule
 
 
 RUN = "11111111-2222-4333-8444-555555555555"
@@ -232,6 +234,12 @@ class ProvisionerUnitTests(unittest.TestCase):
         instance.parent_identity = {"uid": os.getuid(), "birth": "UNIT original"}
         instance.seconds = 30
         instance.root = 'anchor "com.apple/*" all\n'
+        instance.rules = "UNIT ACTIVE OWNED RULES"
+        instance.baseline_filter_tree = instance.root
+        instance.active_filter_tree = 'anchor "com.apple/*" all {\n anchor "' + instance.anchor.split('/')[-1] + '" all {\n ' + instance.rules + '\n }\n}\n'
+        instance.baseline_translation_tree = ""
+        instance.anchor_inventory = instance.anchor.split('/')[-1] + "\n"
+        instance.control = None
         instance.initial_pflog_exists = False
         instance.initial_anchor_inventory = ""
         instance.baseline_processes = {}
@@ -239,10 +247,22 @@ class ProvisionerUnitTests(unittest.TestCase):
         instance.escaped = {}
         instance.snapshot = Mock(return_value={})
         instance.command = Mock(return_value="")
+        active = [True]
+        rules_active = [True]
         def pf(*argv):
             if argv == ("-s", "info"):
-                return "Status: Disabled\n"
-            if argv in (("-sr",), ("-a", "*", "-sr")):
+                return "Status: Enabled\n" if active[0] else "Status: Disabled\n"
+            if "-X" in argv:
+                active[0] = False
+            if "-F" in argv:
+                rules_active[0] = False
+            if argv == ("-a", instance.anchor, "-sr"):
+                return instance.rules if rules_active[0] else ""
+            if argv == ("-a", "*", "-sr"):
+                return instance.active_filter_tree if rules_active[0] else instance.root
+            if argv == ("-a", "com.apple", "-s", "Anchors"):
+                return instance.anchor_inventory if rules_active[0] else instance.initial_anchor_inventory
+            if argv == ("-sr",):
                 return instance.root
             return ""
         instance.pf = Mock(side_effect=pf)
@@ -332,6 +352,76 @@ class ProvisionerUnitTests(unittest.TestCase):
         self.assertTrue(record["failures"])
         self.assertNotIn("-d", str(instance.pf.call_args_list))
 
+    def test_SIM_LEASE_09_changed_active_policy_or_states_prevents_any_release(self):
+        for target, value in ((("-sr",), "UNIT changed root"), (("-a", "*", "-sr"), "UNIT unknown quick path"),
+                              (("-a", "*", "-sn"), "UNIT unknown translation"), (("-ss",), "UNIT unexpected state"),
+                              (("-a", "com.apple", "-s", "Anchors"), "UNIT changed order")):
+            instance = self.unit_lease()
+            previous = instance.pf.side_effect
+            instance.pf.side_effect = lambda *args: value if args == target else previous(*args)
+            with patch.object(lease.time, "sleep"), self.assertRaises(p.Blocked):
+                instance.cleanup()
+            self.assertFalse(any("-F" in call.args or "-X" in call.args for call in instance.pf.call_args_list))
+            record = instance.record.call_args.args[1]
+            self.assertNotIn("enforcementReleaseStartedAt", record)
+            self.assertIsNone(record["isolationRetained"])
+
+    def test_SIM_LEASE_10_partial_enable_never_accesses_unknown_active_baseline_or_releases(self):
+        instance = self.unit_lease()
+        instance.rules = instance.active_filter_tree = instance.anchor_inventory = None
+        instance.token = None
+        with patch.object(lease.time, "sleep"), self.assertRaises(p.Blocked):
+            instance.cleanup()
+        self.assertFalse(any("-F" in call.args or "-X" in call.args for call in instance.pf.call_args_list))
+        record = instance.record.call_args.args[1]
+        self.assertNotIn("enforcementReleaseStartedAt", record)
+        self.assertIn("recordedAt", record)
+
+    def test_SIM_LEASE_11_release_bound_follows_final_policy_check_and_precedes_owned_removal(self):
+        instance = self.unit_lease()
+        with patch.object(lease.time, "sleep"):
+            instance.cleanup()
+        record = instance.record.call_args.args[1]
+        self.assertLessEqual(record["enforcementReleaseStartedAt"], record["recordedAt"])
+        self.assertIn("beforeReleaseRootRules", record["restoration"])
+        self.assertIn("translationTreeAfterRelease", record["restoration"])
+        self.assertFalse(record["isolationRetained"])
+
+    def test_SIM_LEASE_12_uncertain_pflog_create_is_never_adopted_or_destroyed(self):
+        instance = self.unit_lease()
+        instance.owns_anchor = instance.enable_attempted = False
+        instance.token = None
+        instance.pflog_create_attempted = True
+        with patch.object(lease.time, "sleep"), self.assertRaises(p.Blocked):
+            instance.cleanup()
+        self.assertFalse(any("destroy" in call.args[0] for call in instance.command.call_args_list))
+        self.assertNotIn("enforcementReleaseStartedAt", instance.record.call_args.args[1])
+
+    def test_SIM_LEASE_13_failed_management_liveness_restores_owned_policy_but_never_passes_run(self):
+        instance = self.unit_lease()
+        instance.control = Mock()
+        instance.control_audit = []
+        instance.check_control = Mock(side_effect=p.Blocked("UNIT stale operator pulse"))
+        with patch.object(lease.time, "sleep"), self.assertRaisesRegex(p.Blocked, "run failed"):
+            instance.cleanup()
+        record = instance.record.call_args.args[1]
+        self.assertFalse(record["isolationRetained"])
+        self.assertEqual(record["resourceRestorationFailures"], [])
+        self.assertTrue(record["runEvidenceFailures"])
+        self.assertTrue(record["failures"])
+        self.assertIn("enforcementReleaseStartedAt", record)
+        self.assertTrue(any("-F" in call.args for call in instance.pf.call_args_list))
+
+    def test_SIM_LEASE_14_foreign_postload_insertions_never_become_blessed_baseline(self):
+        instance = self.unit_lease()
+        instance.pf = Mock(side_effect=lambda *args: instance.root if args == ("-sr",) else
+                           instance.rules if args == ("-a", instance.anchor, "-sr") else
+                           instance.active_filter_tree.replace("\n}", '\n anchor "foreign" all {\n pass out quick all\n }\n}') if args == ("-a", "*", "-sr") else
+                           instance.anchor_inventory if args == ("-a", "com.apple", "-s", "Anchors") else
+                           "Status: Disabled\n" if args == ("-s", "info") else "")
+        with self.assertRaises(firewall.IsolationUnproven):
+            instance.verify_owned_insertion(enabled=False)
+
     def test_SIM_AUTH_01_generic_entry_cannot_start_an_isolation_lease(self):
         instance = p.Provisioner(unit_request(), self.folder / "untrusted-generic")
         instance.start_lease = Mock()
@@ -364,6 +454,9 @@ class ProvisionerUnitTests(unittest.TestCase):
         for pattern in ("*.py", "*.ts"):
             for source in HERE.glob(pattern):
                 shutil.copyfile(source, harness / source.name)
+        shutil.copyfile(HERE / "vsock-profile.json", harness / "vsock-profile.json")
+        (root / "tests/mac-enforcement").mkdir()
+        shutil.copyfile(HERE.parent / "mac-enforcement/control-sockets.c", root / vsock_control.SOURCE_NAME)
         config = root / "UNIT-config.json"
         config.write_text(json.dumps({"classification": "UNIT ONLY, NOT ACTUAL LAUNCH OR ISOLATION EVIDENCE"}))
         nonce = "77777777-8888-4999-AAAA-BBBBBBBBBBBB"
@@ -374,9 +467,10 @@ class ProvisionerUnitTests(unittest.TestCase):
                      "toolRoute": {"documentation": launch_provenance.CAPY_URL, "sourceKind": "workspace",
                                    "authority": "UNIT mobile.build", "execution": "UNIT Revyl remote build commands"}}
         files = {str(file.relative_to(root)): p.digest(file.read_bytes()) for file in harness.iterdir()}
+        files[vsock_control.SOURCE_NAME] = vsock_control.SOURCE_SHA256
         files[config.name] = p.digest(config.read_bytes())
         manifest = {"version": 2, "runID": RUN, "launchNonce": nonce, "files": files,
-                    "configurationFiles": {config.name: files[config.name]}}
+                    "configurationFiles": {config.name: files[config.name], "tests/simulator-provisioner/vsock-profile.json": files["tests/simulator-provisioner/vsock-profile.json"]}}
         manifest_path = root / "UNIT-source-manifest.json"
         manifest_path.write_text(json.dumps(manifest))
         now = int(p.time.time() * 1000)
@@ -416,6 +510,8 @@ class ProvisionerUnitTests(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, b"UNIT FABRICATED root process birth\n", b"")
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch.object(launch_provenance, "__file__", str(fixture["harness"] / "launch_provenance.py")))
+            stack.enter_context(patch.object(vsock_control, "__file__", str(fixture["harness"] / "vsock_control.py")))
+            stack.enter_context(patch.object(root_capsule, "__file__", str(fixture["harness"] / "root_capsule.py")))
             stack.enter_context(patch.object(launch_provenance, "REVIEWED_READABLE_SHA256", fixture["providerHash"]))
             stack.enter_context(patch.object(launch_provenance, "NONCE_DIRECTORY", fixture["ledger"]))
             stack.enter_context(patch.object(launch_provenance.platform, "system", return_value="Darwin"))
@@ -545,6 +641,7 @@ class ProvisionerUnitTests(unittest.TestCase):
     def live_status_fixture(self):
         now = int(p.time.time() * 1000)
         authority = {"chainSHA256": "a" * 64, "launchNonce": "77777777-8888-4999-AAAA-BBBBBBBBBBBB",
+                     "contextSHA256": "b" * 64,
                      "guestBootSessionUUID": SIMULATOR, "classification": "UNIT FABRICATED STATUS INPUT"}
         ready = {"runID": RUN, "ownerPID": 91, "leasePID": 535, "leaseIdentity": {"birth": "UNIT root birth"},
                  "leaseExpiresAt": now + 60_000, "recordedAt": now - 100,
@@ -553,16 +650,25 @@ class ProvisionerUnitTests(unittest.TestCase):
                  "activeFilterTree": "UNIT filter tree", "baselineTranslationTree": "UNIT translation tree",
                  "anchor": "com.apple/zzzz_calledit_" + RUN.replace("-", "").lower()}
         witness = {"rootGuard": {"pid": 535, "uid": 0, "birth": "UNIT root birth"}, "consumedAt": now - 200}
+        capsule = "/private/var/run/calledit-qa-capsules/" + authority["launchNonce"]
+        capsule_raw = json.dumps({"contextSHA256": ready["launchContextSHA256"]})
+        witness["rootGuard"].update({"capsuleDirectory": capsule, "capsuleInfoSHA256": p.digest(capsule_raw.encode())})
+        ready["leaseProgram"] = capsule + "/tests/simulator-provisioner/lease.py"
+        ready["rootAuthorityContextPath"] = capsule + "/root-authority/context.json"
+        ready["controlRuntimeSHA256"] = "d" * 64
         capture = b"UNIT FABRICATED PCAP; NO ACTUAL KERNEL OR MAC EVIDENCE"
         proof = {"runID": RUN, "verifiedAt": now, "resolverBroker": {"pcapFile": "resolver-blocked.pcap",
                  "pcapSHA256": p.digest(capture), "hostname": "unit-fabricated.example.com"}}
+        proof["controller"] = {"rootControlWitnessSHA256": ready["controlRuntimeSHA256"]}
         for name, value in (("lease-ready.json", ready), ("heartbeat.json", {"runID": RUN}), ("network-verified.json", proof)):
             (self.folder / name).write_text(json.dumps(value))
         (self.folder / "resolver-blocked.pcap").write_bytes(capture)
         outputs = {("/bin/ps", "-p", "535", "-o", "uid="): "0\n",
+                   ("/bin/ps", "-p", "91", "-o", "uid="): "501\n",
                    ("/bin/ps", "-p", "535", "-o", "lstart="): "UNIT root birth\n",
                    ("/usr/bin/sudo", "-n", "/bin/ps", "-p", "535", "-o", "args="):
-                       "UNIT " + str(HERE / "lease.py") + " " + str(self.folder) + " " + RUN}
+                       "UNIT " + ready["leaseProgram"] + " " + str(self.folder) + " " + RUN,
+                   ("/usr/bin/sudo", "-n", "/bin/cat", capsule + "/capsule-info.json"): capsule_raw}
         for args, value in ((("-sr",), ready["rootRules"]), (("-a", ready["anchor"], "-sr"), ready["activeRules"]),
                             (("-a", "*", "-sr"), ready["activeFilterTree"]), (("-a", "*", "-sn"), ready["baselineTranslationTree"]),
                             (("-s", "info"), "Status: Enabled\n"), (("-ss",), "")):
@@ -572,12 +678,23 @@ class ProvisionerUnitTests(unittest.TestCase):
 
     @contextlib.contextmanager
     def status_environment(self, authority, witness, outputs):
+        capsule_directory = "/private/var/run/calledit-qa-capsules/" + authority["launchNonce"]
+        ordinary_regular = p.regular
+        def unit_regular(path, *args):
+            if str(path) == capsule_directory + "/root-records/lease-ready.json":
+                path = str(self.folder / "lease-ready.json")
+            return ordinary_regular(path, *args)
         def query(argv, **_kwargs):
             self.assertIn(tuple(argv), outputs)
             return subprocess.CompletedProcess(argv, 0, outputs[tuple(argv)].encode(), b"")
         with patch.object(provisioning_status.platform, "system", return_value="Darwin"), \
                 patch.object(provisioning_status, "verify_trusted_launch", return_value=authority) as launch, \
                 patch.object(provisioning_status, "root_launch_witness", return_value=(witness, "c" * 64)), \
+                patch.object(provisioning_status, "live_control", return_value={"classification": "UNIT MOCK", "ownerUID": 501, "outputDirectory": str(self.folder)}), \
+                patch.object(provisioning_status, "capsule_info", return_value={"directory": capsule_directory, "info": {"privateContextPath": capsule_directory + "/root-authority/context.json"}}), \
+                patch.object(provisioning_status, "regular", side_effect=unit_regular), \
+                patch.object(provisioning_status.os, "geteuid", return_value=0), \
+                patch.object(provisioning_status.pwd, "getpwuid", return_value=type("Pw", (), {"pw_dir": str(self.folder)})()), \
                 patch.object(provisioning_status.subprocess, "run", side_effect=query), \
                 patch.object(provisioning_status, "source_fingerprints", return_value={"classification": "UNIT-FABRICATED"}):
             yield launch
@@ -586,7 +703,7 @@ class ProvisionerUnitTests(unittest.TestCase):
         authority, ready, witness, _proof, outputs = self.live_status_fixture()
         with self.status_environment(authority, witness, outputs) as launch:
             observed = provisioning_status.live_status(self.folder, RUN, 91)
-        launch.assert_called_once_with(ready["launchContext"], ready["launchContextSHA256"], RUN)
+        launch.assert_called_once_with(ready["rootAuthorityContextPath"], ready["launchContextSHA256"], RUN)
         self.assertEqual(observed["runnerAuthorization"], authority)
         self.assertEqual(observed["rootLaunchWitnessSHA256"], "c" * 64)
 

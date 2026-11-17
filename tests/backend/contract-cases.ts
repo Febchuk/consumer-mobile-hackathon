@@ -1,6 +1,6 @@
 import { makeFunctionReference } from "convex/server";
 import { makePng } from "../fixtures/png.mjs";
-import { CUTOFF, REVEAL } from "./fixture";
+import { REVEAL } from "./fixture";
 import type { v0Fixture } from "./v0-fixture";
 
 export type V0Fixture = Awaited<ReturnType<typeof v0Fixture>>;
@@ -34,7 +34,7 @@ export const contractCases: Record<string, Case> = {
   "v0Bets:get": { kind: "query", args: (f, token) => ({ token, locator: f.locator }) },
   "v0Bets:list": { kind: "query", args: (f, token) => ({ token, groupId: f.g1 }) },
   "v0Bets:history": { kind: "query", args: (f, token) => ({ token, groupId: f.g1 }) },
-  "v0Bets:create": { kind: "mutation", args: (f, token) => ({ token, groupId: f.g1, subjectId: f.actors.subject.id, question: "Will Sage suggest a picnic game before reveal?", contextLine: "A synthetic picnic", format: "yes_no", options: ["Yes", "No"], cutoffAt: CUTOFF, revealAt: REVEAL, source: "manual", requestId: request(f) }) },
+  "v0Bets:create": { kind: "mutation", args: (f, token) => ({ token, groupId: f.g1, subjectId: f.actors.subject.id, question: "Will Sage suggest a picnic game before reveal?", contextLine: "A synthetic picnic", format: "yes_no", options: ["Yes", "No"], cutoffAt: REVEAL, revealAt: REVEAL, source: "manual", requestId: request(f) }) },
   "v0Bets:pick": { kind: "mutation", args: (f, token) => ({ token, betId: f.bet, option: 0, confidence: 0.5, requestId: request(f) }) },
   "v0Bets:veto": { kind: "mutation", args: (f, token) => ({ token, betId: f.bet, requestId: request(f) }) },
   "v0Bets:answer": { kind: "mutation", args: (f, token) => ({ token, betId: f.bet, option: 0, requestId: request(f) }) },

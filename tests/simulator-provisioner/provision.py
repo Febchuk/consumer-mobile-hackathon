@@ -40,7 +40,7 @@ def digest(data):
 def regular(path, limit=1_048_576):
     path = Path(path)
     require(path.is_absolute() and path.resolve() == path and not path.is_symlink(), "absolute non-symlink input required")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         stat = os.fstat(fd)
         import stat as stat_module
@@ -77,7 +77,9 @@ def load_request(path):
     fields = {"runID", "nativeSourceRevision", "backendSourceRevision", "fixtureSetID", "configVersion",
               "runtimeID", "deviceTypeID", "apiPort", "cardPort", "lifetimeSeconds", "appPath",
               "nativeBuildRecord", "backendBuildRecord", "controlPIDs", "sourceCardOrigin"}
-    require(isinstance(request, dict) and set(request) == fields, "exact provisioner request fields required")
+    require(isinstance(request, dict) and set(request) in (fields, fields | {"controlPulsePath"}), "exact provisioner request fields required")
+    if "controlPulsePath" in request:
+        require(isinstance(request["controlPulsePath"], str) and Path(request["controlPulsePath"]).is_absolute(), "absolute operator pulse path required")
     request["runID"] = str(uuid.UUID(request["runID"])).upper()
     for key in ("nativeSourceRevision", "backendSourceRevision"):
         require(isinstance(request[key], str) and REVISION.fullmatch(request[key]), "independent source revision required")
@@ -109,6 +111,7 @@ class Provisioner:
         self.pending_completion = None
         self.trusted_launch_context = None
         self.trusted_launch_sha256 = None
+        self.control_profile = None
 
     def command(self, argv, check=True, timeout=120):
         started = int(time.time() * 1000)
@@ -129,11 +132,17 @@ class Provisioner:
         root = self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-sr"])
         states = self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-ss"])
         root_anchor_supported(root)
-        sockets = self.command(["/usr/bin/sudo", "-n", "/usr/sbin/lsof", "-nP", "-a", "-p", ",".join(map(str, self.request["controlPIDs"])),
-                                "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"], timeout=10)
-        flows = controller_flows(sockets, self.request["controlPIDs"])
+        flows = []
+        if self.control_profile is None:
+            sockets = self.command(["/usr/bin/sudo", "-n", "/usr/sbin/lsof", "-nP", "-a", "-p", ",".join(map(str, self.request["controlPIDs"])),
+                                    "-iTCP", "-sTCP:ESTABLISHED", "-FpcuftPnT"], timeout=10)
+            flows = controller_flows(sockets, self.request["controlPIDs"])
         require_no_unowned_states(states, flows)
-        self.anchor, rules = plan_rules(self.request["runID"], flows)
+        if self.control_profile is None:
+            self.anchor, rules = plan_rules(self.request["runID"], flows)
+        else:
+            from global_pf import plan_no_ip_rules
+            self.anchor, rules = plan_no_ip_rules(self.request["runID"])
         require(not self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-a", self.anchor, "-sr"]).strip(), "run anchor already exists")
         self.host_metadata = {"macOS": self.command(["/usr/bin/sw_vers"]), "xcode": self.command(["/usr/bin/xcodebuild", "-version"]),
                               "controllerFlows": flows, "rootRules": root, "preexistingStates": states,
@@ -270,7 +279,7 @@ class Provisioner:
             except subprocess.TimeoutExpired:
                 raise Blocked("independent root lease did not complete cleanup; do not force-disable PF or flush states")
             cleanup = json.loads(regular(str(self.output / "lease-cleanup.json")))
-            require(not cleanup["failures"], "independent lease retained isolation; administrative cleanup is required")
+            require(not cleanup["failures"], "independent lease run failed; inspect actual isolationRetained and resource/evidence failure records")
             if self.pending_completion is not None:
                 require(self.lease_child.returncode == 0 and cleanup["reason"] == "owner-requested-stop" and not (self.output / "lease-blocked.json").exists(),
                         "independent lease failed despite workload completion; no successful completion may be recorded")
@@ -304,21 +313,22 @@ class Provisioner:
 
     def start_lease(self):
         (self.output / "jobs").mkdir(mode=0o700)
-        write_new(self.output / "lease-request.json", {"runID": self.request["runID"], "controlPIDs": self.request["controlPIDs"]})
+        write_new(self.output / "lease-request.json", {"runID": self.request["runID"], "controlPIDs": self.request["controlPIDs"],
+                  "controlPulsePath": self.request["controlPulsePath"]})
         self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
         self.heartbeat_thread.start()
         deadline = time.monotonic() + 3
         while not (self.output / "heartbeat.json").exists() and time.monotonic() < deadline:
             time.sleep(0.05)
-        script = str(Path(__file__).resolve().parent / "lease.py")
+        from root_capsule import pinned_bootstrap, source_root
+        bootstrap, manifest_sha = pinned_bootstrap(self.trusted_launch_context, self.trusted_launch_sha256)
         error_fd = os.open(self.output / "lease-stderr.txt", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(error_fd, "wb") as errors:
-            self.lease_child = subprocess.Popen(["/usr/bin/sudo", "-n", "/usr/bin/python3", "-E", "-s", script,
-                    "--directory", str(self.output), "--owner-pid", str(os.getpid()), "--run-id", self.request["runID"],
-                    "--seconds", str(self.request["lifetimeSeconds"]), "--trusted-launch-context", self.trusted_launch_context,
-                    "--trusted-launch-sha256", self.trusted_launch_sha256], env=self.environment,
+            self.lease_child = subprocess.Popen(["/usr/bin/sudo", "-n", "/usr/bin/python3", "-I", "-S", "-c", bootstrap,
+                    str(source_root()), self.trusted_launch_context, self.trusted_launch_sha256, manifest_sha, str(self.output),
+                    str(os.getpid()), self.request["runID"], str(self.request["lifetimeSeconds"]), str(os.getuid())], env=self.environment,
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors, start_new_session=True)
-        self.lease_ready = self.wait_for_file(self.output / "lease-ready.json", 30)
+        self.lease_ready = self.wait_for_file(self.output / "lease-ready.json", 120)
         print("GLOBAL_PF_LEASE_ACTIVE " + self.request["runID"], flush=True)
 
     def start_job(self, argv, label, environment=None):
@@ -351,6 +361,7 @@ class Provisioner:
         raise Blocked(label + " exceeded the bounded active lease")
 
     def publish(self):
+        from vsock_control import fingerprint_paths
         require(self.lease_child is not None and self.lease_child.poll() is None and
                 self.network_proof["runID"] == self.request["runID"] and self.network_proof["verifiedAt"] <= self.boot_started,
                 "live independent isolation and actual pre-boot kernel evidence required before receipt publication")
@@ -368,8 +379,8 @@ class Provisioner:
         denial = {"runID": self.request["runID"], "simulatorUDID": self.udid, "lease": self.lease_ready,
                   "kernelVerification": self.network_proof, "simulatorBootStartedAt": self.boot_started,
                   "installedBeforeSimulatorBoot": self.network_proof["verifiedAt"] <= self.boot_started,
-                  "policyScope": "stateless global kernel policy for every UID/process and broker; exact preexisting controller tuples only",
-                  "sourceHashes": {path.name: digest(path.read_bytes()) for path in Path(__file__).resolve().parent.glob("*.py")},
+                  "policyScope": "stateless global IP policy; zero external IP allows; intentional provider vsock management is not arbitrary non-IP/covert-channel coverage",
+                  "sourceHashes": {name: digest(path.read_bytes()) for name, path in fingerprint_paths().items()},
                   "leaseReadySHA256": digest(regular(str(self.output / "lease-ready.json"))),
                   "networkProofSHA256": digest(regular(str(self.output / "network-verified.json"))),
                   "sourceCardOrigin": self.request["sourceCardOrigin"], "sourceBuilds": self.builds}
@@ -401,6 +412,9 @@ class Provisioner:
             self.trusted_launch_sha256 = trusted_launch_sha256
             launch = verify_trusted_launch(trusted_launch_context, trusted_launch_sha256, self.request["runID"])
             write_new(self.output / "runner-launch-chain.json", launch)
+            from vsock_control import load_profile
+            self.control_profile, _ = load_profile()
+            require(self.request.get("controlPulsePath"), "actual operator stdout liveness pulse is required for the vsock-only profile")
             self.preflight()
             if not enforcement_probe:
                 self.builds = self.build_records()
@@ -414,6 +428,7 @@ class Provisioner:
             require(self.network_proof["runID"] == self.request["runID"], "kernel verification run mismatch")
             if enforcement_probe:
                 self.pending_completion = {"runID": self.request["runID"], "status": "completed-and-owned-isolation-restored",
+                                           "localVerdict": "local-gates-pass-parent-tool-continuity-pending", "parentToolContinuityVerified": False,
                                            "scope": "kernel/controller/broker only; no simulator/native behavior proof"}
                 return
             self.create_and_erase()

@@ -11,14 +11,16 @@ import { makeFunctionReference } from "convex/server";
 import { actors } from "./tls-provider.mjs";
 import { fixtureSets } from "./catalog.mjs";
 import { bootOfficialBackend } from "./bootstrap.mjs";
+import { confirmationSourceRoot } from "./confirmation-fixture.mjs";
+import { confirmationScenarios } from "./confirmation-scenarios.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const argv = process.argv.slice(2);
 const option = (name) => argv[argv.indexOf(name) + 1];
 const binaryPins = JSON.parse(readFileSync(resolve(root, "tests/qa-runtime/binary-pins.json"), "utf8"));
 const binarySHA256 = binaryPins.platforms["linux-x64"].executableSHA256;
-const backendRevision = "8ed1967d9d25c874457cea255961fb04c7db8883";
-const nativeRevision = "f9c694db91835cdfeb5bcabba74eb4eebdf6648c";
+const backendRevision = "7450eed9f957261ab4bcd19cf19cb42506823c32";
+const nativeRevision = "00e5cf219c0d4329d806867f4dcf6aaec54a986d";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 if (!argv.includes("--binary") || !argv.includes("--output")) throw new Error("Require hash-pinned --binary and fresh external --output");
 const binary = resolve(option("--binary"));
@@ -50,20 +52,27 @@ const backendOrigin = "http://127.0.0.1:3210";
 const gatewayOrigin = "http://127.0.0.1:8199";
 const cardOrigin = "http://127.0.0.1:3211";
 const sourcePaths = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? sourcePaths(resolve(directory, entry.name)) : [resolve(directory, entry.name)]).sort();
-const sourceDigest = () => digest(sourcePaths(resolve(root, "convex")).map((path) => path.slice(root.length + 1) + "\n" + readFileSync(path, "utf8")).join("\n"));
+const sourceDigest = (sourceRoot = root) => digest(sourcePaths(resolve(sourceRoot, "convex")).map((path) => path.slice(sourceRoot.length + 1) + "\n" + readFileSync(path, "utf8")).join("\n"));
+const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+const pinnedSourcePaths = git("ls-tree", "-r", "--name-only", backendRevision, "--", "convex").split("\n").filter(Boolean).sort();
+assert.deepEqual(sourcePaths(resolve(root, "convex")).map((path) => path.slice(root.length + 1)), pinnedSourcePaths);
+for (const path of pinnedSourcePaths) assert.equal(readFileSync(resolve(root, path), "utf8"), execFileSync("git", ["show", `${backendRevision}:${path}`], { cwd: root, encoding: "utf8" }), `Canonical backend bytes differ from ${backendRevision}:${path}`);
 const before = sourceDigest();
-const executedHarnessPaths = ["tests/qa-runtime/run.mjs", "tests/qa-runtime/bootstrap.mjs", "tests/qa-runtime/binary-pins.json", "tests/qa-runtime/catalog.mjs", "tests/qa-runtime/tls-provider.mjs", "tests/qa-runtime/fixture.ts.txt", "tests/qa-runtime/binding.ts", "tests/qa-runtime/routing.ts", "tests/qa-adapter/adapter.ts", "tests/qa-adapter/dispatcher.ts", "tests/qa-adapter/manifest.ts", "tests/qa-adapter/evidence.ts"];
+const sourceRoot = confirmationSourceRoot(root, state);
+assert.equal(sourceDigest(sourceRoot), before);
+const executedHarnessPaths = ["tests/qa-runtime/run.mjs", "tests/qa-runtime/bootstrap.mjs", "tests/qa-runtime/binary-pins.json", "tests/qa-runtime/catalog.mjs", "tests/qa-runtime/tls-provider.mjs", "tests/qa-runtime/fixture.ts.txt", "tests/qa-runtime/confirmation-fixture.mjs", "tests/qa-runtime/confirmation-scenarios.mjs", "tests/qa-runtime/binding.ts", "tests/qa-runtime/routing.ts", "tests/qa-adapter/adapter.ts", "tests/qa-adapter/dispatcher.ts", "tests/qa-adapter/manifest.ts", "tests/qa-adapter/evidence.ts"];
 const harnessHashes = Object.fromEntries(executedHarnessPaths.map((path) => [path, digest(readFileSync(resolve(root, path)))]));
 const privateValues = new Set();
 let local;
 const redact = (input) => { let text = String(input); for (const value of privateValues) text = text.replaceAll(value, "[local credential redacted]"); return local ? local.redact(text) : text; };
 const checks = [];
 const metadata = {
-  version: 1, runID, fixtureSetID, nativeRevision, backendRevision, sourcePinBasis: "integration-owner supplied revisions plus before/after source-byte digest",
+  version: 1, runID, fixtureSetID, nativeRevision, backendRevision, candidateSha: git("rev-parse", "HEAD"), sourcePinBasis: "backend owner commit files checked against canonical bytes; native revision is owner-supplied, not executed",
   backendSourceDigest: before, binarySHA256, backendVersion: binaryPins.release, sdkVersion: JSON.parse(readFileSync(resolve(root, "node_modules/convex/package.json"), "utf8")).version,
   target: "real OSS backend and CA-verified local provider TRANSPORT in egress-denied Linux namespace",
   nativeUIExecuted: false, simulatorProvisioned: false, nativeTransportCredit: false, realProviderExecuted: false, fullV0Ready: false,
-  sourceOverlays: ["scratch-only internal qaRuntimeControl.ts", "scratch-only empty crons.ts"], cardOriginRewritten: false,
+  sourceOverlays: ["scratch-only internal qaRuntimeControl.ts with seven additional synthetic confirmation bets", "scratch-only empty crons.ts"], cardOriginRewritten: false,
+  fixtureOverlaySHA256: digest(readFileSync(resolve(sourceRoot, "tests/qa-runtime/fixture.ts.txt"))),
   startedAt: new Date().toISOString(), status: "blocked", assertions: checks,
 };
 const check = async (id, operation) => {
@@ -85,7 +94,7 @@ try {
     assert.equal(execFileSync("ip", ["-6", "route", "show", "default"], { encoding: "utf8" }).trim(), "");
     assert.deepEqual(JSON.parse(execFileSync("ip", ["-json", "link", "show"], { encoding: "utf8" })).map((item) => item.ifname), ["lo"]);
   };
-  local = await bootOfficialBackend({ root, directory: state + "b", binary, expectedBinarySHA256: binarySHA256, runID, fixtureSetID, backendRevision, configVersion: "qa-transport-v0", verifyIsolation, rejectFirstCertificate: true, processGroupMode: "independent" });
+  local = await bootOfficialBackend({ root: sourceRoot, directory: state + "b", binary, expectedBinarySHA256: binarySHA256, runID, fixtureSetID, backendRevision, configVersion: "qa-transport-v0", verifyIsolation, rejectFirstCertificate: true, processGroupMode: "independent" });
   symlinkSync(resolve(root, "node_modules"), resolve(state, "node_modules"), "dir");
   transport = local.provider;
   metadata.providerTransport = { kind: "strict localhost CONNECT plus verified verify.twilio.com TLS fixture", proxyOrigin: transport.proxyOrigin, caSHA256: transport.caSHA256, stats: transport.stats };
@@ -131,7 +140,8 @@ try {
     assert.equal(new Set(fixture.groups).size, 2);
     assert.equal(fixture.locator, digest(`${runID}:bet-a`));
     assert.equal(fixture.unavailableLocator, digest(`${runID}:unavailable`));
-    assert.deepEqual(await local.inspectFixture(), { accounts: 4, sessions: 0, memberships: 6, bets: 2, picks: 0, ledger: 0 });
+    assert.deepEqual(await local.inspectFixture(), { accounts: 4, sessions: 0, memberships: 6, bets: 9, picks: 0, ledger: 0 });
+    assert.deepEqual(Object.keys(fixture.confirmationScenarios).sort(), ["blockReplay", "memberReplay", "newRequestSamePayload", "revealAdmission", "sameRequestDifferentPayload", "sameRequestSamePayload", "voidReplay"]);
     metadata.independentBackendAttestation = backend;
     metadata.fixtureIdentity = { runID: fixture.runID, fixtureSetID: fixture.fixtureSetID, roles: Object.keys(fixture.actors).sort(), independentGroupCount: fixture.groups.length };
   });
@@ -181,7 +191,8 @@ try {
     const bet = await query("v0Bets:get", { token: sessions.friend.token, locator: fixture.locator });
     assert.equal(bet.view, "bet"); assert.equal(bet.question, `SECRET_QUESTION_${runID}`);
     const expectedOptions = fixtureSetID.endsWith("yes-no") ? ["Yes", "No"] : fixtureSetID.endsWith("over-under") ? ["Over 2.5", "Under 2.5"] : [`PRIVATE_OPTION_A_${runID}`, `PRIVATE_OPTION_B_${runID}`];
-    assert.deepEqual(bet.options, expectedOptions); assert.equal(bet.canPick, false);
+    assert.deepEqual(bet.options, expectedOptions); assert.equal(bet.canPick, true); assert.equal(bet.myPick, null);
+    assert.equal(bet.cutoffAt, bet.revealAt);
     assert.equal("contextLine" in bet, false);
     await assert.rejects(query("v0Bets:get", { token: sessions.outsider.token, locator: fixture.locator }), (error) => error.data?.code === "NOT_AVAILABLE");
     assert.equal(new URL(bet.card.url).origin, "https://cards.qa-runtime.invalid");
@@ -198,8 +209,8 @@ try {
       assert.equal(board.rows.find((row) => row.accountId === fixture.actors.friend)?.points, points);
     }
   });
-  await check("QA-RUNTIME.policy-pending-is-not-success", async () => {
-    await assert.rejects(client.mutation(makeFunctionReference("v0Bets:pick"), { token: sessions.friend.token, betId: fixture.betId, option: 0, confidence: 0.5, requestId: randomUUID() }), (error) => error.data?.code === "POLICY_PENDING");
+  await check("QA-RUNTIME.remaining-creator-policy-is-not-success", async () => {
+    await assert.rejects(client.mutation(makeFunctionReference("v0Bets:create"), { token: sessions.creator.token, groupId: fixture.groups[0], subjectId: fixture.actors.subject, question: "Will Sage bring a puzzle to the picnic?", contextLine: "A synthetic picnic", format: "yes_no", options: ["Yes", "No"], source: "manual", requestId: randomUUID() }), (error) => error.data?.code === "POLICY_PENDING");
     const state = await local.inspectFixture();
     assert.equal(state.picks, 0); assert.equal(state.ledger, 0); assert.equal(state.sessions, 4);
   });
@@ -211,6 +222,8 @@ try {
       assert.equal(before.picks, 0); assert.equal(before.ledger, 0);
     });
   }
+  await confirmationScenarios({ origin: backendOrigin, fixture, sessions, actors, check, local, verifyIsolation,
+    markSensitive: (value) => { privateValues.add(value); local.markSensitive(value); }, evidence: metadata });
   metadata.fixtureIdentity.exactRunSentinels = true;
   metadata.status = "passing-limited-real-handler-binding";
 } catch (error) {
@@ -223,6 +236,7 @@ try {
   await adapter?.dispose().catch(() => {});
   const diagnostics = local ? await local.close() : bootstrapFailure;
   assert.equal(sourceDigest(), before, "Canonical backend source changed during check");
+  assert.equal(sourceDigest(sourceRoot), before, "Private copied product source changed during check");
   metadata.finishedAt = new Date().toISOString();
   metadata.harnessHashes = harnessHashes;
   metadata.harnessBytesUnchanged = executedHarnessPaths.every((path) => digest(readFileSync(resolve(root, path))) === harnessHashes[path]);

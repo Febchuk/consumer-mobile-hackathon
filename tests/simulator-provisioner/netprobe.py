@@ -82,14 +82,14 @@ class NetworkProbe:
         return self.command(["/usr/bin/sudo", "-n", "/sbin/pfctl", "-a", self.anchor, "-vvsr"])
 
     def control_continuity(self):
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            text = self.counters()
-            pairs = set(re.findall(r'label "(' + self.name + r'_control_\d+)_out"', text))
-            if pairs and any(packet_count(text, label + "_out") > 0 and packet_count(text, label + "_in") > 0 for label in pairs):
-                return {"actualControlPacketsMatched": True, "kernelCounters": text}
-            time.sleep(0.25)
-        raise RuntimeError("no observed established controller packets matched the stateless exact-tuple exceptions; refusing simulator boot")
+        from launch_provenance import root_launch_witness, verify_trusted_launch
+        from vsock_control import live_control
+        ready = json.loads(regular(str(self.folder / "lease-ready.json")))
+        authorization = verify_trusted_launch(ready["launchContext"], ready["launchContextSHA256"], self.run)
+        _, witness_sha = root_launch_witness(authorization, ready["leasePID"])
+        observed = live_control(ready, authorization, witness_sha, self.command)
+        require(observed["outputDirectory"] == str(self.folder), "network probe belongs to another immutable run directory")
+        return observed
 
     def raw_denials(self):
         results = []
@@ -166,10 +166,11 @@ class NetworkProbe:
         loopback = verify_loopback()
         raw = self.raw_denials()
         broker = self.broker_denial()
+        after_control = self.control_continuity()
         write_new(self.folder / "network-verified.json", {"runID": self.run, "probePID": os.getpid(), "uid": os.getuid(),
                   "verifiedAt": int(time.time() * 1000),
-                  "controller": continuity, "loopback": loopback, "rawNonlocal": raw, "resolverBroker": broker,
-                  "coverage": "global stateless kernel policy before simulator boot, including privileged brokers; no per-subprocess flag inference"})
+                  "controller": continuity, "controllerAfterDenials": after_control, "loopback": loopback, "rawNonlocal": raw, "resolverBroker": broker,
+                  "coverage": "global stateless IP policy, zero external IP allows; intentional provider vsock management; no arbitrary non-IP/covert-channel coverage or inferred external delivery"})
 
 
 def main():

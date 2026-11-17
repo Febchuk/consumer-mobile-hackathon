@@ -77,33 +77,48 @@ describe("SEC1 actual V0 public authorization matrix", () => {
     expect(await f.t.run((ctx) => ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.outsider.id)).collect())).toEqual([]);
   });
 
-  it("[V0.server-reveal] uses server time at cutoff and reveal without a client now argument", async () => {
+  it("[V0.server-reveal] uses server reveal time without a global legacy cutoff or a client now argument", async () => {
     const f = await v0Fixture();
-    for (const [time, state, view] of [[CUTOFF - 1, "open", "sealed"], [CUTOFF, "locked", "sealed"], [REVEAL - 1, "locked", "sealed"], [REVEAL, "revealed", "bet"]] as const) {
+    for (const [time, state, view] of [[CUTOFF - 1, "open", "sealed"], [CUTOFF, "open", "sealed"], [REVEAL - 1, "open", "sealed"], [REVEAL, "revealed", "bet"]] as const) {
       vi.setSystemTime(time);
       const value = await f.t.query(api.v0Bets.get, { token: f.actors.subject.token, locator: f.locator });
-      expect(value).toMatchObject({ state, view, serverTime: time });
+      expect(value).toMatchObject({ state, view, serverTime: time, cutoffAt: REVEAL });
       if (view === "sealed") noPrivateValues(value, f.privateValues);
       else expect(value).toMatchObject({ question: f.privateValues[0], canPick: false, canAnswer: true, canChallenge: false, answerDeadline: REVEAL + 86_400_000 });
     }
   });
 
   for (const at of [CUTOFF, REVEAL - 1, REVEAL, REVEAL + 1]) {
-    it(`[V0.no-late-write.${at - CUTOFF}] rejects a pick at or after cutoff with no exposure`, async () => {
+    it(`[V0.no-late-write.${at - CUTOFF}] enforces final-confirm admission at reveal rather than the superseded stored cutoff`, async () => {
       const f = await v0Fixture();
       vi.setSystemTime(at);
-      await expect(invoke(f, "v0Bets:pick", f.actors.friend.token)).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
-      expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
-      expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);
+      await f.t.run(async (ctx) => {
+        expect(Date.now()).toBe(at);
+        const args = { token: f.actors.friend.token, betId: f.bet, option: 0, confidence: 0.5, requestId: `${f.runId}_request` };
+        if (at < REVEAL) {
+          expect(await ctx.runMutation(api.v0Bets.pick, args)).toEqual({ saved: true, option: 0, confidence: 0.5, updatedAt: at });
+          expect(await ctx.db.query("v0Picks").collect()).toHaveLength(1);
+          expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ state: "open", canPick: false, myPick: { option: 0, confidence: 0.5 } });
+        } else {
+          await expect(ctx.runMutation(api.v0Bets.pick, args)).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
+          expect(await ctx.db.query("v0Picks").collect()).toEqual([]);
+        }
+        expect(await ctx.db.query("v0Ledger").collect()).toEqual([]);
+      });
     });
   }
 
   for (const path of ["v0Bets:create", "v0Bets:pick", "v0Groups:proposeGoal", "v0Groups:confirmGoal"]) {
-    it(`[V0.pending-policy.${path}] refuses to invent unapproved economics or rules`, async () => {
+    it(`[V0.pending-policy.${path}] retains unapproved policy gates while final pick confirmation is explicitly approved`, async () => {
       const f = await v0Fixture();
-      await expect(invoke(f, path, f.actors.creator.token)).rejects.toMatchObject({ data: { code: "POLICY_PENDING" } });
+      if (path === "v0Bets:pick") {
+        expect(await invoke(f, path, f.actors.creator.token)).toEqual({ saved: true, option: 0, confidence: 0.5, updatedAt: T0 });
+        expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toHaveLength(1);
+      } else {
+        await expect(invoke(f, path, f.actors.creator.token)).rejects.toMatchObject({ data: { code: "POLICY_PENDING" } });
+        expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
+      }
       expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);
-      expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
     });
   }
 
