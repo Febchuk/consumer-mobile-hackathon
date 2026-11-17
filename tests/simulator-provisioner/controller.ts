@@ -11,6 +11,15 @@ import { canonicalUUID, parseManifest, type ExpectedRun } from "../qa-adapter/ma
 const execute = promisify(execFile);
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+function sealedDigest(value: Record<string, unknown>): string {
+  return sha256(Buffer.from(JSON.stringify(value, (_key, entry: unknown) => {
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+      return Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
+    }
+    return entry;
+  })));
+}
+
 export class LiveIsolationUnproven extends Error {
   constructor() { super("Actual authorized runner/kernel isolation provenance is unavailable or changed"); }
 }
@@ -34,6 +43,7 @@ async function bounded(path: string, limit = 1_048_576): Promise<Buffer> {
 type Context = {
   version: number; phase: string; ownerPID: number; simulatorUDID: string; harnessDirectory: string;
   manifestPath: string; receiptPath: string; manifestSHA256: string;
+  trustedLaunchContext: string; trustedLaunchSHA256: string;
   request: { runID: string; nativeSourceRevision: string; backendSourceRevision: string; fixtureSetID: string; sourceCardOrigin: string };
 };
 
@@ -41,7 +51,13 @@ type LiveStatus = {
   runID: string; ownerPID: number; leasePID: number; anchor: string; checkedAt: number;
   leaseReadySHA256: string; networkProofSHA256: string; sourceFingerprints: Record<string, string>;
   device: { runID: string; simulatorUDID: string; independentErase: { exit: number } } | null;
-  runnerAuthorization: { buildID: string; launchNonce: string; contextSHA256: string };
+  rootLaunchWitnessSHA256: string;
+  runnerAuthorization: {
+    version: number; runID: string; launchNonce: string; guestBootSessionUUID: string; contextSHA256: string;
+    sourceManifestSHA256: string; launchPlanSHA256: string; harnessSHA256: string; guardSHA256: string;
+    configurationSHA256: string; reviewedAuthoritySHA256: string; chainSHA256: string;
+    providerReadableSHA256: string; authorityScope: Record<string, string>; checkedAt: number;
+  };
 };
 
 export function createLiveProvisioningController(options: {
@@ -80,7 +96,25 @@ export function createLiveProvisioningController(options: {
         live.checkedAt <= Date.now() + 1_000 && live.checkedAt >= Date.now() - 15_000 &&
         isDeepStrictEqual(live.sourceFingerprints, sourcePins));
       requireValue(live.device && canonicalUUID(live.device.simulatorUDID) === canonicalUUID(options.expected.simulatorUDID) && live.device.independentErase.exit === 0);
-      requireValue(/^[A-Z0-9]{26}$/.test(live.runnerAuthorization.buildID) && /^[a-f0-9]{64}$/.test(live.runnerAuthorization.contextSHA256));
+      const authorization = live.runnerAuthorization;
+      requireValue(authorization.version === 2 && canonicalUUID(authorization.runID) === expectedRun &&
+        canonicalUUID(authorization.launchNonce) === authorization.launchNonce && authorization.launchNonce !== expectedRun &&
+        canonicalUUID(authorization.guestBootSessionUUID) === authorization.guestBootSessionUUID);
+      requireValue([authorization.contextSHA256, authorization.sourceManifestSHA256, authorization.launchPlanSHA256,
+        authorization.harnessSHA256, authorization.guardSHA256, authorization.configurationSHA256,
+        authorization.reviewedAuthoritySHA256, authorization.providerReadableSHA256, authorization.chainSHA256,
+        live.rootLaunchWitnessSHA256].every((value) => /^[a-f0-9]{64}$/.test(value)));
+      const { chainSHA256, checkedAt, ...chain } = authorization;
+      requireValue(checkedAt >= Date.now() - 15_000 && checkedAt <= Date.now() + 1_000 && sealedDigest(chain) === chainSHA256 &&
+        isDeepStrictEqual(authorization.authorityScope, { tool: "mobile.build", platform: "ios", source: "workspace", provider: "revyl-remote-builds",
+          guest: "one-clean-single-use-private-vm", cache: "compilation-only", entry: "archived-build-commands" }));
+      const launchBytes = await bounded(context.trustedLaunchContext, 65_536);
+      const launch = JSON.parse(launchBytes.toString()) as { version: number; runID: string; launchNonce: string };
+      requireValue(launch.version === 2 && launch.runID === expectedRun && launch.launchNonce === authorization.launchNonce &&
+        sha256(launchBytes) === context.trustedLaunchSHA256 && context.trustedLaunchSHA256 === authorization.contextSHA256);
+      const harness = Object.fromEntries(Object.entries(sourcePins)
+        .map(([name, hash]) => ["tests/simulator-provisioner/" + name, hash]));
+      requireValue(sealedDigest(harness) === authorization.harnessSHA256);
       return { context, live };
     } catch { throw new LiveIsolationUnproven(); }
   }
@@ -116,6 +150,8 @@ export function createLiveProvisioningController(options: {
         Array.isArray(contacts) && contacts.every((entry) => entry.count === 0));
       requireValue(denied.leaseReadySHA256 === live.leaseReadySHA256 && denied.networkProofSHA256 === live.networkProofSHA256 &&
         denied.sourceCardOrigin === options.expectedSourceCardOrigin);
+      const lease = denied.lease as { runnerAuthorization: LiveStatus["runnerAuthorization"] };
+      requireValue(lease.runnerAuthorization.chainSHA256 === live.runnerAuthorization.chainSHA256);
       const kernel = denied.kernelVerification as { verifiedAt: number };
       requireValue(typeof kernel.verifiedAt === "number" && typeof denied.simulatorBootStartedAt === "number" && kernel.verifiedAt <= denied.simulatorBootStartedAt);
       await assertLiveIsolation();

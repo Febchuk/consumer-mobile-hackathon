@@ -23,6 +23,8 @@ invent PIDs or preserve all host connections. `request.example.json` is a
 From the repository root on the approved fresh cloud Mac:
 
 ```sh
+printf 'TRUSTED_PRELAUNCH nonce=%s sourceManifestSHA256=%s contextSHA256=%s\n' \
+  "$LAUNCH_NONCE" "$SOURCE_MANIFEST_SHA256" "$TRUSTED_LAUNCH_SHA256"
 /usr/bin/python3 -E -s tests/simulator-provisioner/provision.py \
   --request /absolute/qa-run-request.json \
   --output /absolute/new-enforcement-probe-directory \
@@ -108,39 +110,125 @@ entry, an `exclusive:true` input, hardware traits or an arbitrary provisioning
 receipt cannot authorize mutation. The parent supplies these nonsecret captures;
 the harness does not manufacture an admission claim or invent a signing API.
 
-The context JSON has exactly `version:1`, canonical `runID`, canonical unique
-`launchNonce`, and three `{file,sha256}` references: `reviewedAuthority`,
-`toolLaunchRecord`, `sourceManifest`. Referenced files are bounded regular
+The version-2 design separates immutable prelaunch inputs from facts that only
+exist after the tool starts a VM. The trusted parent retains the actual
+`mobile.build` input/result, returned build/operation IDs and resulting logs
+outside the archive. It matches those to this job's unique nonce and raw-byte
+source-manifest/context hashes. It never stages an invented or prior build ID,
+expected boot UUID, postlaunch result or supposed platform signature. Version-1
+contexts and those additional plan fields are rejected.
+
+The context JSON has **exactly** these fields:
+
+```json
+{
+  "version": 2,
+  "runID": "<canonical uppercase run UUID>",
+  "launchNonce": "<new canonical uppercase random UUIDv4, distinct from runID>",
+  "reviewedAuthority": {"file": "reviewed-authority.json", "sha256": "<raw-file SHA256>"},
+  "launchPlan": {"file": "launch-plan.json", "sha256": "<raw-file SHA256>"},
+  "sourceManifest": {"file": "source-manifest.json", "sha256": "<raw-file SHA256>"}
+}
+```
+
+The angle-bracket values are descriptions, not runnable pins. All SHA256 values
+are 64 lowercase hexadecimal characters. Referenced files are bounded regular
 non-symlink basenames beside that context. Use the actual reviewed authority
 snapshot at Captain Drive `handoffs/CONS-13/remote-runner-isolation.json`;
 its embedded readable provider source must hash to
 `24c2eacdef14a2d9ae80a3aa7a83851d209ef4b8b379f9df479890f9305fadd5`.
-This provider/route guarantee is necessary but not a per-job witness by itself.
+This provider/route guarantee is necessary but is not a per-job witness by itself.
 
-The source manifest is `{version:1,launchNonce,files:{"relative/path":sha256}}`.
-It must seal all runtime guard files listed in `launch_provenance.REQUIRED` and
-any additional sources the trusted parent archives. Every actual archived file
-is rehashed. No arbitrary source root, traversal or inferred revision is accepted.
+The source manifest has **exactly** `version:2`, `runID`, `launchNonce`,
+`files:{"repository/relative/path":sha256}` and
+`configurationFiles:{"repository/relative/path":sha256}`. Both UUIDs must match
+the context. `files` must cover every actual `.py`/`.ts` file in this harness,
+all files in `launch_provenance.REQUIRED` (including the UI launcher), the reviewed
+bootstrap/discovery/command sources and the actual archived configuration inputs.
+`configurationFiles` is a nonempty subset of `files` with identical hashes,
+separate from the harness files, identifying those actual configuration inputs.
+Do not satisfy it with an unrelated inert file. Every listed file is rehashed
+under the real repository root; no arbitrary source root, traversal or inferred
+revision is accepted. Seal the templates and code that derive runtime controller
+PIDs from actual observations; do not prefill a future PID, boot or job identity.
+Coverage of the launcher/configuration inputs is part of the parent's source
+review, not something a file digest can infer.
 
-The parent-observed launch record has exactly `version:1`,
-`observer:"trusted-parent-launcher"`, `tool:"mobile.build"`,
-`provider:"revyl-remote-builds"`, `runID`, `launchNonce`,
-`sourceManifestSHA256`, `capturedAt` (epoch milliseconds), `bootSessionUUID`,
-`invocation`, and `result`. `invocation` is the actual captured nonsecret tool
-input (`action:"start"`, `platform:"ios"`, `source.type:"workspace"`); its archived
-commands bind the exact unique nonce and source-manifest hash. `result` includes
-the real returned 26-character `build_id`, not a placeholder/prior build. The
-current guest `kern.bootsessionuuid` is independently read and must match the
-recorded actual boot identity before mutation. The capture must be current.
-The unique nonce is consumed once by the independent root guard.
+The launch plan has **exactly** these fields:
 
-The trust boundary is the parent's observed tool invocation/result and pinned
-archive/proof hashes, not facts asserted by the app, API caller or receipt. The
-parent must stage the actual per-job record before this command; this directory
-does not generate a fake record or claim cryptographic platform attestation.
-The verified nonsecret chain is written to `runner-launch-chain.json` and
-`runner-authorized.json` **before** any firewall change. Missing/unbound chain
-fails closed even on a Mac with working sudo/PF.
+```json
+{
+  "version": 2,
+  "kind": "trusted-parent-prelaunch-plan",
+  "runID": "<same run UUID>",
+  "launchNonce": "<same new UUIDv4>",
+  "sourceManifestSHA256": "<raw source-manifest file SHA256>",
+  "issuedAt": 0,
+  "expiresAt": 0,
+  "scope": {
+    "tool": "mobile.build",
+    "platform": "ios",
+    "source": "workspace",
+    "provider": "revyl-remote-builds",
+    "guest": "one-clean-single-use-private-vm",
+    "cache": "compilation-only",
+    "entry": "archived-build-commands"
+  }
+}
+```
+
+Replace the zero timestamps with actual epoch milliseconds: issuance may be at
+most two hours old and five seconds ahead, expiry must be future and no later
+than two hours after issuance. The exact scope is mandatory; local/paired/shared,
+upload-only, runtime-cache and boolean-exclusivity substitutes are rejected. The
+reviewed route runs the repository-root workspace archive's build commands on
+one clean, private Revyl VM; it does not authorize execution on another Mac.
+
+Before PF mutation the nonroot provisioner reads `kern.bootsessionuuid` and
+writes `runner-launch-chain.json`. The independent root guard rehashes the
+immutable inputs, reads the **actual current** boot UUID itself, then writes and
+fsyncs a single-use witness at
+`/private/var/run/calledit-qa-launches/<launchNonce>.json`. Its directory is
+root-owned/non-user-writable and its file is root-owned/read-only, so deleting
+the archived context or output folder cannot reset consumption. Re-consumption
+fails. The root guard also writes `runner-authorized.json` before any PF query or
+mutation, and includes that authorization in `lease-ready.json`.
+
+The stable authorization chain has exactly `version:2`, `authorityScope` (the
+plan's exact `scope`), `runID`, `launchNonce`, `contextSHA256`,
+`sourceManifestSHA256`, `launchPlanSHA256`, `harnessSHA256`, `guardSHA256`,
+`configurationSHA256`, `reviewedAuthoritySHA256`, `providerReadableSHA256` and
+`guestBootSessionUUID`. Returned authorizations add `chainSHA256` and `checkedAt`.
+`harnessSHA256` seals the repository-relative `.py`/`.ts` source map;
+`guardSHA256` seals the `REQUIRED` subset; `configurationSHA256` seals the
+`configurationFiles` map. These three hashes and `chainSHA256` use UTF-8 JSON
+with recursively sorted keys, no whitespace and no final newline. Raw artifact
+hashes instead cover the exact file bytes, including any newline.
+
+The root witness has exactly `version:2`, `chain` (that stable chain),
+`chainSHA256`, `rootGuard:{pid,uid:0,birth}` (observed normalized `ps lstart`)
+and `consumedAt`. The live verifier re-reads the current boot and all seals,
+checks this witness against the exact root lease PID/birth and pre-lease
+timestamp, then retains all live kernel/broker/device checks. Its status adds
+`rootLaunchWitnessSHA256`. Process approvals and independently erased-device
+records belong to that exact live guard/run directory. Receipt binding remains
+transitive through the actual `lease-ready.json` hash, embedded authorization,
+same live guard/device, and the hashed kernel proof; the frozen native manifest
+and outer provisioning receipt schemas are unchanged. Kernel proof must postdate
+this specific lease. A previous boot's witness or a previous lease's proof is
+not accepted as current evidence.
+
+This is a trusted-launcher/operator boundary, **not** cryptographic platform
+attestation: a guest cannot independently authenticate a malicious privileged
+operator or distinguish an exact archive copied to another Mac without an
+external attestation service, which this design does not invent. The parent must
+use only the reviewed actual tool route, reserve each nonce for one launch in
+its independent tool record, reject cross-job reuse and retain the actual
+returned IDs/log linkage. Guest root consumption prevents reuse within that VM;
+it is not a cross-VM nonce registry. Neither a caller's booleans nor a receipt
+under test establishes that boundary. Missing/unbound chains fail closed even
+on a Mac with working sudo/PF. No staged plan by itself proves PF enforcement,
+safe restoration, simulator freshness or Messages/UI execution.
 
 ## Gateway verifier/controller interface
 
@@ -273,10 +361,10 @@ the parent runs the command above. A successful preflight or passing units canno
 be promoted to outbound, UI, provider, signing or full-V0 readiness evidence.
 
 
-Current local assertion inventory: Python `SIM-AUTH-01..03`, `SIM-GUARD-01..07`,
+Current local assertion inventory: Python `SIM-AUTH-01..10`, `SIM-GUARD-01..08`,
 `SIM-EGRESS-01..09`, `SIM-GATE-01`, `SIM-LEASE-01..08`, `SIM-RECEIPT-01..02`,
-`SIM-UI-01..02`, `SIM-CLEANUP-01` (33 methods), plus Node
-`SIM-CONTROLLER-01..02`. The separate native driver uses
+`SIM-UI-01..02`, `SIM-STATUS-01..02`, `SIM-CLEANUP-01` (43 methods), plus Node
+`SIM-CONTROLLER-01..04`. The separate native driver uses
 `SIM-PROVISION-UI-01..16`; those native assertions are source-only until the actual
 Mac UI lane runs. Unit receipt/process/packet inputs are deliberately fabricated
 and cannot be reported as real platform, kernel, simulator or Messages evidence.
