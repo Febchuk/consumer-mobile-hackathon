@@ -157,13 +157,13 @@ export const pick = mutation({
     const existing = picks[0];
     if (existing && (existing.groupId !== bet.groupId || existing.membershipId !== member._id || existing.voidedAt !== undefined || !Number.isFinite(existing.updatedAt))) fail("NOT_AVAILABLE");
     return await once(ctx, account._id, "bets.pick", args.requestId, { betId: args.betId, option: args.option, confidence: args.confidence }, async () => {
+      await rateLimit(ctx, `pick:${account._id}`, 60, 60_000);
       if (existing) {
         if (existing.option !== args.option || existing.confidence !== args.confidence) fail("CONFLICT", "Your confirmed pick cannot be changed.");
         return { saved: true as const, option: existing.option, confidence: existing.confidence, updatedAt: existing.updatedAt };
       }
       const now = Date.now();
       if (stateAt(bet, now) !== "open" || now >= bet.revealAt || now < bet.createdAt) fail("NOT_AVAILABLE");
-      await rateLimit(ctx, `pick:${account._id}`, 60, 60_000);
       await ctx.db.insert("v0Picks", { betId: bet._id, groupId: bet.groupId, accountId: account._id, membershipId: member._id, option: args.option, confidence: args.confidence, placedAt: now, updatedAt: now });
       return { saved: true as const, option: args.option, confidence: args.confidence, updatedAt: now };
     });
