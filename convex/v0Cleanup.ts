@@ -2,6 +2,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { voidBet } from "./v0Bets";
 import { requireMember } from "./v0Policy";
+import { providerCleanupConfigured } from "./v0ProviderCleanup";
 
 export async function cancelSubjectBets(ctx: MutationCtx, accountId: Id<"v0Accounts">, groupId?: Id<"v0Groups">) {
   const bets = await ctx.db.query("v0Bets").withIndex("by_subject", (q) => q.eq("subjectId", accountId)).collect();
@@ -64,6 +65,8 @@ export async function blockInteractions(ctx: MutationCtx, accountId: Id<"v0Accou
 }
 
 export async function deleteAccountData(ctx: MutationCtx, accountId: Id<"v0Accounts">) {
+  const account = await ctx.db.get(accountId);
+  if (!account || account.deletedAt !== undefined) return;
   const now = Date.now();
   const phones = await ctx.db.query("v0Phones").withIndex("by_account", (q) => q.eq("accountId", accountId)).collect();
   const phoneHashes = new Set(phones.map((phone) => phone.phoneHash));
@@ -75,7 +78,7 @@ export async function deleteAccountData(ctx: MutationCtx, accountId: Id<"v0Accou
     }
     await ctx.db.delete(phone._id);
   }
-  await ctx.db.insert("v0ProviderCleanup", { accountId, provider: "twilio_verify", references: [...references], state: "manual_required", attempts: 0, availableAt: now, createdAt: now });
+  await ctx.db.insert("v0ProviderCleanup", { accountId, provider: "twilio_verify", references: [...references], state: providerCleanupConfigured() ? "pending" : "manual_required", attempts: 0, availableAt: now, createdAt: now });
 
   const memberships = await ctx.db.query("v0Memberships").withIndex("by_account", (q) => q.eq("accountId", accountId)).collect();
   const membershipIds = new Set(memberships.map((member) => member._id));
