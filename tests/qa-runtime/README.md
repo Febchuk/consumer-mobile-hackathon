@@ -93,6 +93,8 @@ The runner creates a fresh user/network namespace with only loopback, verifies n
 
 The runner intentionally does not activate routing: native-card-origin compatibility remains explicitly blocked. Its manifest is only a plumbing contract input with a placeholder simulator, not a native activation. Evidence retains `nativeUIExecuted=false`, `simulatorProvisioned=false`, `nativeTransportCredit=false`, `realProviderExecuted=false` and `fullV0Ready=false`. A passing evidence file is insufficient unless the command exits zero, private state is removed, and the source/harness hashes remain unchanged.
 
+NaN and both infinities are valid Convex wire values, not valid confidence inputs. The native codec test checks their exact `$float` encoding and exclusion from the actual control range; this real-backend lane separately sends all three through the official HTTP client and requires `INVALID_INPUT` with unchanged fixture counts. This is not a claim that Swift has called the backend or that a pick succeeded.
+
 Run focused verification without inherited deployment credentials:
 
 ```sh
