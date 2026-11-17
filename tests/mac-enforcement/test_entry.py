@@ -16,6 +16,29 @@ SPEC.loader.exec_module(ENTRY)
 
 
 class FakeArchiveEntryDesignTests(unittest.TestCase):
+    def test_OPERATOR_CARRIER_01_generates_only_in_private_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary).resolve()
+            (root / "native-imessage").mkdir()
+            (root / "native-imessage/Info.plist").write_text("sealed original")
+            scratch = root / "scratch"
+            scratch.mkdir()
+            environment = ENTRY.build_environment(scratch)
+
+            def compile_fake(argv, **options):
+                self.assertEqual(options["cwd"], scratch / "native")
+                self.assertEqual(options["env"], environment)
+                (scratch / "native/Info.plist").write_text("FAKE generated content")
+                if argv[0] == "xcodebuild":
+                    (scratch / "native/build/Build/Products/QA-iphonesimulator/CalledItMessages.app").mkdir(parents=True)
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(ENTRY.subprocess, "run", side_effect=compile_fake):
+                destination = ENTRY.build_carrier(root, scratch, environment)
+            self.assertEqual((root / "native-imessage/Info.plist").read_text(), "sealed original")
+            self.assertEqual(destination, root / "out/CalledItMessages.app")
+            self.assertTrue(destination.is_dir())
+
     def test_OPERATOR_ENV_01_derives_build_username_without_inheriting_credentials(self):
         user = SimpleNamespace(pw_name="SYNTHETIC_RUNNER", pw_dir="/synthetic/home")
         with patch.object(ENTRY.pwd, "getpwuid", return_value=user), patch.dict(ENTRY.os.environ, {"ANTHROPIC_API_KEY": "FAKE_SECRET_MUST_NOT_LEAK", "USER": "UNTRUSTED_NAME"}):

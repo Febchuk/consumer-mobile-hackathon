@@ -31,6 +31,28 @@ def build_environment(scratch):
             "USER": user.pw_name, "LOGNAME": user.pw_name, "TMPDIR": str(scratch), "LANG": "en_US.UTF-8"}
 
 
+def build_carrier(root, scratch, environment):
+    native = scratch / "native"
+    shutil.copytree(root / "native-imessage", native)
+    with (scratch / "compile.log").open("w") as log:
+        for command in [
+            ["xcodegen", "generate"],
+            ["xcodebuild", "build", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "generic/platform=iOS Simulator", "-derivedDataPath", "build", "CODE_SIGNING_ALLOWED=NO"],
+        ]:
+            result = subprocess.run(command, cwd=native, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, timeout=900)
+            if result.returncode:
+                log.flush()
+                print("\n".join((scratch / "compile.log").read_text().splitlines()[-100:]), flush=True)
+                raise RuntimeError("Unsigned carrier compilation failed before any PF attempt")
+    app = native / "build/Build/Products/QA-iphonesimulator/CalledItMessages.app"
+    if not app.is_dir():
+        raise RuntimeError("Actual unsigned carrier artifact missing")
+    destination = root / "out/CalledItMessages.app"
+    destination.parent.mkdir()
+    shutil.copytree(app, destination)
+    return destination
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--launch-nonce", required=True)
@@ -55,25 +77,8 @@ def main():
     verify_source()
     scratch = pathlib.Path(tempfile.mkdtemp(prefix="calledit-enforcement-")).resolve()
     environment = build_environment(scratch)
-    native = scratch / "native"
-    shutil.copytree(root / "native-imessage", native)
-    with (scratch / "compile.log").open("w") as log:
-        for command in [
-            ["xcodegen", "generate"],
-            ["xcodebuild", "build", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "generic/platform=iOS Simulator", "-derivedDataPath", "build", "CODE_SIGNING_ALLOWED=NO"],
-        ]:
-            result = subprocess.run(command, cwd=native, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, timeout=900)
-            if result.returncode:
-                log.flush()
-                print("\n".join((scratch / "compile.log").read_text().splitlines()[-100:]), flush=True)
-                raise RuntimeError("Unsigned carrier compilation failed before any PF attempt")
+    destination = build_carrier(root, scratch, environment)
     verify_source()
-    app = native / "build/Build/Products/QA-iphonesimulator/CalledItMessages.app"
-    if not app.is_dir():
-        raise RuntimeError("Actual unsigned carrier artifact missing")
-    destination = root / "out/CalledItMessages.app"
-    destination.parent.mkdir()
-    shutil.copytree(app, destination)
     sys.path.insert(0, str(root / "tests/simulator-provisioner"))
     from global_pf import controller_flows
     from launch_provenance import verify_trusted_launch
