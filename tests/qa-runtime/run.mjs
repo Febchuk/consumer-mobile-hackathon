@@ -85,7 +85,7 @@ try {
     assert.equal(execFileSync("ip", ["-6", "route", "show", "default"], { encoding: "utf8" }).trim(), "");
     assert.deepEqual(JSON.parse(execFileSync("ip", ["-json", "link", "show"], { encoding: "utf8" })).map((item) => item.ifname), ["lo"]);
   };
-  local = await bootOfficialBackend({ root, directory: state + "b", binary, expectedBinarySHA256: binarySHA256, runID, fixtureSetID, backendRevision, configVersion: "qa-transport-v0", verifyIsolation, rejectFirstCertificate: true });
+  local = await bootOfficialBackend({ root, directory: state + "b", binary, expectedBinarySHA256: binarySHA256, runID, fixtureSetID, backendRevision, configVersion: "qa-transport-v0", verifyIsolation, rejectFirstCertificate: true, processGroupMode: "independent" });
   symlinkSync(resolve(root, "node_modules"), resolve(state, "node_modules"), "dir");
   transport = local.provider;
   metadata.providerTransport = { kind: "strict localhost CONNECT plus verified verify.twilio.com TLS fixture", proxyOrigin: transport.proxyOrigin, caSHA256: transport.caSHA256, stats: transport.stats };

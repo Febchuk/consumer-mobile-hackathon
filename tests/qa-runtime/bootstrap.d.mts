@@ -10,6 +10,7 @@ export type BootstrapOptions = {
   verifyIsolation: () => Promise<void>;
   path?: string;
   rejectFirstCertificate?: boolean;
+  processGroupMode?: "independent" | "supervised";
 };
 
 export type FixtureCatalog = {
