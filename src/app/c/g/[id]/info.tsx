@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useMutation } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
 import { useIdentity } from "@/lib/identity";
@@ -20,7 +21,12 @@ export default function GroupInfo() {
   const pair = useMutation(api.ext.createPair);
   const [code, setCode] = useState<{ code: string; expiresAt: number } | null>(null);
   const data = useStableQuery(api.chat.thread, token ? { token, groupId: id as Id<"groups">, now: qnow } : ("skip" as never));
-  if (!data) return <View style={{ flex: 1, backgroundColor: N.bg }} />;
+  if (!data)
+    return (
+      <View style={{ flex: 1, backgroundColor: N.bg }}>
+        <StatusBar style="light" />
+      </View>
+    );
   const items = data.items as { type: string; total?: number; status?: string }[];
   const pot = items.filter((i) => i.type === "bet" || i.type === "sealed").reduce((a, i) => a + (i.total ?? 0), 0);
   const bets = items.filter((i) => i.type === "bet" || i.type === "sealed").length;
@@ -28,6 +34,7 @@ export default function GroupInfo() {
   const section = { backgroundColor: N.card, borderRadius: 16, borderWidth: 1, borderColor: N.line, marginHorizontal: 16, overflow: "hidden" as const };
   return (
     <ScrollView style={{ flex: 1, backgroundColor: N.bg }} contentContainerStyle={{ paddingTop: insets.top + 6, paddingBottom: 60, gap: 18, maxWidth: 620, width: "100%", alignSelf: "center" }}>
+      <StatusBar style="light" />
       <View style={{ flexDirection: "row", paddingHorizontal: 16, height: 40, alignItems: "center" }}>
         <View style={{ flex: 1 }} />
         <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: "/c/g/[id]", params: { id } }))} hitSlop={10}>

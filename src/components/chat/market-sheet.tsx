@@ -96,7 +96,7 @@ export function MarketSheet({ betId, token, onClose }: { betId: Id<"bets">; toke
               <Glow color={iWon ? N.gold : N.red} style={{ backgroundColor: "#000", borderRadius: 20, borderWidth: 1, borderColor: iWon ? N.gold : N.red, padding: 20, alignItems: "center", gap: 6 }}>
                 <Text style={[nt(34, "800", iWon ? N.lime : N.red), { textShadowColor: iWon ? N.lime : N.red, textShadowRadius: 18 }]}>{iWon ? "Called it!" : "Not this time"}</Text>
                 {iWon ? (
-                  <Ticker value={payoutFor(m.pools, m.mine.option, m.mine.amount)} prefix="+" suffix=" pts" duration={1400} style={mono(30, N.gold, true)} />
+                  <Ticker value={Math.floor((m.pools.reduce((a, b) => a + b, 0) * m.mine.amount) / m.pools[m.mine.option]) - m.mine.amount} prefix="+" suffix=" pts" duration={1400} style={mono(30, N.gold, true)} />
                 ) : (
                   <Text style={mono(26, N.red, true)}>-{fmt(m.mine.amount)} pts</Text>
                 )}
