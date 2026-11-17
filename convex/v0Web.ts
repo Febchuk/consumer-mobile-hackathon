@@ -14,8 +14,21 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 }
 
+function appleAppSiteAssociation() {
+  const prefix = process.env.V0_APPLE_APP_ID_PREFIX ?? "";
+  const bundles = (process.env.V0_APPLE_BUNDLE_IDS ?? "").split(",");
+  if (!/^[A-Z0-9]{10}$/.test(prefix) || prefix === "ABCDE12345") return null;
+  if (bundles.length > 4 || new Set(bundles).size !== bundles.length) return null;
+  if (!bundles.every((bundle) => bundle.length <= 155 && /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(bundle) && !/^com\.example(\.|$)/i.test(bundle))) return null;
+  return JSON.stringify({ applinks: { details: [{ appIDs: bundles.map((bundle) => `${prefix}.${bundle}`), components: [{ "/": `/c/${"?".repeat(64)}` }] }] } });
+}
+
 export function landingResponse(request: Request) {
   const path = new URL(request.url).pathname;
+  if (path === "/.well-known/apple-app-site-association") {
+    const association = appleAppSiteAssociation();
+    if (association) return new Response(association, { headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+  }
   if (path !== "/" && !/^\/c\/[a-f0-9]{64}$/.test(path)) return new Response("This legacy web page is no longer available.", { status: 410, headers: { "Cache-Control": "no-store" } });
   const install = installUrl();
   const control = install
