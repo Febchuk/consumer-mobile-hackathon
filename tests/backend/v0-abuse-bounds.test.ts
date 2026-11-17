@@ -333,7 +333,7 @@ function logged(value: unknown): string {
 }
 
 describe("SEC2 secret-free logs", () => {
-  it("[SEC2.secret-free-logs.runtime] writes no session, code, phone, provider credential or sealed content to the function log across sign-in, pairing and every canonical export", async () => {
+  it("[SEC2.secret-free-logs.runtime] writes no session, code, phone, provider credential or sealed content to the function log across sign-in, pairing and every canonical export reached by an eligible actor", async () => {
     const levels = ["log", "info", "warn", "error", "debug", "trace"] as const;
     const spies = levels.map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
     const provider = fakeOtp();
@@ -353,20 +353,28 @@ describe("SEC2 secret-free logs", () => {
     await f.t.query(api.v0Auth.me, { token: paired.token });
     await f.t.mutation(api.v0Auth.revoke, { token: paired.token, allDevices: false, requestId: "log-revoke" });
     await expectCode(f.t.query(api.v0Auth.me, { token: paired.token }), "AUTH_REQUIRED");
-    let calls = 0;
-    for (const role of ["anonymous", "revoked", "outsider", "friend", "subject"] as const) {
+    const secrets = [...fixtureSecrets(f).filter((value) => value !== f.runId), session.token, paired.token, pair.code, syntheticPhone, syntheticOtherPhone, syntheticCode, "135791", pepper, "d".repeat(32), syntheticAccountSid, syntheticServiceSid, syntheticVerificationSid, "PROVIDER_INTERNAL_DETAIL", await hash(session.token), await hash(pair.code)];
+    const reached = new Set<string>();
+    for (const role of ["anonymous", "revoked", "outsider", "creator", "friend", "subject"] as const) {
       for (const path of Object.keys(contractCases)) {
-        calls++;
-        try {
-          await invoke(f, path, role === "anonymous" ? "synthetic_anonymous" : f.actors[role].token);
-        } catch (error) {
-          expect(error).toBeInstanceOf(ConvexError);
+        for (const at of [T0, REVEAL + 1]) {
+          vi.setSystemTime(at);
+          const each = await v0Fixture();
+          secrets.push(...fixtureSecrets(each).filter((value) => value !== each.runId));
+          try {
+            await invoke(each, path, role === "anonymous" ? "synthetic_anonymous" : each.actors[role].token);
+            reached.add(role + " " + path);
+          } catch (error) {
+            expect(error).toBeInstanceOf(ConvexError);
+          }
         }
       }
     }
-    expect(calls).toBe(5 * Object.keys(contractCases).length);
+    const authenticated = ["v0Auth:me", "v0Auth:revoke", "v0Auth:createPair", "v0Groups:create", "v0Groups:invitations", "v0Groups:members", "v0Groups:linkConversation", "v0Groups:resolveConversation", "v0Groups:unlinkConversation", "v0Groups:turn", "v0Groups:passTurn", "v0Groups:recap", "v0Groups:board", "v0Bets:get", "v0Bets:list", "v0Bets:history", "v0Proof:list", "v0Proof:read", "v0Controls:get", "v0Controls:update", "v0Controls:alias", "v0Controls:leave", "v0Controls:deleteAccount", "v0Controls:report", "v0Controls:block", "v0Suggestions:get", "v0Notifications:register", "v0Notifications:unregister", "v0Notifications:preferences", "v0Notifications:setPreferences"];
+    for (const path of [...authenticated, "v0Bets:pick", "v0Groups:invite"]) expect(reached.has("friend " + path) || reached.has("creator " + path), path).toBe(true);
+    for (const path of ["v0Bets:veto", "v0Bets:answer", "v0Proof:upload"]) expect(reached.has("subject " + path), path).toBe(true);
+    expect(reached.has("outsider v0Groups:accept")).toBe(true);
     const output = spies.flatMap((spy) => spy.mock.calls).map((entry) => entry.map(logged).join(" ")).join("\n");
-    const secrets = [...fixtureSecrets(f).filter((value) => value !== f.runId), session.token, paired.token, pair.code, syntheticPhone, syntheticOtherPhone, syntheticCode, "135791", pepper, "d".repeat(32), syntheticAccountSid, syntheticServiceSid, syntheticVerificationSid, "PROVIDER_INTERNAL_DETAIL", await hash(session.token), await hash(pair.code)];
     for (const secret of secrets) expect(output).not.toContain(secret);
     expect(output).not.toMatch(/Basic [A-Za-z0-9+/=]{8,}/);
   });
@@ -376,7 +384,7 @@ describe("SEC2 secret-free logs", () => {
     expect(files).toContain("v0Auth.ts");
     for (const name of files) {
       for (const line of readFileSync("convex/" + name, "utf8").split("\n")) {
-        if (/console\s*\.\s*\w+\s*\(/.test(line)) expect(line, name).not.toMatch(/token|phone|code|secret|pepper|authorization|password|passcode|session|key|sid|bytes/i);
+        if (/console\s*\.\s*\w+\s*\(/.test(line)) expect(line, name).not.toMatch(/token|phone|code|secret|pepper|authorization|password|passcode|session|key|sid|bytes|\bargs?\b|request|account/i);
       }
     }
   });
