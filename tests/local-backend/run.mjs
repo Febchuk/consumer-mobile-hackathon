@@ -9,6 +9,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { convexToJson } from "convex/values";
 import { makePng } from "../fixtures/png.mjs";
+import { assertLoopbackTarget, nonLoopbackListeners } from "./loopback.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const argv = process.argv.slice(2);
@@ -42,7 +43,7 @@ mkdirSync(project);
 mkdirSync(home);
 const env = { PATH: process.env.PATH, HOME: home, TMPDIR: state, CI: "1", NODE_ENV: "test", EXPO_NO_DOTENV: "1", CONVEX_AGENT_MODE: "anonymous", DISABLE_BEACON: "1", DO_NOT_TRACK: "1" };
 const runId = `e2e_${randomUUID().replaceAll("-", "")}`;
-const origin = "http://127.0.0.1:3210";
+const origin = assertLoopbackTarget("http://127.0.0.1:3210").origin;
 const instanceSecret = randomBytes(32).toString("hex");
 const adminKey = execFileSync(binary, ["keygen", "admin-key", "--instance-name", runId, "--instance-secret", instanceSecret], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 const redact = (value) => String(value).replaceAll(instanceSecret, "[local secret redacted]").replaceAll(adminKey, "[local key redacted]");
@@ -53,10 +54,8 @@ const sourceFiles = git("ls-files", "convex").split("\n").filter(Boolean).sort()
 const sourceDigest = digest(sourceFiles.map((path) => path + "\n" + readFileSync(resolve(root, path), "utf8")).join("\n"));
 const metadata = { schemaVersion: 1, runId, candidateSha: git("rev-parse", "HEAD"), backendSourceSha: git("log", "-1", "--format=%H", "--", "convex"), backendSourceDigest: sourceDigest, harnessSha256: digest(readFileSync(fileURLToPath(import.meta.url))), fixtureSha256: digest(readFileSync(resolve(root, "tests/local-backend/fixtures/qaRpc.ts.txt"))), mediaFixtureSha256: digest(readFileSync(resolve(root, "tests/fixtures/png.mjs"))), mediaContentHashes: [undefined, 257, 512 * 1024].map((length) => { const bytes = makePng(length); return { length: bytes.byteLength, sha256: digest(new Uint8Array(bytes)) }; }), backendVersion, binarySha256, convexClientVersion: JSON.parse(readFileSync(resolve(root, "node_modules/convex/package.json"), "utf8")).version, os: { platform: process.platform, architecture: process.arch, node: process.version }, startedAt: new Date().toISOString(), origin, target: "real OSS backend in isolated loopback network namespace", sourceOverlays: ["qaRpc.ts (test-only fixture)", "crons.ts (empty test-only scheduler)"], productionProof: false, nativeTransportExecuted: false, businessHandlerProof: "proof media and session revocation only; no complete journey", providerRunIds: [], signedBuild: null, status: "blocked" };
 const safeFetch = async (url, options = {}) => {
-  const target = new URL(url);
+  const target = assertLoopbackTarget(url);
   assert.equal(target.origin, origin);
-  assert.equal(target.username, "");
-  assert.equal(target.password, "");
   return fetch(url, { ...options, redirect: "error", signal: AbortSignal.timeout(15000) });
 };
 const client = new ConvexHttpClient(origin, { skipConvexDeploymentUrlCheck: true, logger: false, fetch: safeFetch });
@@ -78,7 +77,8 @@ try {
   writeFileSync(resolve(project, "convex/crons.ts"), 'import { cronJobs } from "convex/server";\nexport default cronJobs();\n');
   writeFileSync(resolve(project, "package.json"), JSON.stringify({ name: "calledit-isolated-rpc", private: true, version: "0.0.0", dependencies: { convex: metadata.convexClientVersion } }));
   symlinkSync(resolve(root, "node_modules"), resolve(project, "node_modules"), "dir");
-  server = spawn(binary, ["--interface", "127.0.0.1", "--port", "3210", "--site-proxy-port", "3211", "--instance-name", runId, "--instance-secret", instanceSecret, "--disable-beacon", "--local-storage", resolve(state, "storage"), resolve(state, "backend.sqlite3")], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"] });
+  const bind = new URL(origin);
+  server = spawn(binary, ["--interface", bind.hostname, "--port", bind.port, "--site-proxy-port", "3211", "--instance-name", runId, "--instance-secret", instanceSecret, "--disable-beacon", "--local-storage", resolve(state, "storage"), resolve(state, "backend.sqlite3")], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"] });
   const collect = (data) => { logs = (logs + data.toString()).slice(-200000); };
   server.stdout.on("data", collect);
   server.stderr.on("data", collect);
@@ -89,6 +89,7 @@ try {
     await delay(250);
   }
   assert.ok(ready, "Local backend did not become ready");
+  assert.deepEqual(nonLoopbackListeners(readFileSync("/proc/net/tcp", "utf8"), readFileSync("/proc/net/tcp6", "utf8")), [], "A socket is listening beyond loopback");
   const deploy = spawnSync(process.execPath, [resolve(root, "node_modules/convex/bin/main.js"), "dev", "--once", "--typecheck", "disable", "--codegen", "disable", "--tail-logs", "disable"], { cwd: project, env: { ...env, CONVEX_SELF_HOSTED_URL: origin, CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey }, encoding: "utf8", timeout: 120000 });
   writeFileSync(resolve(output, "local-push.log"), redact((deploy.stdout ?? "") + (deploy.stderr ?? "")), { mode: 0o600 });
   assert.equal(deploy.status, 0, "Local-only source push failed; see redacted local-push.log");

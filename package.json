@@ -55,7 +55,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:backend": "node scripts/run-backend-tests.mjs",
-    "test:once": "node scripts/run-backend-tests.mjs"
+    "test:once": "node scripts/run-backend-tests.mjs",
+    "test:local-backend": "node tests/local-backend/lane.mjs"
   },
   "private": true,
   "allowScripts": {
