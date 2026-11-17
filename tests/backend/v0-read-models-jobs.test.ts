@@ -11,13 +11,13 @@ async function seedTurn(f: Fixture) {
 }
 
 describe("actual V0 read models and implemented reveal scheduler", () => {
-  it("[V0.sweep-reveal-boundaries] locks and reveals at server boundaries with one logical event per eligible recipient", async () => {
+  it("[V0.sweep-reveal-boundaries] preserves personal confirmation until reveal with one logical reveal event per eligible recipient", async () => {
     const f = await v0Fixture();
     await f.t.run(async (ctx) => {
       const member = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.friend.id)).unique();
       await ctx.db.insert("v0Picks", { groupId: f.g1, betId: f.bet, accountId: f.actors.friend.id, membershipId: member!._id, option: 0, confidence: 0.5, placedAt: T0, updatedAt: T0 });
     });
-    for (const [now, state, advanced] of [[CUTOFF - 1, "open", 0], [CUTOFF, "locked", 1], [REVEAL - 1, "locked", 0], [REVEAL, "revealed", 1]] as const) {
+    for (const [now, state, advanced] of [[CUTOFF - 1, "open", 0], [CUTOFF, "open", 0], [REVEAL - 1, "open", 0], [REVEAL, "revealed", 1]] as const) {
       vi.setSystemTime(now);
       expect(await f.t.mutation(internal.v0Jobs.sweep, {})).toEqual({ advanced });
       expect((await f.t.run((ctx) => ctx.db.get(f.bet)))?.state).toBe(state);

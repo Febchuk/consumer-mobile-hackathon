@@ -19,7 +19,7 @@ The first command constructs an environment allowlist, creates a fresh HOME, ent
 
 The current backend lane asserts every retired public query/mutation/action fails closed for every fixture role. The actual public HTTP handler returns a neutral install landing for `/` and opaque card paths, retires legacy paths, ignores previously registered assets, and never serves proof/question data. All 43 canonical business exports have explicit reviewed policies and valid argument descriptors, checked against the actual 97-export registry (including attestation and retired exports). Real-handler tests cover authentication, authorization, membership boundaries, invited consent, controls, session revocation and notification worker/provider-adapter behavior. `v0-fixture.ts` seeds the actual schema with hashed sessions and independent membership intervals; fixture validation alone is not business coverage.
 
-Provider transports are explicit synthetic replacements inside the denied-network namespace. Passing OTP/APNs adapter tests does not prove provider delivery. Create/pick/answer/challenge/goal and rotation/scoring rules still return POLICY_PENDING where approval is missing. Refusing those operations is tested as a truthful block, never credited as functional acceptance. Concurrency in convex-test does not prove real transaction conflict retries; the separate local-backend lane below tests a limited real-transaction race.
+Provider transports are explicit synthetic replacements inside the denied-network namespace. Passing OTP/APNs adapter tests does not prove provider delivery. Approved final pick confirmation, answer and challenge behavior has actual independent assertions; create/goal/rotation/scoring retain POLICY_PENDING where required rules remain unresolved. Refusing an operation is never functional acceptance. Convex-test concurrency does not prove actual transaction conflicts; the genuine HTTP lane records overlapping requests separately and does not claim engine retry events it did not observe.
 
 `tests/tsconfig.json` permits a focused harness typecheck without Expo globals. Root typecheck/lint remain required. The source-export inventory is an AST drift guard, not authorization proof: every listed public function still needs runtime policy assertions. Regenerate it only after reviewing the changed export contract:
 
@@ -37,6 +37,7 @@ The private source extraction command verifies the pinned source digests, reject
 node tests/tools/extract-acceptance.mjs \
   --spec-root "$PRIVATE_SPEC_DIRECTORY" \
   --decision-addendum "$PRIVATE_POLICY_ADDENDUM" \
+  --decision-addendum "$PRIVATE_SUPERSEDING_DECISION" \
   --output "$HOME/.capy/work/v0-acceptance-private.json"
 ```
 

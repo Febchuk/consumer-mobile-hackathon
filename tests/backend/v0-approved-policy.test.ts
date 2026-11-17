@@ -45,7 +45,7 @@ async function recordedAnswer(f: Fixture, at = answerTime) {
     expect(Date.now()).toBe(at);
     const result = await ctx.runMutation(api.v0Bets.answer, answerArgs(f));
     expect(result).toEqual({ state: "provisional", challengeDeadline: at + hour });
-    expect(await ctx.db.get(f.bet)).toMatchObject({ state: "provisional", answeredAt: at, provisionalOutcome: 0, answerDeadline: timeout, challengeDeadline: at + hour, policyVersion: "v0-policy.1" });
+    expect(await ctx.db.get(f.bet)).toMatchObject({ state: "provisional", answeredAt: at, provisionalOutcome: 0, answerDeadline: timeout, challengeDeadline: at + hour, policyVersion: "v0-policy.2" });
     return result;
   });
 }
@@ -64,7 +64,7 @@ describe("approved server answer and challenge windows, not settlement policy", 
         expect(subject.serverTime).toBe(at);
         expect(friend).toMatchObject({ view: "bet", canAnswer: false, canChallenge: false });
         if (offset < 0) {
-          expect(subject).toMatchObject({ view: "sealed", state: "locked" });
+          expect(subject).toMatchObject({ view: "sealed", state: "open", cutoffAt: REVEAL });
           await expectCode(ctx.runMutation(api.v0Bets.answer, answerArgs(f)), "NOT_AVAILABLE");
           expect(await ctx.db.get(f.bet)).not.toHaveProperty("answeredAt");
         } else {
@@ -271,7 +271,9 @@ describe("approved server answer and challenge windows, not settlement policy", 
     await f.t.run(async (ctx) => {
       expect(Date.now()).toBe(timeout + day);
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
-      expect(await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.1", missing: expect.arrayContaining(["streaks", "reward_rounding", "cutoff_limits", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"]) } });
+      const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
+      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.2", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"]) } });
+      expect(advanced?.policy.missing).not.toContain("cutoff_limits");
       expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "bet", state: "provisional", canAnswer: false, canChallenge: false, provisionalOutcome: 0 });
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("outcome");
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("finalizedAt");
@@ -423,8 +425,8 @@ describe("approved unanswered timeout and resume catch-up", () => {
 });
 
 describe("approved confidence validation retains unresolved creation and reward gates", () => {
-  for (const [name, confidence, code] of [["below-min", 0.0099, "INVALID_INPUT"], ["min", 0.01, "POLICY_PENDING"], ["middle", 0.5, "POLICY_PENDING"], ["max", 1, "POLICY_PENDING"], ["above-max", 1.0001, "INVALID_INPUT"], ["nan", Number.NaN, "INVALID_INPUT"], ["infinity", Infinity, "INVALID_INPUT"], ["negative-infinity", -Infinity, "INVALID_INPUT"]] as const) {
-    it(`[APPROVED.confidence.${name}] validates normalized confidence without accepting a pick or inventing a reward`, async () => {
+  for (const [name, confidence, code] of [["below-min", 0.0099, "INVALID_INPUT"], ["min", 0.01, "CONFLICT"], ["middle", 0.5, "CONFLICT"], ["max", 1, "CONFLICT"], ["above-max", 1.0001, "INVALID_INPUT"], ["nan", Number.NaN, "INVALID_INPUT"], ["infinity", Infinity, "INVALID_INPUT"], ["negative-infinity", -Infinity, "INVALID_INPUT"]] as const) {
+    it(`[APPROVED.confidence.${name}] validates normalized confidence while preserving the already-confirmed immutable pick and no reward`, async () => {
       const f = await policyFixture("open");
       const before = await scoreState(f);
       const picks = await f.t.run((ctx) => ctx.db.query("v0Picks").collect());
@@ -480,12 +482,12 @@ describe("approved next strictly future group-local 20:00 default", () => {
   });
 
   for (const [name, zone, reveal, cutoff, code] of [
-    ["la-default", "America/Los_Angeles", undefined, CUTOFF, "POLICY_PENDING"],
-    ["tokyo-default", "Asia/Tokyo", undefined, CUTOFF, "POLICY_PENDING"],
-    ["utc-default", "UTC", undefined, CUTOFF, "POLICY_PENDING"],
+    ["la-default", "America/Los_Angeles", undefined, undefined, "POLICY_PENDING"],
+    ["tokyo-default", "Asia/Tokyo", undefined, undefined, "POLICY_PENDING"],
+    ["utc-default", "UTC", undefined, undefined, "POLICY_PENDING"],
     ["invalid-default-zone", "Synthetic/Invalid", undefined, CUTOFF, "INVALID_INPUT"],
-    ["explicit-override", "UTC", T0 + 123_456, CUTOFF, "POLICY_PENDING"],
-    ["override-bypasses-default-zone", "Synthetic/Invalid", REVEAL, CUTOFF, "POLICY_PENDING"],
+    ["explicit-override", "UTC", T0 + 123_456, T0 + 123_456, "POLICY_PENDING"],
+    ["override-bypasses-default-zone", "Synthetic/Invalid", REVEAL, REVEAL, "POLICY_PENDING"],
     ["reveal-past", "UTC", T0 + 59_999, CUTOFF, "INVALID_INPUT"],
     ["reveal-now", "UTC", T0 + 60_000, CUTOFF, "INVALID_INPUT"],
     ["reveal-nonfinite", "UTC", Infinity, CUTOFF, "INVALID_INPUT"],

@@ -16,7 +16,7 @@ function manual(f: Fixture) {
   return {
     token: f.actors.creator.token, groupId: f.g1, subjectId: f.actors.subject.id,
     question: "Will they suggest a song before the reveal?", contextLine: "A friendly music evening.",
-    format: "yes_no" as const, options: ["Yes", "No"], cutoffAt: CUTOFF, revealAt: REVEAL,
+    format: "yes_no" as const, options: ["Yes", "No"], cutoffAt: REVEAL, revealAt: REVEAL,
     source: "manual" as const, requestId: `${f.runId}_create`,
   };
 }
