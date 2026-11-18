@@ -1,0 +1,160 @@
+import { internalMutation, internalQuery } from "./_generated/server";
+import { v } from "convex/values";
+import { hash, phoneHash } from "./v0Policy";
+import { approvedPolicy, localDateAt, localInstant } from "./v0GamePolicy";
+
+const runID = "__QA_RUN_ID__";
+const actors: Record<string, { phone: string; alias: string }> = __QA_ACTORS__;
+const tables = ["v0Accounts", "v0Phones", "v0Sessions", "v0OtpAttempts", "v0Pairs", "v0Groups", "v0Memberships", "v0Invites", "v0ConversationLinks", "v0Bets", "v0Picks", "v0Challenges", "v0Proofs", "v0Ledger", "v0Turns", "v0Recaps", "v0PushTokens", "v0Outbox", "v0Requests", "v0RateLimits", "v0Blocks", "v0Reports", "v0ProviderCleanup", "v0Goals"] as const;
+const groupMembers: Record<string, string[]> = { G1: ["cora", "sage", "finn"], G2: ["cora", "finn", "oli"] };
+const minute = 60_000;
+const hour = 60 * minute;
+
+function requireRun(id: string) {
+  if (id !== runID) throw new Error("Wrong fixture run");
+}
+
+// The real backend has no clock override, so every fixture group lives in the fixed-offset zone where it is 09:xx now:
+// inside the 08:00-20:00 turn window and before the noon pass.
+function fixtureZone(now: number) {
+  const offset = (new Date(now).getUTCHours() - 9 + 24) % 24;
+  return offset === 0 ? "Etc/GMT" : offset <= 12 ? "Etc/GMT+" + offset : "Etc/GMT-" + (24 - offset);
+}
+
+async function ids(ctx: any) {
+  const accounts: Record<string, any> = {};
+  for (const [name, actor] of Object.entries(actors)) {
+    const hashed = await phoneHash(actor.phone);
+    const row = await ctx.db.query("v0Phones").withIndex("by_hash", (q: any) => q.eq("phoneHash", hashed)).first();
+    if (row) accounts[name] = row.accountId;
+  }
+  const groups: Record<string, any> = {};
+  for (const group of await ctx.db.query("v0Groups").collect()) {
+    const key = /^QA (G\d) /.exec(group.name)?.[1];
+    if (key) groups[key] = group._id;
+  }
+  return { accounts, groups };
+}
+
+async function betByKey(ctx: any, key: string) {
+  const locator = await hash(runID + ":" + key);
+  const found = await ctx.db.query("v0Bets").withIndex("by_locator", (q: any) => q.eq("locator", locator)).first();
+  if (!found) throw new Error("Unknown fixture bet " + key);
+  return found;
+}
+
+export const reset = internalMutation({
+  args: { runID: v.string(), tokens: v.record(v.string(), v.string()), points: v.optional(v.record(v.string(), v.record(v.string(), v.number()))) },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    for (const table of tables) for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
+    const now = Date.now();
+    const timezone = fixtureZone(now);
+    const accounts: Record<string, any> = {};
+    for (const [name, actor] of Object.entries(actors)) {
+      const id = await ctx.db.insert("v0Accounts", { displayName: actor.alias, createdAt: now - 96 * hour, noBets: false, blockedTopics: [] });
+      await ctx.db.insert("v0Phones", { accountId: id, phoneHash: await phoneHash(actor.phone), lastFour: actor.phone.slice(-4), verifiedAt: now - 96 * hour });
+      const token = args.tokens[name];
+      if (!token) throw new Error("A control session is required for " + name);
+      await ctx.db.insert("v0Sessions", { accountId: id, tokenHash: await hash(token), deviceId: "qa-control-" + name, createdAt: now - minute, expiresAt: now + 2 * hour });
+      accounts[name] = id;
+    }
+    const groups: Record<string, any> = {};
+    for (const [key, members] of Object.entries(groupMembers)) {
+      const groupId = await ctx.db.insert("v0Groups", { name: "QA " + key + " " + runID.slice(0, 8), creatorId: accounts.cora, timezone, createdAt: now - 80 * hour, nextTurnAt: Number.MAX_SAFE_INTEGER });
+      groups[key] = groupId;
+      for (const [index, name] of members.entries()) {
+        await ctx.db.insert("v0Memberships", { groupId, accountId: accounts[name], alias: actors[name].alias, joinedAt: now - 72 * hour + index * 1000, points: args.points?.[key]?.[name] ?? 0, streak: 0 });
+      }
+    }
+    return { accounts, groups, timezone };
+  },
+});
+
+export const seedTurn = internalMutation({
+  args: { runID: v.string(), group: v.string(), creator: v.string(), subject: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts, groups } = await ids(ctx);
+    const group = await ctx.db.get(groups[args.group]);
+    const now = Date.now();
+    const localDate = localDateAt(group.timezone, now)!;
+    for (const turn of await ctx.db.query("v0Turns").withIndex("by_group_date", (q: any) => q.eq("groupId", group._id).eq("localDate", localDate)).collect()) await ctx.db.delete(turn._id);
+    const id = await ctx.db.insert("v0Turns", { groupId: group._id, localDate, creatorId: accounts[args.creator], subjectId: accounts[args.subject], status: "assigned", assignedAt: now - minute, passAt: localInstant(group.timezone, localDate, approvedPolicy.turnPassHour)! });
+    await ctx.db.patch(group._id, { lastCreatorId: accounts[args.creator], lastTurnDate: localDate });
+    return { turnId: id, localDate };
+  },
+});
+
+export const seedBet = internalMutation({
+  args: { runID: v.string(), key: v.string(), group: v.string(), creator: v.string(), subject: v.string(), format: v.union(v.literal("yes_no"), v.literal("over_under"), v.literal("this_that")), question: v.optional(v.string()), revealInMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts, groups } = await ids(ctx);
+    const now = Date.now();
+    const options = args.format === "yes_no" ? ["Yes", "No"] : args.format === "over_under" ? ["Over 2.5", "Under 2.5"] : ["PRIVATE_OPTION_A_" + runID, "PRIVATE_OPTION_B_" + runID];
+    const locator = await hash(runID + ":" + args.key);
+    const revealAt = now + (args.revealInMs ?? 20 * minute);
+    const betId = await ctx.db.insert("v0Bets", { groupId: groups[args.group], creatorId: accounts[args.creator], subjectId: accounts[args.subject], createdAt: now - minute, cutoffAt: revealAt, revealAt, question: args.question ?? "SECRET_QUESTION_" + runID, contextLine: "PRIVATE_CONTEXT_" + runID, format: args.format, options, ...(args.format === "over_under" ? { line: 2.5 } : {}), source: "manual", state: "open", locator, policyVersion: approvedPolicy.version });
+    return { betId, locator };
+  },
+});
+
+// The controllable clock: the server clock cannot move, so a fixture bet is moved through time instead, by rewriting
+// its own timestamps. The product's own jobs then perform the transition.
+export const shiftBet = internalMutation({
+  args: { runID: v.string(), key: v.optional(v.string()), betId: v.optional(v.id("v0Bets")), to: v.union(v.literal("revealed"), v.literal("challengeOver"), v.literal("answerTimeout")) },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const bet = args.betId ? await ctx.db.get(args.betId) : await betByKey(ctx, args.key!);
+    if (!bet) throw new Error("Unknown fixture bet");
+    const now = Date.now();
+    if (args.to === "revealed") {
+      if (bet.state !== "open") throw new Error("Only an open bet can be moved to its reveal");
+      await ctx.db.patch(bet._id, { createdAt: now - 2 * hour, cutoffAt: now - minute, revealAt: now - minute });
+      for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q: any) => q.eq("betId", bet._id)).collect()) await ctx.db.patch(pick._id, { placedAt: now - hour, updatedAt: now - hour });
+    } else if (args.to === "challengeOver") {
+      if (bet.state !== "provisional") throw new Error("Only an answered bet can be moved past its challenge hour");
+      const answeredAt = now - hour - 100_000;
+      await ctx.db.patch(bet._id, { createdAt: now - 5 * hour, cutoffAt: now - 3 * hour, revealAt: now - 3 * hour, answerDeadline: now + 21 * hour, answeredAt, challengeDeadline: answeredAt + hour });
+      for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q: any) => q.eq("betId", bet._id)).collect()) await ctx.db.patch(pick._id, { placedAt: now - 4 * hour, updatedAt: now - 4 * hour });
+      for (const challenge of await ctx.db.query("v0Challenges").withIndex("by_bet", (q: any) => q.eq("betId", bet._id)).collect()) await ctx.db.patch(challenge._id, { createdAt: answeredAt + 1000 });
+    } else {
+      if (bet.state !== "open" && bet.state !== "revealed") throw new Error("Only an unanswered bet can time out");
+      await ctx.db.patch(bet._id, { createdAt: now - 26 * hour, cutoffAt: now - 24 * hour - minute, revealAt: now - 24 * hour - minute });
+      for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q: any) => q.eq("betId", bet._id)).collect()) await ctx.db.patch(pick._id, { placedAt: now - 25 * hour, updatedAt: now - 25 * hour });
+    }
+    return { betId: bet._id };
+  },
+});
+
+export const inspect = internalQuery({
+  args: { runID: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts, groups } = await ids(ctx);
+    const actor = (id: any) => Object.entries(accounts).find(([, value]) => value === id)?.[0] ?? (id ? "other" : null);
+    const group = (id: any) => Object.entries(groups).find(([, value]) => value === id)?.[0] ?? (id ? "other" : null);
+    const all = async (table: any) => await ctx.db.query(table).collect();
+    return {
+      accounts, groups,
+      accountRows: (await all("v0Accounts")).map((row: any) => ({ actor: actor(row._id), displayName: row.displayName, noBets: row.noBets, blockedTopics: row.blockedTopics, deleted: row.deletedAt !== undefined, notificationsEnabled: row.notificationsEnabled ?? null })),
+      sessions: (await all("v0Sessions")).map((row: any) => ({ actor: actor(row.accountId), control: row.deviceId.startsWith("qa-control-"), revoked: row.revokedAt !== undefined })),
+      memberships: (await all("v0Memberships")).map((row: any) => ({ group: group(row.groupId), actor: actor(row.accountId), alias: row.alias, points: row.points, streak: row.streak, left: row.leftAt !== undefined })),
+      groupRows: (await all("v0Groups")).map((row: any) => ({ id: row._id, key: group(row._id), name: row.name, creator: actor(row.creatorId), timezone: row.timezone })),
+      invites: (await all("v0Invites")).map((row: any) => ({ group: group(row.groupId), inviter: actor(row.inviterId), accepted: row.acceptedAt !== undefined, revoked: row.revokedAt !== undefined })),
+      links: (await all("v0ConversationLinks")).map((row: any) => ({ actor: actor(row.accountId), group: group(row.groupId), control: row.deviceId.startsWith("qa-control-") })),
+      turns: (await all("v0Turns")).map((row: any) => ({ group: group(row.groupId), localDate: row.localDate, creator: actor(row.creatorId), subject: actor(row.subjectId), status: row.status, hasBet: row.betId !== undefined, passed: row.passedFromId !== undefined })),
+      bets: (await all("v0Bets")).map((row: any) => ({ id: row._id, locator: row.locator, group: group(row.groupId), creator: actor(row.creatorId), subject: actor(row.subjectId), question: row.question, format: row.format, options: row.options, state: row.state, source: row.source, revealAt: row.revealAt, provisionalOutcome: row.provisionalOutcome ?? null, outcome: row.outcome ?? null })),
+      picks: (await all("v0Picks")).map((row: any) => ({ betId: row.betId, actor: actor(row.accountId), option: row.option, confidence: row.confidence, voided: row.voidedAt !== undefined })),
+      challenges: (await all("v0Challenges")).map((row: any) => ({ betId: row.betId, actor: actor(row.accountId) })),
+      ledger: (await all("v0Ledger")).map((row: any) => ({ betId: row.betId, group: group(row.groupId), actor: actor(row.accountId), points: row.points, streakBefore: row.streakBefore, streakAfter: row.streakAfter })),
+      outbox: (await all("v0Outbox")).map((row: any) => ({ kind: row.kind, actor: actor(row.accountId), group: group(row.groupId), betId: row.betId ?? null, state: row.state, attempts: row.attempts })),
+      pushTokens: (await all("v0PushTokens")).length,
+      goals: (await all("v0Goals")).map((row: any) => ({ group: group(row.groupId), proposer: actor(row.proposerId), label: row.label, targetPoints: row.targetPoints, state: row.state, confirmedBy: row.confirmedBy.map(actor) })),
+      blocks: (await all("v0Blocks")).map((row: any) => ({ actor: actor(row.accountId), blocked: actor(row.blockedId) })),
+      reports: (await all("v0Reports")).map((row: any) => ({ reporter: actor(row.reporterId), group: group(row.groupId), reason: row.reason })),
+      recaps: (await all("v0Recaps")).length,
+    };
+  },
+});
