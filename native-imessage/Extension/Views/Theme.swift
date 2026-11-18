@@ -185,9 +185,9 @@ struct ErrorText: View {
     let text: String?
 
     var body: some View {
-        if let text {
-            Text(text).font(.footnote.weight(.medium)).foregroundStyle(Theme.red)
-        }
+        Text(text ?? "").font(.footnote.weight(.medium)).foregroundStyle(Theme.red)
+            .frame(height: text == nil ? 0 : nil)
+            .accessibilityHidden(text == nil)
     }
 }
 

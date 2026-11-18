@@ -7,7 +7,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
@@ -27,12 +27,12 @@ const fixtureSetID = "synthetic-v0-native-journeys";
 const configVersion = "native-sim.1";
 
 if (flag("--help")) {
-  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator]");
+  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--demo] [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator]");
   process.exit(0);
 }
 
 const stripped = inheritedCredentials(process.env);
-const environment = { PATH: ["/opt/homebrew/bin", process.env.PATH ?? "/usr/bin:/bin"].join(":"), HOME: homedir(), LANG: "en_US.UTF-8" };
+const environment = { PATH: ["/opt/homebrew/bin", process.env.PATH ?? "/usr/bin:/bin"].join(":"), HOME: homedir(), USER: userInfo().username, LOGNAME: userInfo().username, LANG: "en_US.UTF-8" };
 if (process.env.DEVELOPER_DIR) environment.DEVELOPER_DIR = process.env.DEVELOPER_DIR;
 process.env.PATH = environment.PATH;
 const run = (command, args, extra = {}) => execFileSync(command, args, { encoding: "utf8", env: environment, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, ...extra });
@@ -119,6 +119,33 @@ async function selfCheck() {
   return { policy: me.policy, providerStarts: 1 };
 }
 
+// Leaves the app running in a visible simulator for a person to click through, until the QA activation expires.
+async function demo(manifest, manifestBytes) {
+  await backend.operations.demo({});
+  const app = resolve(evidence.derived, "Build/Products/QA-iphonesimulator/CalledItMessages.app");
+  run("xcrun", ["simctl", "install", simulator.udid, app]);
+  const launch = () => run("xcrun", ["simctl", "launch", "--terminate-running-process", simulator.udid, "com.mikunad.calledit.qa.host"], { env: { ...environment, SIMCTL_CHILD_CALLED_IT_QA_RUN_ID: runID, SIMCTL_CHILD_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64") } });
+  launch();
+  spawnSync("open", ["-a", "Simulator", "--args", "-CurrentDeviceUDID", simulator.udid], { env: environment });
+  const until = new Date(manifest.expiresAt - 60_000);
+  evidence.status = "demo";
+  console.log(["", "Called It is running in the simulator '" + simulator.name + "' against a local backend with made-up data.", "",
+    "Sign in with any of these numbers and the code 000000:",
+    ...Object.entries(actors).map(([, actor]) => "  " + actor.phone + "  " + actor.alias),
+    "", "Start as QA Cora (" + actors.cora.phone + "). Then open Messages, tap OK on the first-run sheet, open a conversation,",
+    "tap +, choose Called It and link the conversation to a group.",
+    "", "This session ends at " + until.toLocaleTimeString() + " (the test build allows one hour). Press Ctrl-C to stop sooner.",
+    "If the Called It app is closed, press Return here to launch it again; opening it from the home screen will not work.", ""].join("\n"));
+  process.stdin.on("data", () => { try { launch(); say("relaunched the app"); } catch (error) { say("relaunch failed: " + error.message); } });
+  process.stdin.on("error", () => {});
+  await new Promise((accept) => {
+    const timer = setTimeout(accept, Math.max(0, until.getTime() - Date.now()));
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, () => { clearTimeout(timer); accept(); });
+  });
+  say("stopping the demo and removing its simulator and data");
+  exitCode = 0;
+}
+
 async function main() {
   assert.ok(process.platform === "darwin" && process.arch === "arm64", "This lane runs on an Apple silicon Mac only; elsewhere it is blocked, not passed");
   if (stripped.length) say("not forwarding inherited deployment or provider variables: " + stripped.join(", "));
@@ -163,10 +190,12 @@ async function main() {
   evidence.safety.cardTarget = manifest.cardOrigin;
 
   say("booting the local backend on loopback");
-  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log });
+  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log, crons: flag("--demo") });
   evidence.backend.selfCheck = await selfCheck();
   say("backend self-check passed: real handlers, fake code provider, policy " + evidence.backend.selfCheck.policy.status);
   if (flag("--backend-only")) { evidence.status = "backend-only"; exitCode = 0; return; }
+
+  if (flag("--demo")) return await demo(manifest, manifestBytes);
 
   sampler = setInterval(() => {
     try { for (const row of nonLoopbackConnections(simulator.udid)) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1); } catch { /* observation only */ }

@@ -38,7 +38,7 @@ async function body(request, limit = 1_048_576) {
  * Boots the pinned official Convex backend on loopback with the repository's real handlers, a per-run scratch copy of convex/
  * plus the test-only overlay, the fake phone-code provider, the app-facing gateway and the test-control server.
  */
-export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log }) {
+export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false }) {
   assert.equal(sha256(readFileSync(binary)), expectedBinarySHA256, "The backend executable does not match its pin");
   assert.ok(!existsSync(directory) && realpathSync(dirname(directory)) === dirname(directory), "A fresh canonical scratch directory is required");
   assert.ok(!resolve(directory).startsWith(resolve(root) + "/") && Buffer.byteLength(directory) + 45 < 104, "Use a short scratch directory outside the repository");
@@ -75,8 +75,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
     cpSync(resolve(root, "convex"), resolve(project, "convex"), { recursive: true });
     const overlay = readFileSync(resolve(root, "tests/native-sim/overlay.ts.txt"), "utf8").replaceAll("__QA_RUN_ID__", runID).replace("__QA_ACTORS__", JSON.stringify(actors));
     writeFileSync(resolve(project, "convex/qaNative.ts"), overlay, { mode: 0o600 });
-    // Crons are replaced by an empty schedule: jobs run only when a test asks for them.
-    writeFileSync(resolve(project, "convex/crons.ts"), 'import { cronJobs } from "convex/server";\nexport default cronJobs();\n');
+    // For tests, crons are replaced by an empty schedule: jobs run only when a test asks for them.
+    if (!crons) writeFileSync(resolve(project, "convex/crons.ts"), 'import { cronJobs } from "convex/server";\nexport default cronJobs();\n');
     writeFileSync(resolve(project, "package.json"), JSON.stringify({ name: "calledit-native-sim", version: "0.0.0", private: true, dependencies: { convex: JSON.parse(readFileSync(resolve(root, "node_modules/convex/package.json"), "utf8")).version } }));
     symlinkSync(resolve(root, "node_modules"), resolve(project, "node_modules"), "dir");
     const providerPath = resolve(project, "convex/v0AuthProvider.ts");
@@ -219,6 +219,18 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         return { ...state, bets: state.bets.map((bet) => ({ ...bet, key: keys[bet.id] ?? null })), picks: state.picks.map((pick) => ({ ...pick, bet: keys[pick.betId] ?? pick.betId })), ledger: state.ledger.map((row) => ({ ...row, bet: keys[row.betId] ?? row.betId })), provider: { starts: provider.stats.starts, checks: provider.stats.checks, invalidCodes: provider.stats.invalidCodes } };
       },
       async calls() { return calls.slice(); },
+      // The click-through scenario: points on both boards, Cora's turn in G1, an open bet to pick in G2, a hidden bet
+      // about Cora in G1 and a shared goal in G1 waiting for one more confirmation.
+      async demo() {
+        await operations.reset({ points: { G1: { cora: 120, finn: 210, sage: 95 }, G2: { cora: 60, finn: 35, oli: 150 } } });
+        await operations.seedTurn({ group: "G1", creator: "cora", subject: "sage" });
+        await operations.seedBet({ key: "demo-open", group: "G2", creator: "finn", subject: "oli", format: "yes_no", question: "Will Oli be late to dinner on Friday?", revealInMs: 30 * 60_000 });
+        await operations.seedBet({ key: "demo-hidden", group: "G1", creator: "finn", subject: "cora", format: "yes_no", question: "Will Cora finish her book this week?", revealInMs: 30 * 60_000 });
+        await operations.act({ actor: "sage", kind: "mutation", path: "v0Bets:pick", args: { betId: "@bet:demo-hidden", option: 0, confidence: 0.7, requestId: "demo-pick-sage" } });
+        const goal = await operations.act({ actor: "finn", kind: "mutation", path: "v0Groups:proposeGoal", args: { groupId: "@G1", label: "Group dinner", targetPoints: 500, requestId: "demo-goal" } });
+        assert.ok(goal.ok, "The demo goal was refused: " + goal.code);
+        return { seeded: true };
+      },
     };
 
     const controlToken = secret(randomBytes(32).toString("hex"));
