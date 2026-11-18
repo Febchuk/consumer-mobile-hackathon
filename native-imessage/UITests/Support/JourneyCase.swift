@@ -174,6 +174,7 @@ class JourneyCase: XCTestCase {
         }
         assertLabel(try required("qa.runtime.endpointPolicy", in: host), "loopback_only", "NATIVE-UI-RUNTIME", file: file, line: line)
         assertLabel(try required("qa.runtime.apiOrigin", in: host), run.manifest.apiOrigin, "NATIVE-UI-RUNTIME", file: file, line: line)
+        assertLabel(try required("qa.runtime.networkIsolation", in: host), run.networkIsolation == "denied" ? "denied" : "observed_not_denied", "NATIVE-UI-RUNTIME", file: file, line: line)
         phone.tap()
         phone.typeText(actor.phone)
         try tap("auth.requestCode", in: host, file: file, line: line)

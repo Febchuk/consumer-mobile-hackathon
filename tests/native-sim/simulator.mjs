@@ -56,7 +56,7 @@ export function nonLoopbackConnections(udid) {
     for (const row of rows) if (!owned.has(row.pid) && owned.has(row.parent)) { owned.set(row.pid, row); grew = true; }
   }
   if (!owned.size) return [];
-  const listing = spawnSync("lsof", ["-nP", "-iTCP", "-sTCP:ESTABLISHED", "-a", "-p", [...owned.keys()].join(",")], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).stdout ?? "";
+  const listing = spawnSync("lsof", ["+c", "0", "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-a", "-p", [...owned.keys()].join(",")], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).stdout ?? "";
   const found = [];
   for (const line of listing.split("\n").slice(1)) {
     const fields = line.trim().split(/\s+/);

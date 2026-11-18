@@ -11,7 +11,7 @@ import { homedir, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
-import { assertBuiltAppHasNoEndpoint, buildManifest, inheritedCredentials, ports } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, inheritedCredentials, networkIsolation, ports } from "./guard.mjs";
 import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime } from "./simulator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,9 +47,23 @@ const output = resolve(option("--output") ?? resolve(scratchRoot, "native-sim-" 
 assert.ok(!existsSync(output), "The output directory already exists: " + output);
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
-const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
+const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
 let backend; let simulator; let sampler; let exitCode = 1;
 const egress = new Map();
+const appEgress = new Set();
+// The two older UI test classes need the root provisioner's fixtures (tests/simulator-provisioner), which this lane does not supply.
+const provisionerOnly = ["MessagesDriveTests", "ProvisioningDriveTests"];
+// One place handles an interrupt at any point, so the simulator, the backend and the scratch data are always removed.
+let child; let interrupt;
+const interrupted = new Promise((_, reject) => {
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => {
+    if (interrupt) return interrupt();
+    evidence.interruptedBy = signal;
+    child?.kill("SIGTERM");
+    reject(new Error("interrupted by " + signal));
+  });
+});
+interrupted.catch(() => {});
 
 async function portFree(port) {
   return await new Promise((accept) => {
@@ -140,7 +154,7 @@ async function demo(manifest, manifestBytes) {
   process.stdin.on("error", () => {});
   await new Promise((accept) => {
     const timer = setTimeout(accept, Math.max(0, until.getTime() - Date.now()));
-    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, () => { clearTimeout(timer); accept(); });
+    interrupt = () => { clearTimeout(timer); accept(); };
   });
   say("stopping the demo and removing its simulator and data");
   exitCode = 0;
@@ -198,14 +212,20 @@ async function main() {
   if (flag("--demo")) return await demo(manifest, manifestBytes);
 
   sampler = setInterval(() => {
-    try { for (const row of nonLoopbackConnections(simulator.udid)) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1); } catch { /* observation only */ }
+    try {
+      const rows = nonLoopbackConnections(simulator.udid);
+      for (const row of rows) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1);
+      for (const row of appConnections(rows)) appEgress.add(row.process + " " + row.remote);
+    } catch { /* a failed sample is a missed observation, not a result */ }
   }, 5000);
   const only = options("--only");
-  const selection = (only.length ? only : ["CalledItUITests"]).map((name) => "-only-testing:" + (name.startsWith("CalledItUITests") ? name : "CalledItUITests/" + name));
+  const selection = only.length ? only.map((name) => "-only-testing:" + (name.startsWith("CalledItUITests") ? name : "CalledItUITests/" + name)) : ["-only-testing:CalledItUITests", ...provisionerOnly.map((name) => "-skip-testing:CalledItUITests/" + name)];
+  if (!only.length) evidence.notRun = provisionerOnly.map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
   const bundle = resolve(output, "native-ui.xcresult");
   say("running " + selection.join(" "));
   const testEnvironment = { ...environment, TEST_RUNNER_CALLED_IT_QA_RUN_ID: runID, TEST_RUNNER_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64"), TEST_RUNNER_CALLED_IT_QA_CONTROL_URL: backend.controlOrigin + "/control", TEST_RUNNER_CALLED_IT_QA_CONTROL_TOKEN: backend.controlToken };
   const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+  child = tests;
   let testLog = "";
   const onData = (data) => { const text = data.toString(); testLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
   tests.stdout.on("data", onData); tests.stderr.on("data", onData);
@@ -214,11 +234,15 @@ async function main() {
   const cases = [...testLog.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
   evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed: cases.filter((test) => test.result === "failed").length, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle };
   evidence.status = status === 0 && cases.length > 0 && evidence.tests.failed === 0 ? "passed" : cases.length === 0 ? "blocked" : "failed";
+  if (appEgress.size) {
+    evidence.status = "failed";
+    console.error("[native-sim] the app contacted an address that is not loopback: " + [...appEgress].join(", "));
+  }
   exitCode = evidence.status === "passed" ? 0 : 1;
 }
 
 try {
-  await main();
+  await Promise.race([main(), interrupted]);
 } catch (error) {
   evidence.error = backend ? backend.redact(error?.stack ?? error) : String(error?.stack ?? error);
   if (error?.backendLog) log("backend.log", error.backendLog);
@@ -226,7 +250,7 @@ try {
 } finally {
   clearInterval(sampler);
   if (simulator) {
-    evidence.safety.outboundNetwork = { enforced: false, reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
+    evidence.safety.outboundNetwork = { mode: networkIsolation, enforced: false, appContactedNonLoopback: [...appEgress], reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
     if (!flag("--keep-simulator")) evidence.simulator.deleted = destroySimulator(simulator.udid);
   }
   if (backend) {
@@ -235,6 +259,6 @@ try {
   }
   evidence.finishedAt = new Date().toISOString();
   log("evidence.json", JSON.stringify(evidence, null, 2) + "\n");
-  say("status " + evidence.status + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed, " + evidence.tests.blocked + " blocked" : "") + "; evidence in " + output);
+  say("status " + evidence.status + " (outbound network " + networkIsolation + ", not denied)" + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed, " + evidence.tests.blocked + " blocked" : "") + "; evidence in " + output);
 }
 process.exit(exitCode);
