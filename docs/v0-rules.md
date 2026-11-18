@@ -100,7 +100,7 @@ The approved rules do not cover these. Each was decided the conservative way whi
 
 ### Scoring and the ledger
 
-25. **Points are credited in the same step that makes the result final,** once. Every scored pick gets a ledger line, including a wrong pick (0 points), so the history shows the streak ending.
+25. **Points are credited in the same step that makes the result final,** once. Every scored pick gets a ledger line, including a wrong pick (0 points), so the history shows the streak ending. When several results in a group are due at once they are settled in the order the subjects answered, so a streak always builds the same way.
 26. **The streak bonus applies to the pick that extends the streak.** The first correct pick pays ×1.0, the second in a row ×1.1, and so on up to ×2.
 27. **Halves round up exactly.** 38.5 becomes 39 even where the computer's arithmetic would land a hair under.
 28. **A member who left before the result became final is not scored.** Leaving cancels their open picks. They keep the points they had, and rejoining starts a new balance at 0, as before.

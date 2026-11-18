@@ -274,6 +274,37 @@ describe("B3 ledger: credit exactly once at finalization, per group", () => {
     expect((await ledger(f)).reduce((sum, row) => sum + row.points, 0)).toBe((await member(f, "creator")).points);
   });
 
+  for (const trigger of ["sweep", "advance-later-first", "later-subject-leaves", "later-subject-deletes", "later-subject-opts-out", "sweep-reversed-rows"] as const) {
+    it(`[B3.ledger.settle-order.${trigger}] settles overdue results in the order they were answered whichever path reaches them first`, async () => {
+      const f = await setup([{ role: "creator", option: 0, confidence: 1 }, { role: "new", option: 0, confidence: 0.5 }]);
+      vi.setSystemTime(REVEAL);
+      await sweep(f);
+      const later = await f.t.run(async (ctx) => {
+        const row = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.creator.id)).unique();
+        const id = await ctx.db.insert("v0Bets", { groupId: f.g1, creatorId: f.actors.friend.id, subjectId: f.actors.new.id, createdAt: T0 + 2, question: "Will the picnic have a puzzle?", contextLine: "", format: "yes_no", options: ["Yes", "No"], source: "manual", state: "revealed", cutoffAt: REVEAL, revealAt: REVEAL, locator: "b".repeat(64) });
+        await ctx.db.insert("v0Picks", { groupId: f.g1, betId: id, accountId: f.actors.creator.id, membershipId: row!._id, option: 0, confidence: 0.5, placedAt: T0 + 3, updatedAt: T0 + 3 });
+        return id;
+      });
+      vi.setSystemTime(answeredAt);
+      await f.t.mutation(api.v0Bets.answer, { token: f.actors.subject.token, betId: f.bet, option: 0, requestId: `${f.runId}_first` });
+      vi.setSystemTime(answeredAt + minute);
+      await f.t.mutation(api.v0Bets.answer, { token: f.actors.new.token, betId: later, option: 0, requestId: `${f.runId}_second` });
+      vi.setSystemTime(deadline + 2 * minute);
+      if (trigger === "advance-later-first") await f.t.mutation(internal.v0Bets.advance, { betId: later });
+      if (trigger === "later-subject-leaves") await f.t.mutation(api.v0Controls.leave, { token: f.actors.new.token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      if (trigger === "later-subject-deletes") await f.t.mutation(api.v0Controls.deleteAccount, { token: f.actors.new.token, requestId: `${f.runId}_delete` });
+      if (trigger === "later-subject-opts-out") await f.t.mutation(api.v0Controls.update, { token: f.actors.new.token, noBets: true, blockedTopics: [], hostedAiConsent: false, requestId: `${f.runId}_optout` });
+      if (trigger === "sweep-reversed-rows") await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.bet, { answeredAt: answeredAt + minute });
+        await ctx.db.patch(later, { answeredAt });
+      });
+      await sweep(f);
+      const rows = (await ledger(f)).filter((row) => row.accountId === f.actors.creator.id).map((row) => [row.betId, row.points, row.streakBefore, row.streakAfter]);
+      expect(rows.sort((a, b) => Number(a[2]) - Number(b[2]))).toEqual(trigger === "sweep-reversed-rows" ? [[later, 50, 0, 1], [f.bet, 110, 1, 2]] : [[f.bet, 100, 0, 1], [later, 55, 1, 2]]);
+      expect(await member(f, "creator")).toMatchObject({ points: trigger === "sweep-reversed-rows" ? 160 : 155, streak: 2 });
+    });
+  }
+
   it("[B3.ledger.per-group] keeps one person's balance and streak separate in each group", async () => {
     const f = await setup([{ role: "creator", option: 0, confidence: 1, points: 10, streak: 1 }]);
     const g2Before = await f.t.run((ctx) => ctx.db.query("v0Memberships").withIndex("by_group", (q) => q.eq("groupId", f.g2)).collect());

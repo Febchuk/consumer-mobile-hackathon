@@ -282,7 +282,7 @@ async function settleBet(ctx: MutationCtx, bet: Doc<"v0Bets">, outcome: number, 
   for (const accountId of recipients) await queueNotification(ctx, { key: `result:${bet._id}:${accountId}`, accountId, groupId: bet.groupId, betId: bet._id, kind: "result" });
 }
 
-async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
+async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">, inOrder = false) {
   const now = Date.now();
   const deadline = challengeDeadlineFor(bet);
   if (deadline === undefined) {
@@ -291,6 +291,13 @@ async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
     return "voided" as const;
   }
   if (now < deadline) return "provisional" as const;
+  if (!inOrder) {
+    const answeredAt = bet.answeredAt!;
+    const earlier = (await ctx.db.query("v0Bets").withIndex("by_group", (q) => q.eq("groupId", bet.groupId)).collect())
+      .filter((other) => other._id !== bet._id && other.state === "provisional" && other.answeredAt !== undefined && (other.answeredAt < answeredAt || (other.answeredAt === answeredAt && other._creationTime < bet._creationTime)))
+      .sort((first, second) => first.answeredAt! - second.answeredAt! || first._creationTime - second._creationTime);
+    for (const other of earlier) await resolveChallenge(ctx, other, true);
+  }
   if ((await challengeTally(ctx, bet, deadline)).voided) {
     await voidNow(ctx, bet);
     return "voided" as const;

@@ -2718,7 +2718,13 @@
     "B3.ledger.streak-across-bets",
     "B3.policy.scoring-values",
     "B3.penalty-switch.0",
-    "B3.penalty-switch.0.5"
+    "B3.penalty-switch.0.5",
+    "B3.ledger.settle-order.sweep",
+    "B3.ledger.settle-order.advance-later-first",
+    "B3.ledger.settle-order.later-subject-leaves",
+    "B3.ledger.settle-order.later-subject-deletes",
+    "B3.ledger.settle-order.later-subject-opts-out",
+    "B3.ledger.settle-order.sweep-reversed-rows"
   ],
   "J7.1.rounding-ties.B": [
     "B3.oracle.correct.0.555.streak-0",
@@ -2759,7 +2765,11 @@
   ],
   "SEC4.exactly-once.B": [
     "B3.ledger.exactly-once",
-    "B3.ledger.exactly-once.reopened-state"
+    "B3.ledger.exactly-once.reopened-state",
+    "B3.ledger.settle-order.advance-later-first",
+    "B3.ledger.settle-order.later-subject-leaves",
+    "B3.ledger.settle-order.later-subject-deletes",
+    "B3.ledger.settle-order.later-subject-opts-out"
   ],
   "SEC4.invalid-pick.B": [
     "B3.ledger.invalid-pick.confidence-zero",
