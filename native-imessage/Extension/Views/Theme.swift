@@ -128,6 +128,7 @@ struct InsetRow<Content: View>: View {
                 .padding(.horizontal, 16)
                 .frame(minHeight: 44)
                 .padding(.vertical, 6)
+                .contentShape(Rectangle())
             if !last { Divider().padding(.leading, 16) }
         }
     }
@@ -185,9 +186,9 @@ struct ErrorText: View {
     let text: String?
 
     var body: some View {
-        if let text {
-            Text(text).font(.footnote.weight(.medium)).foregroundStyle(Theme.red)
-        }
+        Text(text ?? "").font(.footnote.weight(.medium)).foregroundStyle(Theme.red)
+            .frame(height: text == nil ? 0 : nil)
+            .accessibilityHidden(text == nil)
     }
 }
 

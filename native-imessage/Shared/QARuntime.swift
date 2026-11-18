@@ -33,13 +33,14 @@ struct QARuntimeContext: Equatable {
     let appGroup: String
     let keychainGroup: String
     let manifestSHA256: String
+    let networkIsolation: QANetworkIsolation
     private let issuedAt: Double
     private let expiresAt: Double
     private static let activationKey = "qa.runtime.activation.v1"
     private static let hostID = "com.mikunad.calledit.qa.host"
     private static let extensionID = "com.mikunad.calledit.qa.host.messages"
 
-    private init(manifest: Manifest, apiURL: URL, cardURL: URL, keychainGroup: String, digest: String) {
+    private init(manifest: Manifest, apiURL: URL, cardURL: URL, keychainGroup: String, digest: String, isolation: QANetworkIsolation) {
         runID = UUID(uuidString: manifest.runID)!.uuidString
         simulatorUDID = UUID(uuidString: manifest.simulatorUDID)!.uuidString
         sourceRevision = manifest.nativeSourceRevision
@@ -52,6 +53,7 @@ struct QARuntimeContext: Equatable {
         appGroup = "group.com.mikunad.calledit.qa"
         self.keychainGroup = keychainGroup
         manifestSHA256 = digest
+        networkIsolation = isolation
         issuedAt = manifest.issuedAt
         expiresAt = manifest.expiresAt
     }
@@ -66,7 +68,9 @@ struct QARuntimeContext: Equatable {
               let group = buildValues["CalledItKeychainGroup"] as? String,
               validKeychainGroup(group) else { throw NativeError.qaConfiguration }
         let fields: Set<String> = ["version", "runID", "simulatorUDID", "nativeSourceRevision", "backendSourceRevision", "deploymentID", "configVersion", "fixtureSetID", "apiOrigin", "cardOrigin", "issuedAt", "expiresAt", "erasedSimulator", "syntheticDataOnly", "outboundNetworkDenied"]
-        guard let object = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any], Set(object.keys) == fields else {
+        guard let object = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any],
+              Set(object.keys) == fields || Set(object.keys) == fields.union([QANetworkIsolation.observedField]),
+              let isolation = QANetworkIsolation.resolve(manifest: object, buildChannel: buildValues["CalledItBuildChannel"] as? String) else {
             throw NativeError.qaConfiguration
         }
         let manifest = try JSONDecoder().decode(Manifest.self, from: manifestData)
@@ -76,12 +80,12 @@ struct QARuntimeContext: Equatable {
               buildValues["CalledItSourceRevision"] as? String == manifest.nativeSourceRevision,
               manifest.deploymentID == "qa-" + run.uuidString,
               validIdentifier(manifest.configVersion), validIdentifier(manifest.fixtureSetID),
-              manifest.erasedSimulator, manifest.syntheticDataOnly, manifest.outboundNetworkDenied else {
+              manifest.erasedSimulator, manifest.syntheticDataOnly else {
             throw NativeError.qaConfiguration
         }
         let context = QARuntimeContext(manifest: manifest, apiURL: try loopbackOrigin(manifest.apiOrigin),
                                        cardURL: try loopbackOrigin(manifest.cardOrigin), keychainGroup: group,
-                                       digest: SHA256.hash(data: manifestData).map { String(format: "%02x", $0) }.joined())
+                                       digest: SHA256.hash(data: manifestData).map { String(format: "%02x", $0) }.joined(), isolation: isolation)
         try context.validateFreshness(at: date)
         return context
     }
