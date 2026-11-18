@@ -26,4 +26,4 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 
 ## Coverage bindings
 
-`tests/coverage/bindings.json` binds native-layer (`.U`) assertions to `NATIVE-UI.<Class>.<test>`. These are proven only by a passing run of this command; the backend evidence report keeps them blocked because it does not execute them.
+`tests/coverage/native-bindings.json` binds native-layer (`.U`) assertions from `inventory.json` to `NATIVE-UI.<Class>.<test>`. These are proven only by a passing run of this command; they live outside `bindings.json` because that file is checked to hold backend (`.B`) evidence only, so the backend evidence report still shows them blocked.
