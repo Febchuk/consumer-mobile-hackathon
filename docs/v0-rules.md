@@ -107,3 +107,15 @@ The approved rules do not cover these. Each was decided the conservative way whi
 29. **A stored pick that is not a valid pick is not scored:** an answer other than the two choices, or a confidence outside 1% to 100%.
 30. **The result notification goes to the subject and to everyone whose pick was scored, right or wrong.** Members who did not pick get none. A voided bet sends no result notification.
 31. **If the wrong-pick penalty is ever switched on,** the loss is rounded the same way, it never takes a balance below 0, and the ledger records the amount actually taken.
+
+### Shared goal
+
+32. **A proposal waits up to 7 days for the group to confirm it.** After that it lapses and anyone can propose again.
+33. **One proposal waits at a time, and none can be made while the active goal is still unreached.** Once the group reaches its goal, any member can propose the next one. The reached goal stays on the board until someone does; the board then shows the new proposal so members can confirm it.
+34. **"More than half" is counted against the members in the group at the moment someone confirms.** Leaving the group withdraws that member's confirmation from a waiting proposal, and rejoining does not bring it back; they confirm again if they want to. A member leaving does not by itself activate a waiting proposal; the next confirmation does the count again.
+35. **Progress adds up the points members earned in this group from the moment the goal became active.** Points earned by a member who later left still count. If the wrong-pick penalty is ever switched on, a loss does not reduce the group's progress.
+36. **Reaching the goal pays nothing out.** The board shows the goal as reached; no balance changes.
+37. **A goal has a name of up to 80 characters and a target of 100 to 1,000,000 whole points.** The name goes through the same checks as a bet question, so it cannot carry links, markup, money or the proposer's blocked topics.
+38. **A waiting proposal is hidden from a member who is blocked with the proposer,** and they cannot confirm it. Once the group confirms it, they see the goal like everyone else, without the names of confirmers they are blocked with.
+39. **Proposing is bounded to 10 an hour per member and confirming to 30.** Confirming twice counts once, and a retried request returns the stored result.
+40. **Deleting an account removes the goals that member proposed, including an active one, and removes their confirmation from other proposals.** This is the existing deletion behaviour, kept as it was.

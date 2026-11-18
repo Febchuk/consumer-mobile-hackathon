@@ -585,7 +585,7 @@
     "path": "v0Groups:board",
     "kind": "query",
     "requiredPolicy": "group_membership",
-    "policy": "room balances and block/deletion filters; no global wallet",
+    "policy": "room balances and block/deletion filters; no global wallet; shared goal with group points earned since activation, points only",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -597,7 +597,7 @@
     "path": "v0Groups:confirmGoal",
     "kind": "mutation",
     "requiredPolicy": "group_membership",
-    "policy": "POLICY_PENDING; no confirmation mutation before approval",
+    "policy": "active member confirms the waiting proposal once; active when more than half of active members confirmed; hidden from a member blocked with the proposer",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -681,7 +681,7 @@
     "path": "v0Groups:proposeGoal",
     "kind": "mutation",
     "requiredPolicy": "group_membership",
-    "policy": "POLICY_PENDING; no goal mutation before approval",
+    "policy": "any active member proposes a name and points target; one waiting proposal, none while the active goal is unreached; proposer counts as first confirmation",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",

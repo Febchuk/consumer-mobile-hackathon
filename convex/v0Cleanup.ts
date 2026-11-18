@@ -25,6 +25,9 @@ export async function leaveGroup(ctx: MutationCtx, accountId: Id<"v0Accounts">, 
   await resolveDueBets(ctx, accountId, groupId);
   const now = Date.now();
   await ctx.db.patch(member._id, { leftAt: now });
+  for (const goal of await ctx.db.query("v0Goals").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()) {
+    if (goal.state === "proposed" && goal.confirmedBy.includes(accountId)) await ctx.db.patch(goal._id, { confirmedBy: goal.confirmedBy.filter((id) => id !== accountId) });
+  }
   await cancelSubjectBets(ctx, accountId, groupId);
   const picks = await ctx.db.query("v0Picks").withIndex("by_account", (q) => q.eq("accountId", accountId)).collect();
   for (const pick of picks) {
