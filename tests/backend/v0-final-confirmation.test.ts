@@ -382,14 +382,14 @@ const createArgs = (f: Fixture) => ({ token: f.actors.creator.token, groupId: f.
 
 describe("approved optional cutoff compatibility validation, not functional creation", () => {
   for (const [name, cutoffAt, revealAt, code] of [
-    ["omitted", undefined, REVEAL, "POLICY_PENDING"],
-    ["equal", REVEAL, REVEAL, "POLICY_PENDING"],
+    ["omitted", undefined, REVEAL, "FORBIDDEN"],
+    ["equal", REVEAL, REVEAL, "FORBIDDEN"],
     ["one-ms-before", REVEAL - 1, REVEAL, "INVALID_INPUT"],
     ["one-ms-after", REVEAL + 1, REVEAL, "INVALID_INPUT"],
     ["legacy-early-cutoff", CUTOFF, REVEAL, "INVALID_INPUT"],
     ["omitted-reveal-past", undefined, confirmedAt - 1, "INVALID_INPUT"],
     ["omitted-reveal-now", undefined, confirmedAt, "INVALID_INPUT"],
-    ["omitted-reveal-next-ms", undefined, confirmedAt + 1, "POLICY_PENDING"],
+    ["omitted-reveal-next-ms", undefined, confirmedAt + 1, "INVALID_INPUT"],
     ["nonfinite-cutoff", Infinity, REVEAL, "INVALID_INPUT"],
     ["nonfinite-reveal", undefined, Infinity, "INVALID_INPUT"],
   ] as const) {
@@ -421,7 +421,7 @@ describe("approved optional cutoff compatibility validation, not functional crea
           expect(Date.now()).toBe(confirmedAt);
           expect(nextDefaultRevealAt(zone, Date.now())).toBe(expectedReveal);
           const cutoffAt = expectedReveal + (mode === "before" ? -1 : mode === "after" ? 1 : 0);
-          await expectCode(ctx.runMutation(makeFunctionReference<"mutation">("v0Bets:create"), { ...createArgs(f), ...(mode === "omitted" ? {} : { cutoffAt }) }), mode === "omitted" || mode === "equal" ? "POLICY_PENDING" : "INVALID_INPUT");
+          await expectCode(ctx.runMutation(makeFunctionReference<"mutation">("v0Bets:create"), { ...createArgs(f), ...(mode === "omitted" ? {} : { cutoffAt }) }), mode === "omitted" || mode === "equal" ? "FORBIDDEN" : "INVALID_INPUT");
           expect(await ctx.db.query("v0Bets").collect()).toEqual(bets);
           expect(await ctx.db.query("v0Requests").collect()).toEqual([]);
         });
@@ -445,7 +445,7 @@ describe("approved optional cutoff compatibility validation, not functional crea
           expect(nextDefaultRevealAt("UTC", Date.now())).toBe(expectedReveal);
           expect(expectedReveal).toBeGreaterThan(at);
           const cutoffAt = expectedReveal + (mode === "before" ? -1 : mode === "after" ? 1 : 0);
-          await expectCode(ctx.runMutation(makeFunctionReference<"mutation">("v0Bets:create"), { ...createArgs(f), ...(mode === "omitted" ? {} : { cutoffAt }) }), mode === "omitted" || mode === "equal" ? "POLICY_PENDING" : "INVALID_INPUT");
+          await expectCode(ctx.runMutation(makeFunctionReference<"mutation">("v0Bets:create"), { ...createArgs(f), ...(mode === "omitted" ? {} : { cutoffAt }) }), mode === "omitted" || mode === "equal" ? "FORBIDDEN" : "INVALID_INPUT");
           expect(await ctx.db.query("v0Bets").collect()).toEqual(bets);
           expect(await ctx.db.query("v0Requests").collect()).toEqual([]);
         });

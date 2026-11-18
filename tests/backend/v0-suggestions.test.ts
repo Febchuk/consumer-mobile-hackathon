@@ -181,7 +181,7 @@ describe("actual V0 suggestions, shared safety and manual-create validation", ()
     it(`[V0.manual.safe-pending.${format}] validates safe manual input without inventing approved lifecycle or economics`, async () => {
       const f = await v0Fixture();
       const args = { ...manual(f), format, ...(format === "over_under" ? { line: 1.5 } : {}) };
-      await expect(f.t.mutation(api.v0Bets.create, args)).rejects.toMatchObject({ data: { code: "POLICY_PENDING" } });
+      await expect(f.t.mutation(api.v0Bets.create, args)).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
       expect(await f.t.run((ctx) => ctx.db.query("v0Bets").collect())).toHaveLength(1);
       expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
       expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);

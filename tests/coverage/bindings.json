@@ -2447,5 +2447,77 @@
     "J8.3.idempotent.cascade-rerun",
     "J8.3.idempotent.worker-rerun",
     "J8.3.idempotent.provider-already-removed"
+  ],
+  "J1.1.single-room.B": [
+    "B1.create.turn-holder",
+    "B1.create.one-per-day",
+    "B1.create.other-group"
+  ],
+  "J1.1.consenting-subject.B": [
+    "B1.create.app-named-subject",
+    "B1.create.subject-withdrawn.no-bets",
+    "B1.create.subject-withdrawn.creator-blocks-subject",
+    "B1.create.subject-withdrawn.subject-blocks-creator",
+    "B1.create.subject-withdrawn.subject-left"
+  ],
+  "J1.1.neutral-card.B": [
+    "B1.create.turn-holder",
+    "B1.create.sealed.subject",
+    "B1.create.sealed.alias",
+    "B1.create.sealed.outsider"
+  ],
+  "J1.3.idempotent-create.B": [
+    "B1.create.idempotent"
+  ],
+  "J6.1.editable.B": [
+    "B1.create.format.yes_no.template",
+    "B1.create.format.yes_no.history",
+    "B1.create.format.over_under.template",
+    "B1.create.format.over_under.history",
+    "B1.create.format.this_that.template",
+    "B1.create.format.this_that.history"
+  ],
+  "J6.1.yes-no.B": [
+    "B1.create.format.yes_no.manual",
+    "B1.create.format.yes_no.template",
+    "B1.create.format.yes_no.history"
+  ],
+  "J6.1.over-under.B": [
+    "B1.create.format.over_under.manual",
+    "B1.create.format.over_under.template",
+    "B1.create.format.over_under.history"
+  ],
+  "J6.1.this-that.B": [
+    "B1.create.format.this_that.manual",
+    "B1.create.format.this_that.template",
+    "B1.create.format.this_that.history"
+  ],
+  "J6.4.context-source-persisted.B": [
+    "B1.create.format.yes_no.manual",
+    "B1.create.format.yes_no.template",
+    "B1.create.format.yes_no.history",
+    "B1.create.format.over_under.manual",
+    "B1.create.format.over_under.template",
+    "B1.create.format.over_under.history",
+    "B1.create.format.this_that.manual",
+    "B1.create.format.this_that.template",
+    "B1.create.format.this_that.history"
+  ],
+  "J6.4.two-outcomes.B": [
+    "B1.create.format.yes_no.manual",
+    "B1.create.format.yes_no.template",
+    "B1.create.format.yes_no.history",
+    "B1.create.format.over_under.manual",
+    "B1.create.format.over_under.template",
+    "B1.create.format.over_under.history",
+    "B1.create.format.this_that.manual",
+    "B1.create.format.this_that.template",
+    "B1.create.format.this_that.history",
+    "V0.manual.safety.three-options"
+  ],
+  "SEC5.bounded-create.B": [
+    "B1.create.rate-bound",
+    "B1.create.rate-bound.counts",
+    "B1.create.one-per-day"
   ]
 }

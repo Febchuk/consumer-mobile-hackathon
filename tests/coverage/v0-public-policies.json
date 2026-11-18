@@ -279,7 +279,7 @@
   "v0Bets:create": {
     "kind": "mutation",
     "scope": "bet_visibility",
-    "rule": "active consenting different subject; safety/topic/future time validation; optional next20:00 group-local reveal or explicit override; lock/creator policy still POLICY_PENDING",
+    "rule": "today's turn holder only; app-named active consenting different subject; one bet per group per local day before 20:00; at least 3 active members; safety/topic validation; default next20:00 group-local reveal or custom reveal 10 minutes to 7 days ahead; idempotent and rate-bounded",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
