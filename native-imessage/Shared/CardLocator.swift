@@ -30,22 +30,3 @@ struct CardLocator: Codable, Equatable, Hashable {
         }
     }
 }
-
-enum ConversationLinks {
-    static func room(for conversation: String, accountID: String, configuration: RuntimeConfiguration) throws -> String? {
-        let defaults = try SharedState.defaults(configuration: configuration)
-        return (defaults.dictionary(forKey: key(accountID, configuration)) as? [String: String])?[conversation]
-    }
-
-    static func set(_ roomID: String?, for conversation: String, accountID: String, configuration: RuntimeConfiguration) throws {
-        let defaults = try SharedState.defaults(configuration: configuration)
-        let key = key(accountID, configuration)
-        var links = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
-        links[conversation] = roomID
-        defaults.set(links, forKey: key)
-    }
-
-    private static func key(_ accountID: String, _ configuration: RuntimeConfiguration) -> String {
-        "links." + configuration.storageNamespace + "." + accountID
-    }
-}

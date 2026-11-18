@@ -5,8 +5,9 @@ import UniformTypeIdentifiers
 
 struct ProofView: View {
     @EnvironmentObject var model: AppModel
-    let betID: String
-    let canUpload: Bool
+    let entry: ProofFeature.Entry
+    private var betID: String { entry.betID }
+    private var canUpload: Bool { entry.canUpload }
     @State private var references: [ProofReference] = []
     @State private var selected: PrivateProof?
     @State private var player: AVAudioPlayer?

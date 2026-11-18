@@ -27,9 +27,10 @@ changing their historical assertions. They reference removed implementations.
 |---|---|
 | `RuntimeConfigurationTests.swift` | `NATIVE-CONFIG-*`, `NATIVE-ATTEST-*`: explicit typed config, independent native/backend pins, exact HTTPS origins and matching v0.2 attestation; ordinary config rejects HTTP/test adapters |
 | `CardLocatorTests.swift` | `NATIVE-LOCATOR-*`: actual opaque locator parsing/round trip, wrong origins/credentials/query/fragment/encoded path rejection, persisted-value revalidation |
-| `SharedSessionAndLinksTests.swift` | `NATIVE-SESSION-*`, `NATIVE-LINK-*`, `NATIVE-CLEAR-*`: expiry/environment validation, account/conversation separation, no last-room fallback, targeted state cleanup |
+| `SharedSessionAndLinksTests.swift` | `NATIVE-SESSION-*`, `NATIVE-CLEAR-*`: expiry/environment validation and targeted state cleanup, including the link map earlier builds stored. The server's `v0Groups:resolveConversation` is the only source of a conversation's group |
 | `NativeBetTests.swift` | `NATIVE-LOCK-*`, `NATIVE-FORMAT-*`, `NATIVE-PICK-*`, `NATIVE-VARIANT-*`: actual DTO variants, no private keys on sealed/unavailable responses even when null, exactly two outcomes, finite O/U line, bounded confidence |
 | `ClockNotificationAndProofTests.swift` | `NATIVE-CLOCK-*`, `NATIVE-NOTIFY-*`, `NATIVE-PROOF-*`: monotonic countdown without local reveal authorization, neutral notification routes, actual `$bytes` and 512 KiB media bound |
+| `ProofFeatureTests.swift` | `NATIVE-PROOF-GATE-*`: proof is off for V0; with the flag off no `ProofFeature.Entry` exists for any bet state, and `ProofView` cannot be built without one; no copy mentions proof while it is hidden |
 | `NativeQAGateTests.swift` | `NATIVE-QA-*`: pure runner safety gate, raw manifest digest, exact fields, loopback/lifetime/run/simulator validation and credential rejection; fabricated unit inputs are not provisioning proof |
 
 The native owner fixed the previously source-backed strict DTO and pending-route

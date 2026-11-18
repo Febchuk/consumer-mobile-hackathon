@@ -141,7 +141,9 @@ struct BetView: View {
             }
             if ["revealed", "provisional", "finalized"].contains(bet.state) {
                 positions(details)
-                ProofView(betID: bet.betId, canUpload: details.canAnswer)
+                if let entry = ProofFeature.entry(betID: bet.betId, state: bet.state, canAnswer: details.canAnswer) {
+                    ProofView(entry: entry)
+                }
             }
             if details.canAnswer {
                 Text("What happened?").font(.title2.bold())
@@ -152,7 +154,7 @@ struct BetView: View {
                     }
                     .accessibilityIdentifier("bet.answer.\(index)")
                 }
-                Footnote(text: "Proof is optional; upload it before answering. Unanswered bets void 24 hours after reveal. Your recorded answer starts a one-hour challenge window; the server owns both deadlines.")
+                Footnote(text: ProofFeature.answerFootnote)
             }
             if let provisional = details.provisionalOutcome {
                 Text("Provisional: \(details.options[safe: provisional] ?? "—")").font(.headline)

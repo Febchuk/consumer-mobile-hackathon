@@ -19,31 +19,15 @@ final class SharedSessionAndLinksTests: XCTestCase {
         }
     }
 
-    func testLinksAreAccountAndConversationScopedWithoutLastRoomFallback() throws {
-        let fixture = NativeUnitFixture()
-        let configuration = try fixture.configuration()
-        let defaults = try SharedState.defaults(configuration: configuration)
-        defer { defaults.removePersistentDomain(forName: configuration.appGroup) }
-        let account = fixture.namespace + "_friend"
-        let outsider = fixture.namespace + "_outsider"
-        try ConversationLinks.set("g1", for: "conversation-a", accountID: account, configuration: configuration)
-        try ConversationLinks.set("g2", for: "conversation-b", accountID: account, configuration: configuration)
-        defaults.set("g1", forKey: "calledit.links.last")
-        XCTAssertNil(try ConversationLinks.room(for: "unknown", accountID: account, configuration: configuration), "[NATIVE-LINK-01] no last-room fallback")
-        XCTAssertNil(try ConversationLinks.room(for: "conversation-a", accountID: outsider, configuration: configuration), "[NATIVE-LINK-02] no cross-account mapping")
-        XCTAssertEqual(try ConversationLinks.room(for: "conversation-a", accountID: account, configuration: configuration), "g1", "[NATIVE-LINK-03]")
-        XCTAssertEqual(try ConversationLinks.room(for: "conversation-b", accountID: account, configuration: configuration), "g2", "[NATIVE-LINK-04]")
-        try ConversationLinks.set(nil, for: "conversation-a", accountID: account, configuration: configuration)
-        XCTAssertNil(try ConversationLinks.room(for: "conversation-a", accountID: account, configuration: configuration), "[NATIVE-LINK-05] explicit unlink")
-    }
-
     func testClearAccountDropsOnlyThatAccountsPrivateRoutingAndPendingLocators() throws {
         let fixture = NativeUnitFixture()
         let configuration = try fixture.configuration()
         let defaults = try SharedState.defaults(configuration: configuration)
         defer { defaults.removePersistentDomain(forName: configuration.appGroup) }
-        try ConversationLinks.set("g1", for: "chat", accountID: "friend", configuration: configuration)
-        try ConversationLinks.set("g2", for: "chat", accountID: "outsider", configuration: configuration)
+        let linkKey = "links." + configuration.storageNamespace + ".friend"
+        let otherLinkKey = "links." + configuration.storageNamespace + ".outsider"
+        defaults.set(["chat": "g1"], forKey: linkKey)
+        defaults.set(["chat": "g2"], forKey: otherLinkKey)
         let revealKey = "reveals." + configuration.storageNamespace + ".friend"
         let otherRevealKey = "reveals." + configuration.storageNamespace + ".outsider"
         let pendingKeys = [configuration.storageKey("pendingCard"), configuration.storageKey("pendingNotification")]
@@ -51,8 +35,8 @@ final class SharedSessionAndLinksTests: XCTestCase {
         defaults.set(["b2": true], forKey: otherRevealKey)
         for key in pendingKeys { defaults.set(Data("synthetic".utf8), forKey: key) }
         try SharedState.clearAccount("friend", configuration: configuration)
-        XCTAssertNil(try ConversationLinks.room(for: "chat", accountID: "friend", configuration: configuration), "[NATIVE-CLEAR-01]")
-        XCTAssertEqual(try ConversationLinks.room(for: "chat", accountID: "outsider", configuration: configuration), "g2", "[NATIVE-CLEAR-02]")
+        XCTAssertNil(defaults.object(forKey: linkKey), "[NATIVE-CLEAR-01] link map left by an earlier build is removed")
+        XCTAssertEqual(defaults.dictionary(forKey: otherLinkKey) as? [String: String], ["chat": "g2"], "[NATIVE-CLEAR-02]")
         for key in [revealKey] + pendingKeys {
             XCTAssertNil(defaults.object(forKey: key), "[NATIVE-CLEAR-03] stale private routing removed")
         }
