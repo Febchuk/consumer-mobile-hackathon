@@ -76,6 +76,11 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
 }
 
 export async function voidBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
+  if (bet.state === "provisional" && (await resolveChallenge(ctx, bet)) !== "provisional") return;
+  await voidNow(ctx, bet);
+}
+
+async function voidNow(ctx: MutationCtx, bet: Doc<"v0Bets">) {
   if (bet.state === "finalized" || bet.state === "voided") return;
   const now = Date.now();
   await ctx.db.patch(bet._id, { state: "voided", provisionalOutcome: undefined, outcome: undefined, answeredAt: undefined, challengeDeadline: undefined });
@@ -263,12 +268,12 @@ async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
   const deadline = challengeDeadlineFor(bet);
   if (deadline === undefined) {
     if (now < answerDeadlineFor(bet) + approvedPolicy.challengeDurationMs) return "provisional" as const;
-    await voidBet(ctx, bet);
+    await voidNow(ctx, bet);
     return "voided" as const;
   }
   if (now < deadline) return "provisional" as const;
   if ((await challengeTally(ctx, bet, deadline)).voided) {
-    await voidBet(ctx, bet);
+    await voidNow(ctx, bet);
     return "voided" as const;
   }
   await ctx.db.patch(bet._id, { state: "finalized", outcome: bet.provisionalOutcome, finalizedAt: now, policyVersion: approvedPolicy.version });

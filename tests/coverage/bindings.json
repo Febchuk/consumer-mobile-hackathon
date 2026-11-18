@@ -1836,7 +1836,10 @@
     "B4.finalize.void-is-terminal",
     "B4.finalize.after-deadline.picker-deletes",
     "B4.finalize.after-deadline.subject-leaves",
-    "B4.finalize.after-deadline.picker-blocks-subject"
+    "B4.finalize.after-deadline.picker-blocks-subject",
+    "B4.finalize.after-deadline.no-bets.standing-answer",
+    "B4.finalize.after-deadline.no-bets.majority",
+    "B4.finalize.before-deadline.no-bets"
   ],
   "J4.1.sentinel-scan.B": [
     "J4.1.card-sentinel-scan",

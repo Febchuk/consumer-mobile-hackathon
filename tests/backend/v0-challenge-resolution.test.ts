@@ -216,6 +216,30 @@ describe("B4 challenge resolution: majority of pickers voids, otherwise the answ
     });
   }
 
+  for (const [name, challenged, state] of [["standing-answer", false, "finalized"], ["majority", true, "voided"]] as const) {
+    it(`[B4.finalize.after-deadline.no-bets.${name}] keeps the result the hour ended with when the subject turns on "no bets about me" before the worker runs`, async () => {
+      const f = await setup(["creator", "friend"]);
+      await answer(f, answeredAt, 1);
+      if (challenged) for (const name of ["creator", "friend"] as const) await storeChallenge(f, name);
+      vi.setSystemTime(deadline + 1000);
+      await f.t.mutation(api.v0Controls.update, { token: f.actors.subject.token, noBets: true, blockedTopics: [], hostedAiConsent: false, requestId: `${f.runId}_optout` });
+      const settled = await bet(f);
+      expect(settled.state).toBe(state);
+      if (!challenged) expect(settled).toMatchObject({ outcome: 1, finalizedAt: deadline + 1000 });
+      vi.setSystemTime(deadline + 30_000);
+      await sweep(f);
+      expect(await bet(f)).toEqual(settled);
+    });
+  }
+
+  it("[B4.finalize.before-deadline.no-bets] still voids an answered bet when the subject opts out before the hour ends", async () => {
+    const f = await setup(["creator"]);
+    await answer(f);
+    vi.setSystemTime(deadline - 1);
+    await f.t.mutation(api.v0Controls.update, { token: f.actors.subject.token, noBets: true, blockedTopics: [], hostedAiConsent: false, requestId: `${f.runId}_optout` });
+    expect((await bet(f)).state).toBe("voided");
+  });
+
   it("[B4.vote.before-deadline.cleanup] still lets a departure, block or deletion before the hour ends change who counts", async () => {
     const f = await setup(["creator", "friend", "new"]);
     await answer(f);
