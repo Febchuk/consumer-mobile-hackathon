@@ -29,7 +29,7 @@ describe("actual V0 read models and implemented reveal scheduler", () => {
     for (const event of events) expect(event).toMatchObject({ groupId: f.g1, betId: f.bet, kind: "reveal", state: "pending", attempts: 0 });
     noPrivateValues(events, [...f.privateValues, ...Object.values(f.actors).map((actor) => actor.token)]);
     expect(await f.t.mutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
-    expect(await f.t.mutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: "revealed", policy: { status: "pending" } });
+    expect(await f.t.mutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: "revealed", policy: { status: "approved" } });
     expect(await f.t.run((ctx) => ctx.db.query("v0Outbox").collect())).toEqual(events);
     expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);
   });
@@ -110,7 +110,7 @@ describe("actual V0 read models and implemented reveal scheduler", () => {
       return await ctx.db.insert("v0Recaps", { groupId: f.g1, startsAt: T0 - 120_000, endsAt: resultTime + 1000, createdAt: resultTime + 1000 });
     });
     const recap = await f.t.query(api.v0Groups.recap, { token: f.actors.creator.token, groupId: f.g1 });
-    expect(recap).toMatchObject({ id, groupId: f.g1, startsAt: T0 - 60_000, endsAt: resultTime + 1000, rows: [{ accountId: f.actors.friend.id, alias: "Finn", points: 10 }], policy: { status: "pending" } });
+    expect(recap).toMatchObject({ id, groupId: f.g1, startsAt: T0 - 60_000, endsAt: resultTime + 1000, rows: [{ accountId: f.actors.friend.id, alias: "Finn", points: 10 }], policy: { status: "approved" } });
     noPrivateValues(recap, f.privateValues);
     expect(await f.t.query(api.v0Groups.recap, { token: f.actors.creator.token, groupId: f.g2 })).toBeNull();
     expect((await f.t.query(api.v0Groups.recap, { token: f.actors.new.token, groupId: f.g1 }))?.rows).toEqual([]);

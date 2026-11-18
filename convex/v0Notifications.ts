@@ -59,6 +59,13 @@ async function canNotify(ctx: QueryCtx, input: NotificationInput) {
     const endsAt = localInstant(group.timezone, turnKey[2], approvedPolicy.turnEndHour);
     if (!turn || turn.creatorId !== input.accountId || (turn.status !== "assigned" && turn.status !== "passed") || endsAt === null || Date.now() >= endsAt) return false;
   }
+  const recapKey = input.kind === "recap" && group ? /^recap:([^:]+):(\d{4}-\d{2}-\d{2}):/.exec(input.key) : null;
+  if (recapKey && group) {
+    const recaps = recapKey[1] === group._id ? await ctx.db.query("v0Recaps").withIndex("by_group", (q) => q.eq("groupId", group._id)).collect() : [];
+    const recap = recaps.find((row) => row.localDate === recapKey[2]);
+    const member = await activeMember(ctx, group._id, input.accountId);
+    if (!recap || !member || member.joinedAt >= recap.endsAt || recaps.some((row) => row.endsAt > recap.endsAt)) return false;
+  }
   if (!input.betId) return true;
   const bet = await ctx.db.get(input.betId);
   if (!bet || bet.groupId !== input.groupId || stateAt(bet, Date.now()) === "voided" || !(await canReadBet(ctx, bet, input.accountId))) return false;

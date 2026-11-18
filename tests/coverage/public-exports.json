@@ -693,7 +693,7 @@
     "path": "v0Groups:recap",
     "kind": "query",
     "requiredPolicy": "group_membership",
-    "policy": "visible time-window ledger; group/interval/block filters; no scheduled recap claim",
+    "policy": "visible time-window ledger; group/interval/block filters; recap rows written weekly by the recap worker",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",

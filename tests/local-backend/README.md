@@ -19,7 +19,7 @@ extracted executable against their pinned SHA256 before anything executes, then
 runs `run.mjs` with a three-variable environment and a fresh output directory
 under the temp directory. That download from the official release is the lane's
 only network use and happens before the denied-network worker starts. It prints
-each assertion and exits non-zero unless all 21 ran and passed; a missing
+each assertion and exits non-zero unless all 22 ran and passed; a missing
 evidence manifest is blocked, never passed. `--binary` and `--output` override
 the binary and evidence locations.
 
@@ -64,18 +64,23 @@ Only that local scratch deployment is pushed. Teardown kills the process,
 verifies repository product-source hashes, rejects a root fixture endpoint and
 removes its scratch database/storage/home.
 
-The 21 checks cover real attestation, exact bytes at 0/1/257/512 KiB, structured/
+The 22 checks cover real attestation, exact bytes at 0/1/257/512 KiB, structured/
 JSON-string/null Convex UDF error data, a retired handler, SDK/HTTP typed value
 serialization, and a concurrent mutation race using the production `once`
 helper. Actual `v0Proof:upload/list/read`, `v0Controls:leave` and `v0Auth:revoke`
 prove private PNG round trips/idempotence/bounds and outsider/leave/revocation
 denial. Valid PNGs include CRCs, compressed pixel data and optional padding.
-Three checks fire overlapping requests at the real transaction engine: 24
+Four checks fire overlapping requests at the real transaction engine: 24
 concurrent sweeps and finalizations of one answered bet must credit each pick
 exactly once and queue each result notification once; the same race on a bet a
-majority challenged must void it with no credit; and 24 concurrent turn workers
-must assign one turn and queue one notification. The scratch wrappers call the
-product's own `v0Jobs.sweep`, `v0Jobs.turns` and `advanceBet`.
+majority challenged must void it with no credit; 24 concurrent turn workers
+must assign one turn and queue one notification; and 24 concurrent recap
+workers must write one recap and queue one notification per member with
+notifications on. The scratch wrappers call the product's own `v0Jobs.sweep`,
+`v0Jobs.turns`, `advanceBet` and `advanceGroupRecap`. The recap check passes a
+synthetic Sunday instant to `advanceGroupRecap`, because the real clock cannot
+be moved to a Sunday; `v0Jobs.recaps` itself is run only to show it schedules a new group and
+sends nothing before the hour.
 
 The pinned backend actually returned HTTP200 UDF-error envelopes; the installed
 SDK also recognizes HTTP560. Native scripted560 unit replies are compatibility

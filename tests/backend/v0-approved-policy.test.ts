@@ -279,9 +279,8 @@ describe("approved server answer and challenge windows, not settlement policy", 
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 1 });
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
       const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
-      expect(advanced).toMatchObject({ state: "voided", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["recap_schedule"]) } });
-      expect(advanced?.policy.missing).not.toContain("cutoff_limits");
-      expect(advanced?.policy.missing).not.toContain("majority_rule");
+      expect(advanced).toMatchObject({ state: "voided", policy: { status: "approved", version: "v0-policy.3" } });
+      expect(advanced?.policy).toEqual({ status: "approved", version: "v0-policy.3" });
       expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "unavailable", state: "voided" });
       expect(await ctx.db.get(f.bet)).toMatchObject({ state: "voided" });
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("outcome");
@@ -344,7 +343,7 @@ describe("approved unanswered timeout and resume catch-up", () => {
             expect(await ctx.db.query("v0Outbox").collect()).toEqual([]);
           }
           expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
-          expect(await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: offset < 0 ? "revealed" : "voided", policy: { status: "pending" } });
+          expect(await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: offset < 0 ? "revealed" : "voided", policy: { status: "approved" } });
           expect(await ctx.db.query("v0Picks").collect()).toEqual(picks);
         });
         expect(await scoreState(f)).toEqual(before);

@@ -119,3 +119,13 @@ The approved rules do not cover these. Each was decided the conservative way whi
 38. **A waiting proposal is hidden from a member who is blocked with the proposer,** and they cannot confirm it. Once the group confirms it, they see the goal like everyone else, without the names of confirmers they are blocked with.
 39. **Proposing is bounded to 10 an hour per member and confirming to 30.** Confirming twice counts once, and a retried request returns the stored result.
 40. **Deleting an account removes the goals that member proposed, including an active one, and removes their confirmation from other proposals.** This is the existing deletion behaviour, kept as it was.
+
+### Weekly recap
+
+41. **The recap covers the seven local days up to Sunday 6:00 PM,** so a week in which the clocks change is an hour shorter or longer, and no moment falls into two recaps.
+42. **No recap is sent for a week in which no result was scored.**
+43. **A recap that is less than a day late is still sent, once.** If the worker was down for a day or more, that week is skipped, and after a longer outage older weeks are not sent.
+44. **One recap per group per Sunday date, even if the group's timezone changes.** After a change the next recap never reaches back before the end of the last one.
+45. **Recipients are the members in the group at 6:00 PM who have notifications on.** A recap not yet delivered is withdrawn if the member turns notifications off or leaves, or once a newer recap exists.
+46. **No recap for a week that ended before the group existed,** and none for a group whose timezone cannot be read.
+47. **With the recap built, every approved rule is in place and the backend reports the rules as approved.** The app uses that to switch on creating bets, taking the daily turn and setting goals.

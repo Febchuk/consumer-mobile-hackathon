@@ -3,6 +3,8 @@ import { v, ConvexError } from "convex/values";
 import { hash, once, requireMember, requireSession } from "./v0Policy";
 import { internal } from "./_generated/api";
 import { advanceBet } from "./v0Bets";
+import { recapWeek } from "./v0GamePolicy";
+import { advanceGroupRecap } from "./v0Recaps";
 
 function namespace(runId: string) {
   if (!/^e2e_[a-f0-9]{32}$/.test(runId)) throw new Error("Synthetic run namespace required");
@@ -190,5 +192,49 @@ export const turnState = query({
     const turns = await ctx.db.query("v0Turns").withIndex("by_group_date", (q) => q.eq("groupId", args.groupId)).collect();
     const outbox = (await ctx.db.query("v0Outbox").collect()).filter((row) => row.groupId === args.groupId && row.kind === "turn");
     return { turns: turns.map((turn) => ({ localDate: turn.localDate, creatorId: turn.creatorId, subjectId: turn.subjectId, status: turn.status })), notifications: outbox.map((row) => ({ key: row.key, accountId: row.accountId })) };
+  },
+});
+
+export const seedRecapGroup = mutation({
+  args: { runId: v.string() },
+  handler: async (ctx, args) => {
+    namespace(args.runId);
+    const now = Date.now();
+    const dueAt = recapWeek("UTC", now)!.nextAt;
+    const accounts = [];
+    for (const displayName of ["Ada", "Ben", "Cy"]) accounts.push(await ctx.db.insert("v0Accounts", { displayName, createdAt: now - 7200000, noBets: false, blockedTopics: [], notificationsEnabled: displayName !== "Cy" }));
+    const groupId = await ctx.db.insert("v0Groups", { name: `${args.runId}_recap`, creatorId: accounts[0], timezone: "UTC", createdAt: now - 7200000, nextTurnAt: now + 24 * 3600000 });
+    const memberships = [];
+    for (const [index, accountId] of accounts.entries()) memberships.push(await ctx.db.insert("v0Memberships", { accountId, groupId, alias: `Member ${index}`, joinedAt: now - 3600000 + index, points: 0, streak: 0 }));
+    const betId = await ctx.db.insert("v0Bets", { groupId, creatorId: accounts[0], subjectId: accounts[1], createdAt: now - 3000, question: "Synthetic recap question?", contextLine: "Synthetic", format: "yes_no", options: ["Yes", "No"], source: "manual", state: "finalized", outcome: 0, cutoffAt: now - 2000, revealAt: now - 2000, locator: await hash(`${args.runId}_recap`) });
+    await ctx.db.insert("v0Ledger", { groupId, betId, accountId: accounts[2], membershipId: memberships[2], points: 70, streakBefore: 0, streakAfter: 1, policyVersion: "synthetic", createdAt: dueAt - 3600000 });
+    return { groupId, dueAt, recipients: accounts.slice(0, 2) };
+  },
+});
+
+export const runRecaps = mutation({
+  args: { runId: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    namespace(args.runId);
+    await ctx.runMutation(internal.v0Jobs.recaps, {});
+    return null;
+  },
+});
+
+export const runRecapAt = mutation({
+  args: { runId: v.string(), groupId: v.id("v0Groups"), now: v.number() },
+  handler: async (ctx, args) => {
+    namespace(args.runId);
+    return await advanceGroupRecap(ctx, (await ctx.db.get(args.groupId))!, args.now);
+  },
+});
+
+export const recapState = query({
+  args: { runId: v.string(), groupId: v.id("v0Groups") },
+  handler: async (ctx, args) => {
+    namespace(args.runId);
+    const recaps = await ctx.db.query("v0Recaps").withIndex("by_group", (q) => q.eq("groupId", args.groupId)).collect();
+    const outbox = (await ctx.db.query("v0Outbox").collect()).filter((row) => row.groupId === args.groupId && row.kind === "recap");
+    return { nextRecapAt: (await ctx.db.get(args.groupId))?.nextRecapAt ?? null, recaps: recaps.map((recap) => ({ startsAt: recap.startsAt, endsAt: recap.endsAt, localDate: recap.localDate })), notifications: outbox.map((row) => row.accountId).sort() };
   },
 });
