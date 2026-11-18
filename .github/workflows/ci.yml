@@ -139,7 +139,11 @@ jobs:
 
   native-ui:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -186,8 +190,7 @@ jobs:
       - name: Run the native UI lane on a new simulator against the loopback backend
         run: |
           env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
-            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
-            --only PickJourneyTests/testFriendConfirmsOnePickThatPersists
+            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence"
       - name: Report the lane's result
         if: ${{ !cancelled() }}
         run: |
@@ -212,7 +215,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence
+          name: native-ui-evidence-${{ matrix.attempt }}
           path: |
             ${{ runner.temp }}/native-ui-evidence
             !${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
@@ -222,7 +225,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult
+          name: native-ui-xcresult-${{ matrix.attempt }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
