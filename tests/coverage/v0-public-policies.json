@@ -242,7 +242,7 @@
   "v0Bets:get": {
     "kind": "query",
     "scope": "bet_visibility",
-    "rule": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; no unapproved settlement",
+    "rule": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; outcome only after the challenge hour ends",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -315,7 +315,7 @@
   "v0Bets:answer": {
     "kind": "mutation",
     "scope": "subject_after_reveal",
-    "rule": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; no settlement credit",
+    "rule": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; answer stands at answeredAt+1h unless more than half of the standing pickers challenged",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -328,7 +328,7 @@
   "v0Bets:challenge": {
     "kind": "mutation",
     "scope": "bet_visibility",
-    "rule": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting or adjudicate majority",
+    "rule": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting; only standing pickers count toward the majority that voids",
     "source": "v0Bets.ts",
     "authenticated": true,
     "minimumAssertions": [

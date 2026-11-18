@@ -393,7 +393,7 @@
     "path": "v0Bets:answer",
     "kind": "mutation",
     "requiredPolicy": "subject_after_reveal",
-    "policy": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; no settlement credit",
+    "policy": "eligible subject at reveal and before reveal+24h; server answeredAt starts1h challenge; idempotent receipt with current authorization; answer stands at answeredAt+1h unless more than half of the standing pickers challenged",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -405,7 +405,7 @@
     "path": "v0Bets:challenge",
     "kind": "mutation",
     "requiredPolicy": "bet_visibility",
-    "policy": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting or adjudicate majority",
+    "policy": "eligible nonsubject provisional state; fresh challenge only before answeredAt+1h; one record per account; authorized cached ACK cannot reopen voting; only standing pickers count toward the majority that voids",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -429,7 +429,7 @@
     "path": "v0Bets:get",
     "kind": "query",
     "requiredPolicy": "bet_visibility",
-    "policy": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; no unapproved settlement",
+    "policy": "active interval predating bet; opaque locator; subject sealed until server reveal; derived unanswered void at reveal+24h; server capabilities/deadlines; outcome only after the challenge hour ends",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",

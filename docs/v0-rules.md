@@ -87,3 +87,13 @@ The approved rules do not cover these. Each was decided the conservative way whi
 15. **The turn notification goes only to the creator,** and to the new creator when it passes. One that has not been delivered yet is withdrawn when the turn passes, the bet is sent, the day ends, or the creator or subject leaves. It is checked again at the moment of delivery.
 16. **One turn per group per local calendar date.** If a group's timezone changes, the new local date can get its own turn, but no date ever gets two.
 17. **A group whose timezone the server cannot read gets no turns** until it is corrected.
+
+### Challenges and results
+
+18. **A challenge is decided once, when the hour ends.** A bet is not voided early, even if a majority has already challenged.
+19. **Who counts:** people whose pick on that bet is still standing when the hour ends and who are still in the group. The subject never counts. A member who did not pick can still send a challenge, but it does not count.
+20. **A member who left counts for nothing.** Their pick leaves the total and their stored challenge is ignored, so they can neither help void a bet nor dilute the people who stayed. Once the hour has ended the count is fixed: a bet whose hour is over is settled before anyone's departure, block or account deletion takes effect.
+21. **A tie lets the answer stand,** because the rule says "more than half". If nobody picked, the answer stands and nobody scores.
+22. **An answer given just before the 24-hour limit still gets its full hour** of challenge time. The no-answer timeout does not void an answered bet.
+23. **If the bet's creator left the group, the reveal notification still goes** to the subject and the remaining pickers, and the bet plays out normally. Before, it was silently dropped, so the subject might never answer. It is still not sent when the creator's account was deleted (the bet is removed) or when the creator and subject have blocked each other (the bet is voided).
+24. **A bet whose stored answer cannot be read is voided** once the answer and challenge windows have both passed, so it cannot stay open forever.

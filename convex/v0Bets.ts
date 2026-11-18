@@ -76,6 +76,11 @@ async function viewFor(ctx: QueryCtx, bet: Doc<"v0Bets">, accountId: Id<"v0Accou
 }
 
 export async function voidBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
+  if (bet.state === "provisional" && (await resolveChallenge(ctx, bet)) !== "provisional") return;
+  await voidNow(ctx, bet);
+}
+
+async function voidNow(ctx: MutationCtx, bet: Doc<"v0Bets">) {
   if (bet.state === "finalized" || bet.state === "voided") return;
   const now = Date.now();
   await ctx.db.patch(bet._id, { state: "voided", provisionalOutcome: undefined, outcome: undefined, answeredAt: undefined, challengeDeadline: undefined });
@@ -244,11 +249,43 @@ export const advance = internalMutation({
   },
 });
 
+export async function challengeTally(ctx: QueryCtx, bet: Doc<"v0Bets">, deadline: number) {
+  const pickers = new Set<Id<"v0Accounts">>();
+  for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {
+    if ((pick.voidedAt !== undefined && pick.voidedAt < deadline) || pick.accountId === bet.subjectId) continue;
+    const member = await ctx.db.get(pick.membershipId);
+    if (member && member.accountId === pick.accountId && member.groupId === bet.groupId && member.joinedAt < deadline && (member.leftAt === undefined || member.leftAt >= deadline)) pickers.add(pick.accountId);
+  }
+  const challengers = new Set<Id<"v0Accounts">>();
+  for (const challenge of await ctx.db.query("v0Challenges").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {
+    if (pickers.has(challenge.accountId) && bet.answeredAt !== undefined && challenge.createdAt >= bet.answeredAt && challenge.createdAt < deadline) challengers.add(challenge.accountId);
+  }
+  return { pickers: pickers.size, challengers: challengers.size, voided: challengers.size * 2 > pickers.size };
+}
+
+async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
+  const now = Date.now();
+  const deadline = challengeDeadlineFor(bet);
+  if (deadline === undefined) {
+    if (now < answerDeadlineFor(bet) + approvedPolicy.challengeDurationMs) return "provisional" as const;
+    await voidNow(ctx, bet);
+    return "voided" as const;
+  }
+  if (now < deadline) return "provisional" as const;
+  if ((await challengeTally(ctx, bet, deadline)).voided) {
+    await voidNow(ctx, bet);
+    return "voided" as const;
+  }
+  await ctx.db.patch(bet._id, { state: "finalized", outcome: bet.provisionalOutcome, finalizedAt: now, policyVersion: approvedPolicy.version });
+  return "finalized" as const;
+}
+
 export async function advanceBet(ctx: MutationCtx, bet: Doc<"v0Bets">) {
   if (![bet.createdAt, bet.cutoffAt, bet.revealAt].every(Number.isFinite) || bet.cutoffAt <= bet.createdAt || bet.revealAt < bet.cutoffAt) {
     await voidBet(ctx, bet);
     return "voided" as const;
   }
+  if (bet.state === "provisional") return await resolveChallenge(ctx, bet);
   const state = stateAt(bet, Date.now());
   if (state === "voided") {
     await voidBet(ctx, bet);

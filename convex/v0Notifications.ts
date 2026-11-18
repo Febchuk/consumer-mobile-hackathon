@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { NotificationPreferences, NotificationTap } from "./v0Contract";
-import { activeMember, canReadBet, fail, hash, once, rateLimit, requireSession } from "./v0Policy";
+import { activeMember, canReadBet, fail, hash, isBlocked, once, rateLimit, requireSession } from "./v0Policy";
 import { approvedPolicy, localInstant, stateAt } from "./v0GamePolicy";
 
 export type NotificationInput = {
@@ -62,15 +62,14 @@ async function canNotify(ctx: QueryCtx, input: NotificationInput) {
   if (!input.betId) return true;
   const bet = await ctx.db.get(input.betId);
   if (!bet || bet.groupId !== input.groupId || stateAt(bet, Date.now()) === "voided" || !(await canReadBet(ctx, bet, input.accountId))) return false;
-  const [subject, creator, subjectCanRead, creatorCanRead] = await Promise.all([
+  const [subject, creator, subjectCanRead] = await Promise.all([
     ctx.db.get(bet.subjectId),
     ctx.db.get(bet.creatorId),
     canReadBet(ctx, bet, bet.subjectId),
-    canReadBet(ctx, bet, bet.creatorId),
   ]);
   return !!subject && subject.deletedAt === undefined && !subject.noBets
     && !!creator && creator.deletedAt === undefined
-    && subjectCanRead && creatorCanRead;
+    && subjectCanRead && !(await isBlocked(ctx, bet.creatorId, bet.subjectId));
 }
 
 export async function queueNotification(ctx: MutationCtx, input: NotificationInput): Promise<Id<"v0Outbox"> | null> {

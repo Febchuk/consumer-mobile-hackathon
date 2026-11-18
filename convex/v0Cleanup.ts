@@ -1,6 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { voidBet } from "./v0Bets";
+import { advanceBet, voidBet } from "./v0Bets";
 import { requireMember } from "./v0Policy";
 import { providerCleanupConfigured } from "./v0ProviderCleanup";
 
@@ -9,8 +9,20 @@ export async function cancelSubjectBets(ctx: MutationCtx, accountId: Id<"v0Accou
   for (const bet of bets) if (groupId === undefined || bet.groupId === groupId) await voidBet(ctx, bet);
 }
 
+export async function resolveDueBets(ctx: MutationCtx, accountId: Id<"v0Accounts">, groupId?: Id<"v0Groups">) {
+  const bets = new Map<Id<"v0Bets">, Doc<"v0Bets">>();
+  for (const bet of await ctx.db.query("v0Bets").withIndex("by_creator", (q) => q.eq("creatorId", accountId)).collect()) bets.set(bet._id, bet);
+  for (const bet of await ctx.db.query("v0Bets").withIndex("by_subject", (q) => q.eq("subjectId", accountId)).collect()) bets.set(bet._id, bet);
+  for (const pick of await ctx.db.query("v0Picks").withIndex("by_account", (q) => q.eq("accountId", accountId)).collect()) {
+    const bet = bets.has(pick.betId) ? null : await ctx.db.get(pick.betId);
+    if (bet) bets.set(bet._id, bet);
+  }
+  for (const bet of bets.values()) if (bet.state === "provisional" && (groupId === undefined || bet.groupId === groupId)) await advanceBet(ctx, bet);
+}
+
 export async function leaveGroup(ctx: MutationCtx, accountId: Id<"v0Accounts">, groupId: Id<"v0Groups">) {
   const member = await requireMember(ctx, groupId, accountId);
+  await resolveDueBets(ctx, accountId, groupId);
   const now = Date.now();
   await ctx.db.patch(member._id, { leftAt: now });
   await cancelSubjectBets(ctx, accountId, groupId);
@@ -35,6 +47,8 @@ export async function leaveGroup(ctx: MutationCtx, accountId: Id<"v0Accounts">, 
 }
 
 export async function blockInteractions(ctx: MutationCtx, accountId: Id<"v0Accounts">, blockedId: Id<"v0Accounts">) {
+  await resolveDueBets(ctx, accountId);
+  await resolveDueBets(ctx, blockedId);
   const bets = new Map<Id<"v0Bets">, Doc<"v0Bets">>();
   for (const person of [accountId, blockedId]) {
     for (const bet of await ctx.db.query("v0Bets").withIndex("by_creator", (q) => q.eq("creatorId", person)).collect()) bets.set(bet._id, bet);
@@ -67,6 +81,7 @@ export async function blockInteractions(ctx: MutationCtx, accountId: Id<"v0Accou
 export async function deleteAccountData(ctx: MutationCtx, accountId: Id<"v0Accounts">) {
   const account = await ctx.db.get(accountId);
   if (!account || account.deletedAt !== undefined) return;
+  await resolveDueBets(ctx, accountId);
   const now = Date.now();
   const phones = await ctx.db.query("v0Phones").withIndex("by_account", (q) => q.eq("accountId", accountId)).collect();
   const phoneHashes = new Set(phones.map((phone) => phone.phoneHash));
