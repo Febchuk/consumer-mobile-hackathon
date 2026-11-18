@@ -2535,7 +2535,14 @@
   "J3.1.neutral-push.B": [
     "B2.turn.neutral-notification",
     "B2.turn.assign-8am",
-    "B2.turn.notification-preference"
+    "B2.turn.notification-preference",
+    "B2.turn.stale-notification.missed-day-end",
+    "B2.turn.stale-notification.subject-left",
+    "B2.turn.stale-notification.creator-left",
+    "B2.turn.stale-notification.passed",
+    "B2.turn.stale-notification.bet-sent",
+    "B2.turn.stale-notification.wrong-recipient",
+    "B2.turn.stale-notification.queue"
   ],
   "J3.1.fair-rotation.B": [
     "B2.turn.rotation",
@@ -2566,7 +2573,10 @@
     "B2.turn.duplicate-workers",
     "B2.turn.atomic-enqueue",
     "B2.turn.dst.spring-forward",
-    "B2.turn.dst.fall-back"
+    "B2.turn.dst.fall-back",
+    "B2.turn.stale-notification.missed-day-end",
+    "B2.turn.stale-notification.subject-left",
+    "B2.turn.stale-notification.creator-left"
   ],
   "N1.pass.B": [
     "B2.turn.noon-pass",

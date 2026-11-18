@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { api, internal } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { approvedPolicy, localDateAt, localInstant } from "../../convex/v0GamePolicy";
+import { queueNotification } from "../../convex/v0Notifications";
 import { phoneHash } from "../../convex/v0Policy";
 import { T0 } from "./fixture";
 import { v0Fixture } from "./v0-fixture";
@@ -404,6 +405,52 @@ describe("B2 daily turn assignment, pass and expiry", () => {
     expect(Object.keys(row).sort()).toEqual(["_creationTime", "_id", "accountId", "attempts", "availableAt", "groupId", "key", "kind", "state"]);
     const body = JSON.stringify(row);
     for (const text of ["Cora", "Finn", "Sage", f.actors.friend.id, ...f.privateValues]) expect(body).not.toContain(text);
+  });
+
+  for (const ending of ["missed-day-end", "subject-left", "creator-left", "passed", "bet-sent", "wrong-recipient"] as const) {
+    it(`[B2.turn.stale-notification.${ending}] withdraws a turn notification at delivery once its turn is over or belongs to someone else`, async () => {
+      const f = await v0Fixture();
+      await longSessions(f);
+      vi.setSystemTime(eightAm);
+      await sweep(f);
+      const [row] = await outbox(f);
+      await f.t.run(async (ctx) => {
+        await ctx.db.insert("v0PushTokens", { accountId: f.actors.creator.id, deviceId: f.actors.creator.deviceId, token: "ab".repeat(32), environment: "sandbox", updatedAt: T0 });
+        if (ending === "wrong-recipient") await ctx.db.insert("v0Outbox", { key: `turn:${f.g1}:2026-11-16:passed`, accountId: f.actors.friend.id, groupId: f.g1, kind: "turn", state: "pending", attempts: 0, availableAt: eightAm });
+      });
+      expect(await f.t.mutation(internal.v0Notifications.claimBatch, {})).toHaveLength(1);
+      await f.t.run((ctx) => ctx.db.patch(row._id, { state: "pending", leaseUntil: undefined, availableAt: eightAm }));
+      if (ending === "missed-day-end") vi.setSystemTime(eightPm);
+      else vi.setSystemTime(eightAm + hour);
+      if (ending === "subject-left") await f.t.mutation(api.v0Controls.leave, { token: f.actors.friend.token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      if (ending === "creator-left") await f.t.mutation(api.v0Controls.leave, { token: f.actors.creator.token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      if (ending === "passed" || ending === "bet-sent") await f.t.run(async (ctx) => {
+        const turn = (await ctx.db.query("v0Turns").collect())[0];
+        await ctx.db.patch(turn._id, ending === "passed" ? { status: "passed", creatorId: f.actors.revoked.id, passedFromId: f.actors.creator.id } : { status: "created" });
+      });
+      if (ending === "missed-day-end") expect((await turns(f))[0].status).toBe("assigned");
+      const claimed = await f.t.mutation(internal.v0Notifications.claimBatch, {});
+      const left = await outbox(f);
+      if (ending === "wrong-recipient") {
+        expect(claimed).toHaveLength(1);
+        expect(left.map((item) => item.key)).toEqual([row.key]);
+        return;
+      }
+      expect(claimed).toEqual([]);
+      expect(left).toEqual([]);
+    });
+  }
+
+  it("[B2.turn.stale-notification.queue] refuses to queue a turn notification for a turn that is not the recipient's open turn", async () => {
+    const f = await v0Fixture();
+    vi.setSystemTime(eightAm);
+    await sweep(f);
+    const queue = (accountId: Id<"v0Accounts">, step: string, date = "2026-11-16") => f.t.run((ctx) => queueNotification(ctx, { key: `turn:${f.g1}:${date}:${step}`, accountId, groupId: f.g1, kind: "turn" }));
+    expect(await queue(f.actors.friend.id, "passed")).toBeNull();
+    expect(await queue(f.actors.creator.id, "passed", "2026-11-15")).toBeNull();
+    expect(await queue(f.actors.creator.id, "passed")).not.toBeNull();
+    vi.setSystemTime(eightPm);
+    expect(await queue(f.actors.creator.id, "assigned")).toBeNull();
   });
 
   for (const [name, dates] of [["spring-forward", ["2027-03-13", "2027-03-14", "2027-03-15"]], ["fall-back", ["2027-11-06", "2027-11-07", "2027-11-08"]]] as const) {

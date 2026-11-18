@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { NotificationPreferences, NotificationTap } from "./v0Contract";
 import { activeMember, canReadBet, fail, hash, once, rateLimit, requireSession } from "./v0Policy";
-import { stateAt } from "./v0GamePolicy";
+import { approvedPolicy, localInstant, stateAt } from "./v0GamePolicy";
 
 export type NotificationInput = {
   key: string;
@@ -51,7 +51,14 @@ async function canNotify(ctx: QueryCtx, input: NotificationInput) {
   const account = await ctx.db.get(input.accountId);
   if (!account || account.deletedAt !== undefined || account.notificationsEnabled === false) return false;
   if (input.groupId && !(await activeMember(ctx, input.groupId, input.accountId))) return false;
-  if (input.groupId && !(await ctx.db.get(input.groupId))) return false;
+  const group = input.groupId ? await ctx.db.get(input.groupId) : null;
+  if (input.groupId && !group) return false;
+  const turnKey = input.kind === "turn" && group ? /^turn:([^:]+):(\d{4}-\d{2}-\d{2}):(?:assigned|passed)$/.exec(input.key) : null;
+  if (turnKey && group) {
+    const turn = turnKey[1] === group._id ? await ctx.db.query("v0Turns").withIndex("by_group_date", (q) => q.eq("groupId", group._id).eq("localDate", turnKey[2])).first() : null;
+    const endsAt = localInstant(group.timezone, turnKey[2], approvedPolicy.turnEndHour);
+    if (!turn || turn.creatorId !== input.accountId || (turn.status !== "assigned" && turn.status !== "passed") || endsAt === null || Date.now() >= endsAt) return false;
+  }
   if (!input.betId) return true;
   const bet = await ctx.db.get(input.betId);
   if (!bet || bet.groupId !== input.groupId || stateAt(bet, Date.now()) === "voided" || !(await canReadBet(ctx, bet, input.accountId))) return false;
