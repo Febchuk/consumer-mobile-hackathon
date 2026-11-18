@@ -33,6 +33,14 @@ export function assertBuiltAppHasNoEndpoint(info) {
   }
 }
 
+// Every record this lane writes carries this, so an observed run can never be read as a denied one.
+export const networkIsolation = "observed";
+
+// Connections made by the app, its extension or its test runner, as opposed to the simulator's own system services.
+export function appConnections(rows) {
+  return rows.filter((row) => /^CalledIt/.test(row.process));
+}
+
 export function buildManifest({ runID, simulatorUDID, nativeSourceRevision, backendSourceRevision, apiOrigin, cardOrigin, fixtureSetID, configVersion, now, lifetimeMs }) {
   assertLoopbackOrigin(apiOrigin);
   assertLoopbackOrigin(cardOrigin);
@@ -41,6 +49,7 @@ export function buildManifest({ runID, simulatorUDID, nativeSourceRevision, back
   return {
     version: 1, runID, simulatorUDID, nativeSourceRevision, backendSourceRevision, deploymentID: "qa-" + runID, configVersion, fixtureSetID,
     apiOrigin, cardOrigin, issuedAt: now, expiresAt: now + lifetimeMs,
-    erasedSimulator: true, syntheticDataOnly: true, outboundNetworkDenied: true,
+    // Nothing on this Mac lane blocks outbound traffic, so the manifest says so: observed, not denied.
+    erasedSimulator: true, syntheticDataOnly: true, outboundNetworkDenied: false, outboundNetworkObserved: true,
   };
 }

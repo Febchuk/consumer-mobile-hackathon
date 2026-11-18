@@ -34,10 +34,12 @@ struct NativeQARun {
     let rawManifest: Data
     let manifestBase64: String
     let manifestSHA256: String
+    /// "denied" or "observed"; an observed run was never isolated from the network and must not be reported as if it were.
+    let networkIsolation: String
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment, now: Date = Date()) throws {
-        #if !targetEnvironment(simulator)
-        throw GateError.blocked("UI execution requires an externally provisioned, erased dedicated iOS simulator")
+        #if !(QA && targetEnvironment(simulator))
+        throw GateError.blocked("UI execution requires a QA build on an externally provisioned, erased dedicated iOS simulator")
         #else
         let credentialKeys = ["CONVEX_DEPLOY_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "PAIR_CODE"]
         let providerPrefixes = ["TWILIO_", "APNS_", "V0_TWILIO_", "V0_APNS_"]
@@ -51,7 +53,8 @@ struct NativeQARun {
         }
         let object = try JSONSerialization.jsonObject(with: raw)
         let fields: Set<String> = ["version", "runID", "simulatorUDID", "nativeSourceRevision", "backendSourceRevision", "deploymentID", "configVersion", "fixtureSetID", "apiOrigin", "cardOrigin", "issuedAt", "expiresAt", "erasedSimulator", "syntheticDataOnly", "outboundNetworkDenied"]
-        guard let dictionary = object as? [String: Any], Set(dictionary.keys) == fields else {
+        guard let dictionary = object as? [String: Any],
+              Set(dictionary.keys) == fields || Set(dictionary.keys) == fields.union([QANetworkIsolation.observedField]) else {
             throw GateError.blocked("QA manifest fields must match the frozen launch contract")
         }
         let manifest = try JSONDecoder().decode(Manifest.self, from: raw)
@@ -59,7 +62,8 @@ struct NativeQARun {
               let simulator = UUID(uuidString: manifest.simulatorUDID),
               environment["SIMULATOR_UDID"].flatMap(UUID.init(uuidString:)) == simulator,
               manifest.deploymentID.lowercased() == "qa-" + runID.uuidString.lowercased(),
-              manifest.erasedSimulator, manifest.syntheticDataOnly, manifest.outboundNetworkDenied else {
+              manifest.erasedSimulator, manifest.syntheticDataOnly,
+              let isolation = QANetworkIsolation.resolve(manifest: dictionary, buildChannel: "qa") else {
             throw GateError.blocked("the executing simulator/run must match the externally proven synthetic fixture")
         }
         for revision in [manifest.nativeSourceRevision, manifest.backendSourceRevision] {
@@ -88,6 +92,7 @@ struct NativeQARun {
             }
         }
         self.manifest = manifest
+        networkIsolation = isolation.rawValue
         rawManifest = raw
         manifestBase64 = encoded
         manifestSHA256 = SHA256.hash(data: raw).map { String(format: "%02x", $0) }.joined()

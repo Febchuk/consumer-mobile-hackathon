@@ -18,6 +18,7 @@ struct QADiagnosticsView: View {
                     value("fixtureSetID", qa.fixtureSetID)
                     value("apiOrigin", configuration.apiURL.absoluteString)
                     value("cardOrigin", configuration.cardBaseURL.absoluteString)
+                    value("networkIsolation", qa.networkIsolation.diagnostic)
                     value("attestationState", QARuntimeTelemetry.shared.state(for: qa))
                 } else {
                     value("runID", "none")

@@ -139,7 +139,7 @@ targets:
   CalledItUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [UITests, TestSupport]
+    sources: [UITests, TestSupport, Shared/QANetworkIsolation.swift]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mikunad.calledit.messages.uitests
