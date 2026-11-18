@@ -92,9 +92,19 @@ struct RubToReveal<Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            content
-                .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-                .accessibilityHidden(!uncovered)
+            if uncovered {
+                content.frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+            } else {
+                // While covered the content is only drawn, never placed in the view tree, so assistive technology
+                // has nothing to read until the person chooses to reveal it.
+                Canvas { context, _ in
+                    if let drawn = context.resolveSymbol(id: 0) { context.draw(drawn, at: .zero, anchor: .topLeading) }
+                } symbols: {
+                    content.frame(width: max(size.width, 1), alignment: .topLeading).tag(0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .accessibilityHidden(true)
+            }
             if !uncovered {
                 InkBubble(name: name)
                     .overlay {
