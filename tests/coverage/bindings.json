@@ -2802,7 +2802,10 @@
     "B5.confirm.nothing-pending",
     "B5.one-goal.pending",
     "B5.one-goal.active",
-    "B5.blocked.proposal-hidden"
+    "B5.blocked.proposal-hidden",
+    "B5.confirm.rejoined",
+    "B5.confirm.proposer-left",
+    "B5.blocked.confirmers-hidden"
   ],
   "J7.4.group-progress.B": [
     "B5.one-goal.active",

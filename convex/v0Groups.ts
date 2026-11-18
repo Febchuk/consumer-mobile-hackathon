@@ -253,7 +253,7 @@ export const proposeGoal = mutation({
       if (goals.pending || (goals.active && goals.activeProgress < goals.active.targetPoints)) fail("CONFLICT", "This group already has a shared goal.");
       await rateLimit(ctx, `groups.proposeGoal:${account._id}`, 10, 3_600_000);
       const goalId = await ctx.db.insert("v0Goals", { groupId, proposerId: account._id, label: cleanLabel, targetPoints, confirmedBy: [account._id], state: "proposed", createdAt: Date.now() });
-      return await settleGoal(ctx, (await ctx.db.get(goalId))!);
+      return await settleGoal(ctx, (await ctx.db.get(goalId))!, account._id);
     });
   },
 });
@@ -268,7 +268,7 @@ export const confirmGoal = mutation({
       if (!pending || await isBlocked(ctx, account._id, pending.proposerId)) fail("NOT_AVAILABLE");
       await rateLimit(ctx, `groups.confirmGoal:${account._id}`, 30, 3_600_000);
       if (!pending.confirmedBy.includes(account._id)) await ctx.db.patch(pending._id, { confirmedBy: [...pending.confirmedBy, account._id] });
-      return await settleGoal(ctx, (await ctx.db.get(pending._id))!);
+      return await settleGoal(ctx, (await ctx.db.get(pending._id))!, account._id);
     });
   },
 });
@@ -296,14 +296,14 @@ async function goalView(ctx: QueryCtx, goal: Doc<"v0Goals">, progressPoints: num
   return { id: goal._id, label: goal.label, targetPoints: goal.targetPoints, confirmedBy, state: goal.state, progressPoints };
 }
 
-async function settleGoal(ctx: MutationCtx, goal: Doc<"v0Goals">): Promise<Goal> {
+async function settleGoal(ctx: MutationCtx, goal: Doc<"v0Goals">, viewerId: Id<"v0Accounts">): Promise<Goal> {
   const members = await activeMembers(ctx, goal.groupId);
   const confirmers = members.filter((entry) => goal.confirmedBy.includes(entry.account._id)).length;
   if (goal.state === "proposed" && confirmers * 2 > members.length) {
     await ctx.db.patch(goal._id, { state: "confirmed", confirmedAt: Date.now() });
     goal = (await ctx.db.get(goal._id))!;
   }
-  return await goalView(ctx, goal, 0, goal.proposerId);
+  return await goalView(ctx, goal, 0, viewerId);
 }
 
 async function boardGoal(ctx: QueryCtx, groupId: Id<"v0Groups">, viewerId: Id<"v0Accounts">): Promise<Goal | null> {

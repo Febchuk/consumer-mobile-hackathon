@@ -111,8 +111,8 @@ The approved rules do not cover these. Each was decided the conservative way whi
 ### Shared goal
 
 32. **A proposal waits up to 7 days for the group to confirm it.** After that it lapses and anyone can propose again.
-33. **One proposal waits at a time, and none can be made while the active goal is still unreached.** Once the group reaches its goal, any member can propose the next one. The reached goal stays on the board until the next one is confirmed.
-34. **"More than half" is counted against the members in the group at the moment someone confirms.** A confirmation from a member who has since left does not count. A member leaving does not by itself activate a waiting proposal; the next confirmation does the count again.
+33. **One proposal waits at a time, and none can be made while the active goal is still unreached.** Once the group reaches its goal, any member can propose the next one. The reached goal stays on the board until someone does; the board then shows the new proposal so members can confirm it.
+34. **"More than half" is counted against the members in the group at the moment someone confirms.** Leaving the group withdraws that member's confirmation from a waiting proposal, and rejoining does not bring it back; they confirm again if they want to. A member leaving does not by itself activate a waiting proposal; the next confirmation does the count again.
 35. **Progress adds up the points members earned in this group from the moment the goal became active.** Points earned by a member who later left still count. If the wrong-pick penalty is ever switched on, a loss does not reduce the group's progress.
 36. **Reaching the goal pays nothing out.** The board shows the goal as reached; no balance changes.
 37. **A goal has a name of up to 80 characters and a target of 100 to 1,000,000 whole points.** The name goes through the same checks as a bet question, so it cannot carry links, markup, money or the proposer's blocked topics.

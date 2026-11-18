@@ -113,6 +113,42 @@ describe("B5 shared goal: propose, confirm by more than half, one active goal, g
     await expectCode(confirm(f, "friend", `${f.runId}_after_leave`), "NOT_AVAILABLE");
   });
 
+  it("[B5.confirm.rejoined] does not revive a confirmation when the member leaves and joins again", async () => {
+    const f = await fixture();
+    await propose(f, "creator");
+    await confirm(f, "friend");
+    await f.t.mutation(api.v0Controls.leave, { token: f.actors.friend.token, groupId: f.g1, requestId: `${f.runId}_leave` });
+    expect((await goals(f))[0].confirmedBy).toEqual([f.actors.creator.id]);
+    await f.t.run((ctx) => ctx.db.insert("v0Memberships", { groupId: f.g1, accountId: f.actors.friend.id, joinedAt: Date.now(), alias: "Finn again", points: 0, streak: 0 }));
+    expect(await confirm(f, "subject")).toMatchObject({ state: "proposed", confirmedBy: [f.actors.creator.id, f.actors.subject.id] });
+    expect(await confirm(f, "friend", `${f.runId}_rejoined`)).toMatchObject({ state: "confirmed", confirmedBy: [f.actors.creator.id, f.actors.subject.id, f.actors.friend.id] });
+  });
+
+  it("[B5.confirm.proposer-left] withdraws the proposer's own confirmation when they leave, and leaves an active goal untouched", async () => {
+    const f = await fixture();
+    await propose(f, "creator");
+    await f.t.mutation(api.v0Controls.leave, { token: f.actors.creator.token, groupId: f.g1, requestId: `${f.runId}_leave` });
+    expect((await goals(f))[0]).toMatchObject({ state: "proposed", confirmedBy: [] });
+    await confirm(f, "friend");
+    await confirm(f, "subject");
+    const active = await confirm(f, "new");
+    expect(active).toMatchObject({ state: "confirmed", confirmedBy: [f.actors.friend.id, f.actors.subject.id, f.actors.new.id] });
+    await f.t.mutation(api.v0Controls.leave, { token: f.actors.new.token, groupId: f.g1, requestId: `${f.runId}_leave_new` });
+    expect((await goals(f))[0]).toMatchObject({ state: "confirmed", confirmedBy: [f.actors.friend.id, f.actors.subject.id, f.actors.new.id] });
+  });
+
+  it("[B5.blocked.confirmers-hidden] answers a confirmation without the confirmers the caller is blocked with", async () => {
+    const f = await fixture();
+    await f.t.run((ctx) => ctx.db.insert("v0Blocks", { accountId: f.actors.friend.id, blockedId: f.actors.subject.id, createdAt: T0 }));
+    await propose(f, "creator");
+    expect(await confirm(f, "friend")).toMatchObject({ confirmedBy: [f.actors.creator.id, f.actors.friend.id] });
+    const answer = await confirm(f, "subject");
+    expect(answer).toMatchObject({ state: "confirmed", confirmedBy: [f.actors.creator.id, f.actors.subject.id] });
+    expect((await board(f, "subject")).goal).toEqual(answer);
+    expect((await board(f, "friend")).goal).toMatchObject({ confirmedBy: [f.actors.creator.id, f.actors.friend.id] });
+    expect((await board(f, "creator")).goal).toMatchObject({ confirmedBy: [f.actors.creator.id, f.actors.friend.id, f.actors.subject.id] });
+  });
+
   it("[B5.confirm.nothing-pending] refuses a confirmation when no proposal is waiting", async () => {
     const f = await fixture();
     await expectCode(confirm(f, "friend"), "NOT_AVAILABLE");
