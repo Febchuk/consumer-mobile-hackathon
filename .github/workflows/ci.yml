@@ -49,3 +49,90 @@ jobs:
       - name: Allow the unprivileged network namespace the loopback lane requires
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: env -i PATH="$PATH" HOME="$HOME" npm run test:local-backend
+
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      XCODEGEN_VERSION: 2.47.0
+      XCODEGEN_SHA256: 6ef12a3ef5327c2c713397f46d9160550f8b1cdc5c925cd884d65c77c9f696cd
+      SIMULATOR: platform=iOS Simulator,arch=arm64,name=iPhone 17,OS=26.5
+    defaults:
+      run:
+        working-directory: native-imessage
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report the toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun simctl list runtimes
+      - name: Install the checksum-pinned XcodeGen
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Generate the Xcode project
+        run: |
+          xcodegen --version
+          xcodegen generate
+      - name: Fail if XcodeGen changed a tracked file other than the two known stale Info.plist files
+        run: |
+          changed="$(git status --porcelain --untracked-files=all)"
+          {
+            echo "### XcodeGen drift"
+            echo
+            if [ -z "$changed" ]; then
+              echo "xcodegen generate left the tree clean."
+            else
+              echo '```'
+              echo "$changed"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$changed"
+          unexpected="$(echo "$changed" | grep -v -x -e ' M native-imessage/App/Info.plist' -e ' M native-imessage/Extension/Info.plist' -e '' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::xcodegen generate changed files outside the two known stale Info.plist files"
+            echo "$unexpected"
+            exit 1
+          fi
+      - name: Build the host app, the Messages extension and the test bundles unsigned for the simulator
+        run: |
+          xcodebuild build-for-testing \
+            -project CalledItMessages.xcodeproj -scheme CalledItMessages \
+            -configuration QA -destination "$SIMULATOR" \
+            -derivedDataPath build -quiet \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+          products=build/Build/Products/QA-iphonesimulator
+          test -d "$products/CalledItMessages.app/PlugIns/CalledItExtension.appex"
+          if codesign -dv "$products/CalledItMessages.app" "$products/CalledItMessages.app/PlugIns/CalledItExtension.appex" 2>&1 | grep 'TeamIdentifier=' | grep -v 'not set'; then
+            echo "::error::a build product carries a team identifier"
+            exit 1
+          fi
+      - name: Run the Swift unit tests only
+        run: |
+          xcodebuild test-without-building \
+            -project CalledItMessages.xcodeproj -scheme CalledItMessages \
+            -configuration QA -destination "$SIMULATOR" \
+            -derivedDataPath build -resultBundlePath "$RUNNER_TEMP/CalledItCoreTests.xcresult" \
+            -only-testing:CalledItCoreTests
+      - name: Report the Swift test count
+        if: ${{ !cancelled() }}
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/CalledItCoreTests.xcresult" > "$RUNNER_TEMP/summary.json"
+          counts="$(jq -r '"\(.totalTestCount) total, \(.passedTests) passed, \(.failedTests) failed, \(.skippedTests) skipped"' "$RUNNER_TEMP/summary.json")"
+          echo "CalledItCoreTests: $counts"
+          { echo "### CalledItCoreTests"; echo; echo "$counts on $(xcodebuild -version | tr '\n' ' ')"; } >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.passedTests > 0 and .failedTests == 0' "$RUNNER_TEMP/summary.json" > /dev/null
+      - name: Keep the result bundle when the job fails
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalledItCoreTests-xcresult
+          path: ${{ runner.temp }}/CalledItCoreTests.xcresult
+          if-no-files-found: ignore
