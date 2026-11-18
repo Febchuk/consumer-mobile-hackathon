@@ -48,7 +48,7 @@ assert.ok(!existsSync(output), "The output directory already exists: " + output)
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
 const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
-let backend; let simulator; let sampler; let exitCode = 1;
+let backend; let closeBackend; let simulator; let sampler; let exitCode = 1;
 const egress = new Map();
 const appEgress = new Set();
 // The two older UI test classes need the root provisioner's fixtures (tests/simulator-provisioner), which this lane does not supply.
@@ -204,7 +204,7 @@ async function main() {
   evidence.safety.cardTarget = manifest.cardOrigin;
 
   say("booting the local backend on loopback");
-  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log, crons: flag("--demo") });
+  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log, crons: flag("--demo"), onClose: (close) => { closeBackend = close; } });
   evidence.backend.selfCheck = await selfCheck();
   say("backend self-check passed: real handlers, fake code provider, policy " + evidence.backend.selfCheck.policy.status);
   if (flag("--backend-only")) { evidence.status = "backend-only"; exitCode = 0; return; }
@@ -253,8 +253,9 @@ try {
     evidence.safety.outboundNetwork = { mode: networkIsolation, enforced: false, appContactedNonLoopback: [...appEgress], reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
     if (!flag("--keep-simulator")) evidence.simulator.deleted = destroySimulator(simulator.udid);
   }
-  if (backend) {
-    try { const retained = await backend.close(); log("backend.log", retained.backendLog); evidence.backend.providerStats = retained.providerStats; evidence.backend.scratchRemoved = true; }
+  if (closeBackend) {
+    evidence.backend ??= {};
+    try { const retained = await closeBackend(); log("backend.log", retained.backendLog); evidence.backend.providerStats = retained.providerStats; evidence.backend.scratchRemoved = true; }
     catch { evidence.backend.scratchRemoved = false; }
   }
   evidence.finishedAt = new Date().toISOString();
