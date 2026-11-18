@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { BetView, CardLocator } from "./v0Contract";
 import { activeMember, canReadBet, fail, isBlocked, once, policyStatus, randomToken, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
-import { activeMembers, currentTurn, turnEndsAt } from "./v0Turns";
+import { activeMembers, closeTurn, currentTurn, turnEndsAt } from "./v0Turns";
 import { format } from "./v0Schema";
 import { validateCandidate } from "./v0Safety";
 import { queueNotification } from "./v0Notifications";
@@ -150,7 +150,7 @@ export const create = mutation({
       if ((await activeMembers(ctx, group._id)).length < approvedPolicy.minActiveMembers) fail("FORBIDDEN", "A group needs at least 3 members to play.");
       await rateLimit(ctx, `bets.create:${account._id}`, 10, 3_600_000);
       const betId = await ctx.db.insert("v0Bets", { groupId: group._id, creatorId: account._id, subjectId: args.subjectId, createdAt: now, question: candidate.question, contextLine: args.contextLine.normalize("NFKC").trim().replace(/\s+/gu, " "), format: candidate.format, options: candidate.options, ...(candidate.line === undefined ? {} : { line: candidate.line }), source: args.source, state: "open", cutoffAt: revealAt, revealAt, policyVersion: approvedPolicy.version, locator: randomToken() });
-      await ctx.db.patch(turn._id, { status: "created", betId });
+      await closeTurn(ctx, turn, { status: "created", betId });
       return { betId, groupId: group._id, card: await cardFor(ctx, (await ctx.db.get(betId))!) };
     });
   },

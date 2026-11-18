@@ -272,7 +272,7 @@ describe("approved server answer and challenge windows, not settlement policy", 
       expect(Date.now()).toBe(timeout + day);
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
       const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
-      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "turn_schedule", "recap_schedule", "goal_confirmation"]) } });
+      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "recap_schedule", "goal_confirmation"]) } });
       expect(advanced?.policy.missing).not.toContain("cutoff_limits");
       expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "bet", state: "provisional", canAnswer: false, canChallenge: false, provisionalOutcome: 0 });
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("outcome");

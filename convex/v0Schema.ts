@@ -17,7 +17,8 @@ export const v0Tables = {
     .index("by_request", ["requestId"]).index("by_phone", ["phoneHash"]),
   v0Pairs: defineTable({ accountId: v.id("v0Accounts"), sessionId: v.id("v0Sessions"), codeHash: v.string(), expiresAt: v.number(), consumedAt: v.optional(v.number()) })
     .index("by_hash", ["codeHash"]).index("by_account", ["accountId"]),
-  v0Groups: defineTable({ name: v.string(), creatorId: v.id("v0Accounts"), timezone: v.string(), createdAt: v.number(), nextTurnAt: v.number(), nextRecapAt: v.optional(v.number()), lastCreatorId: v.optional(v.id("v0Accounts")), policyVersion: v.optional(v.string()) }),
+  v0Groups: defineTable({ name: v.string(), creatorId: v.id("v0Accounts"), timezone: v.string(), createdAt: v.number(), nextTurnAt: v.number(), nextRecapAt: v.optional(v.number()), lastCreatorId: v.optional(v.id("v0Accounts")), lastTurnDate: v.optional(v.string()), policyVersion: v.optional(v.string()) })
+    .index("by_next_turn", ["nextTurnAt"]),
   v0Memberships: defineTable({ groupId: v.id("v0Groups"), accountId: v.id("v0Accounts"), joinedAt: v.number(), leftAt: v.optional(v.number()), alias: v.string(), points: v.number(), streak: v.number(), lastScoredBetId: v.optional(v.id("v0Bets")) })
     .index("by_group", ["groupId"]).index("by_account", ["accountId"]).index("by_group_account", ["groupId", "accountId"]),
   v0Invites: defineTable({ groupId: v.id("v0Groups"), inviterId: v.id("v0Accounts"), phoneHash: v.string(), createdAt: v.number(), expiresAt: v.number(), acceptedAt: v.optional(v.number()), revokedAt: v.optional(v.number()) })
@@ -34,7 +35,7 @@ export const v0Tables = {
     .index("by_bet", ["betId"]).index("by_account", ["accountId"]).index("by_request", ["accountId", "requestId"]),
   v0Ledger: defineTable({ groupId: v.id("v0Groups"), betId: v.id("v0Bets"), accountId: v.optional(v.id("v0Accounts")), membershipId: v.optional(v.id("v0Memberships")), points: v.number(), streakBefore: v.number(), streakAfter: v.number(), policyVersion: v.string(), createdAt: v.number() })
     .index("by_group", ["groupId"]).index("by_bet", ["betId"]).index("by_account", ["accountId"]),
-  v0Turns: defineTable({ groupId: v.id("v0Groups"), localDate: v.string(), creatorId: v.id("v0Accounts"), subjectId: v.id("v0Accounts"), status: v.union(v.literal("assigned"), v.literal("passed"), v.literal("created"), v.literal("expired")), assignedAt: v.number(), passAt: v.number(), betId: v.optional(v.id("v0Bets")) })
+  v0Turns: defineTable({ groupId: v.id("v0Groups"), localDate: v.string(), creatorId: v.id("v0Accounts"), subjectId: v.id("v0Accounts"), status: v.union(v.literal("assigned"), v.literal("passed"), v.literal("created"), v.literal("expired")), assignedAt: v.number(), passAt: v.number(), betId: v.optional(v.id("v0Bets")), passedFromId: v.optional(v.id("v0Accounts")) })
     .index("by_group_date", ["groupId", "localDate"]),
   v0Recaps: defineTable({ groupId: v.id("v0Groups"), startsAt: v.number(), endsAt: v.number(), createdAt: v.number() })
     .index("by_group", ["groupId"]),

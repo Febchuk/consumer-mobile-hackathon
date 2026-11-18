@@ -669,7 +669,7 @@
     "path": "v0Groups:passTurn",
     "kind": "mutation",
     "requiredPolicy": "group_membership",
-    "policy": "assigned creator only; POLICY_PENDING instead of invented rotation",
+    "policy": "first assigned creator only, once per turn, before 20:00 group time; passes to the next member in join order; idempotent and rate-bounded",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",
@@ -717,7 +717,7 @@
     "path": "v0Groups:turn",
     "kind": "query",
     "requiredPolicy": "group_membership",
-    "policy": "current valid local-date turn; eligible creator/subject/viewer intervals; pass disabled pending policy",
+    "policy": "current valid local-date turn; eligible creator/subject/viewer intervals; canPass only for the first creator before 20:00 group time",
     "minimumAssertions": [
       "anonymous_AUTH_REQUIRED",
       "revoked_AUTH_REQUIRED",

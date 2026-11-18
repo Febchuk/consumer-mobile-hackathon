@@ -73,3 +73,17 @@ The approved rules do not cover these. Each was decided the conservative way whi
 4. **The 3 active members are counted when the bet is sent,** not only when the turn was assigned. A deleted account does not count.
 5. **Creation is also limited to 10 bets per person per hour** across all their groups, as an abuse bound.
 6. **A retried send returns the bet already created.** It never creates a second one, even if the retry arrives after 8:00 PM.
+
+### Daily turn
+
+7. **Tomorrow's turn goes to the member after whoever last held today's turn,** counting a pass. Nobody creates two days running because someone else missed a morning.
+8. **A turn can be passed once, by anyone or by the clock.** The member it passed to cannot pass it again. If nobody else can take it, it stays with the first creator until 8:00 PM.
+9. **When a turn passes, the subject stays the same** unless the new creator is that subject or is blocked with them. Then the app names a new subject by the same rule.
+10. **"Gone longest without being the subject" counts bets actually sent about you in this group** since you last joined. A turn that produced no bet does not count. Members who have never been the subject go first, in join order.
+11. **A creator with nobody eligible to be their subject is skipped** for the day. If no creator and subject pair exists, the group gets no turn that day.
+12. **A turn that starts late still starts,** as long as it is before 8:00 PM: for example when the group gets its third member during the day, or after an outage. A turn that starts at or after noon is not passed by the clock; its creator can still pass it by hand.
+13. **A new group's first turn check is the next 8:00 AM group time.** A group that reaches 3 members later that day gets its turn then.
+14. **If today's creator or subject leaves the group, today's turn ends** and there is no bet that day. This was already how leaving worked. Deleting an account does the same.
+15. **The turn notification goes only to the creator,** and to the new creator when it passes. One that has not been delivered yet is withdrawn when the turn passes, the bet is sent, the day ends, or the creator or subject leaves. It is checked again at the moment of delivery.
+16. **One turn per group per local calendar date.** If a group's timezone changes, the new local date can get its own turn, but no date ever gets two.
+17. **A group whose timezone the server cannot read gets no turns** until it is corrected.

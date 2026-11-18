@@ -170,7 +170,7 @@
   "v0Groups:turn": {
     "kind": "query",
     "scope": "group_membership",
-    "rule": "current valid local-date turn; eligible creator/subject/viewer intervals; pass disabled pending policy",
+    "rule": "current valid local-date turn; eligible creator/subject/viewer intervals; canPass only for the first creator before 20:00 group time",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -182,7 +182,7 @@
   "v0Groups:passTurn": {
     "kind": "mutation",
     "scope": "group_membership",
-    "rule": "assigned creator only; POLICY_PENDING instead of invented rotation",
+    "rule": "first assigned creator only, once per turn, before 20:00 group time; passes to the next member in join order; idempotent and rate-bounded",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [
