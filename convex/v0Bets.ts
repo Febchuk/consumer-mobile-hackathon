@@ -7,7 +7,7 @@ import { activeMembers, closeTurn, currentTurn, turnEndsAt } from "./v0Turns";
 import { format } from "./v0Schema";
 import { validateCandidate } from "./v0Safety";
 import { queueNotification } from "./v0Notifications";
-import { answerDeadlineFor, approvedPolicy, challengeDeadlineFor, nextDefaultRevealAt, stateAt } from "./v0GamePolicy";
+import { answerDeadlineFor, approvedPolicy, challengeDeadlineFor, nextDefaultRevealAt, scorePick, stateAt } from "./v0GamePolicy";
 
 async function cardFor(ctx: QueryCtx, bet: Doc<"v0Bets">): Promise<CardLocator> {
   let origin: URL;
@@ -263,7 +263,26 @@ export async function challengeTally(ctx: QueryCtx, bet: Doc<"v0Bets">, deadline
   return { pickers: pickers.size, challengers: challengers.size, voided: challengers.size * 2 > pickers.size };
 }
 
-async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
+async function settleBet(ctx: MutationCtx, bet: Doc<"v0Bets">, outcome: number, now: number) {
+  if (await ctx.db.query("v0Ledger").withIndex("by_bet", (q) => q.eq("betId", bet._id)).first()) return;
+  const recipients = new Set([bet.subjectId]);
+  for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {
+    if (pick.voidedAt !== undefined || pick.accountId === bet.subjectId || pick.groupId !== bet.groupId || recipients.has(pick.accountId)) continue;
+    if (![0, 1].includes(pick.option) || !Number.isFinite(pick.confidence) || pick.confidence < approvedPolicy.confidenceMin || pick.confidence > approvedPolicy.confidenceMax) continue;
+    const account = await ctx.db.get(pick.accountId);
+    const member = await activeMember(ctx, bet.groupId, pick.accountId);
+    if (!account || account.deletedAt !== undefined || !member || member._id !== pick.membershipId || member.lastScoredBetId === bet._id) continue;
+    const balance = Number.isFinite(member.points) ? member.points : 0;
+    const streakBefore = Number.isInteger(member.streak) && member.streak > 0 ? member.streak : 0;
+    const result = scorePick({ confidence: pick.confidence, correct: pick.option === outcome, streak: streakBefore, balance });
+    await ctx.db.insert("v0Ledger", { groupId: bet.groupId, betId: bet._id, accountId: pick.accountId, membershipId: member._id, points: result.points, streakBefore, streakAfter: result.streak, policyVersion: approvedPolicy.version, createdAt: now });
+    await ctx.db.patch(member._id, { points: balance + result.points, streak: result.streak, lastScoredBetId: bet._id });
+    recipients.add(pick.accountId);
+  }
+  for (const accountId of recipients) await queueNotification(ctx, { key: `result:${bet._id}:${accountId}`, accountId, groupId: bet.groupId, betId: bet._id, kind: "result" });
+}
+
+async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">, inOrder = false) {
   const now = Date.now();
   const deadline = challengeDeadlineFor(bet);
   if (deadline === undefined) {
@@ -272,11 +291,19 @@ async function resolveChallenge(ctx: MutationCtx, bet: Doc<"v0Bets">) {
     return "voided" as const;
   }
   if (now < deadline) return "provisional" as const;
+  if (!inOrder) {
+    const answeredAt = bet.answeredAt!;
+    const earlier = (await ctx.db.query("v0Bets").withIndex("by_group", (q) => q.eq("groupId", bet.groupId)).collect())
+      .filter((other) => other._id !== bet._id && other.state === "provisional" && other.answeredAt !== undefined && (other.answeredAt < answeredAt || (other.answeredAt === answeredAt && other._creationTime < bet._creationTime)))
+      .sort((first, second) => first.answeredAt! - second.answeredAt! || first._creationTime - second._creationTime);
+    for (const other of earlier) await resolveChallenge(ctx, other, true);
+  }
   if ((await challengeTally(ctx, bet, deadline)).voided) {
     await voidNow(ctx, bet);
     return "voided" as const;
   }
   await ctx.db.patch(bet._id, { state: "finalized", outcome: bet.provisionalOutcome, finalizedAt: now, policyVersion: approvedPolicy.version });
+  await settleBet(ctx, bet, bet.provisionalOutcome!, now);
   return "finalized" as const;
 }
 

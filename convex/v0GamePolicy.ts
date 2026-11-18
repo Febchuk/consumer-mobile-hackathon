@@ -34,6 +34,22 @@ export const approvedPolicy = {
   recapWindowDays: 7,
 };
 
+export type ScoringPolicy = Pick<typeof approvedPolicy, "confidencePointScale" | "wrongPickPenaltyFraction" | "streakBonusPerCorrectPick" | "streakMultiplierCap">;
+
+function roundHalfUp(value: number) {
+  return Math.floor(value + 0.5 + 1e-9);
+}
+
+export function scorePick(input: { confidence: number; correct: boolean; streak: number; balance: number }, policy: ScoringPolicy = approvedPolicy) {
+  if (!input.correct) {
+    const loss = Math.min(Math.max(0, input.balance), roundHalfUp(policy.confidencePointScale * input.confidence * policy.wrongPickPenaltyFraction));
+    return { points: loss > 0 ? -loss : 0, streak: 0 };
+  }
+  const streak = input.streak + 1;
+  const multiplier = Math.min(policy.streakMultiplierCap, 1 + policy.streakBonusPerCorrectPick * (streak - 1));
+  return { points: roundHalfUp(policy.confidencePointScale * input.confidence * multiplier), streak };
+}
+
 export function answerDeadlineFor(bet: Doc<"v0Bets">) {
   return bet.revealAt + approvedPolicy.unansweredDurationMs;
 }

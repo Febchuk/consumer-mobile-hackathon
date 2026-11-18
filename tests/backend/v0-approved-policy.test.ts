@@ -279,7 +279,7 @@ describe("approved server answer and challenge windows, not settlement policy", 
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 1 });
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
       const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
-      expect(advanced).toMatchObject({ state: "voided", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "recap_schedule", "goal_confirmation"]) } });
+      expect(advanced).toMatchObject({ state: "voided", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["recap_schedule", "goal_confirmation"]) } });
       expect(advanced?.policy.missing).not.toContain("cutoff_limits");
       expect(advanced?.policy.missing).not.toContain("majority_rule");
       expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "unavailable", state: "voided" });
