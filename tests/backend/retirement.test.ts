@@ -87,6 +87,11 @@ describe("Canonical checkpoint: retired public APIs fail closed", () => {
           expect(body).toContain("<button disabled>");
           expect(body).toContain("verified TestFlight invitation");
           expect(body).toContain("tap the original card");
+          expect(body).toContain("works only on iPhone with iMessage");
+          expect(body).toContain("There is no Android app and no web version");
+          expect(body).toContain("nothing can be viewed or picked from this page");
+          expect(body).toContain("does not read your chats, photos or contacts");
+          expect(body).not.toContain("<script");
           expect(body).not.toContain("<a href=");
           expect(body).not.toContain(text);
           expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
