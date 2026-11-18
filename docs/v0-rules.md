@@ -97,3 +97,13 @@ The approved rules do not cover these. Each was decided the conservative way whi
 22. **An answer given just before the 24-hour limit still gets its full hour** of challenge time. The no-answer timeout does not void an answered bet.
 23. **If the bet's creator left the group, the reveal notification still goes** to the subject and the remaining pickers, and the bet plays out normally. Before, it was silently dropped, so the subject might never answer. It is still not sent when the creator's account was deleted (the bet is removed) or when the creator and subject have blocked each other (the bet is voided).
 24. **A bet whose stored answer cannot be read is voided** once the answer and challenge windows have both passed, so it cannot stay open forever.
+
+### Scoring and the ledger
+
+25. **Points are credited in the same step that makes the result final,** once. Every scored pick gets a ledger line, including a wrong pick (0 points), so the history shows the streak ending.
+26. **The streak bonus applies to the pick that extends the streak.** The first correct pick pays ×1.0, the second in a row ×1.1, and so on up to ×2.
+27. **Halves round up exactly.** 38.5 becomes 39 even where the computer's arithmetic would land a hair under.
+28. **A member who left before the result became final is not scored.** Leaving cancels their open picks. They keep the points they had, and rejoining starts a new balance at 0, as before.
+29. **A stored pick that is not a valid pick is not scored:** an answer other than the two choices, or a confidence outside 1% to 100%.
+30. **The result notification goes to the subject and to everyone whose pick was scored, right or wrong.** Members who did not pick get none. A voided bet sends no result notification.
+31. **If the wrong-pick penalty is ever switched on,** the loss is rounded the same way, it never takes a balance below 0, and the ledger records the amount actually taken.

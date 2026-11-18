@@ -191,6 +191,53 @@ try {
     await assert.rejects(client.action(makeFunctionReference("v0Proof:read"), { token: friendToken, proofId: lastProof.id }), (error) => error.data?.code === "NOT_AVAILABLE");
   });
 
+  const ref = (name) => makeFunctionReference(`qaRpc:${name}`);
+  const overlapping = (count, call) => Promise.all(Array.from({ length: count }, (_, index) => call(index)));
+
+  await check("RPC.settlement-finalize-race", async () => {
+    const seeded = await client.mutation(ref("seedSettlement"), { runId, pickers: 4, challengers: 1 });
+    await overlapping(24, (index) => index % 2 ? client.mutation(ref("runSweep"), { runId }, { skipQueue: true }) : client.mutation(ref("advance"), { runId, betId: seeded.betId }, { skipQueue: true }));
+    const first = await client.query(ref("settlementState"), { runId, ...seeded });
+    assert.equal(first.state, "finalized");
+    assert.equal(first.outcome, 0);
+    assert.equal(first.ledger.length, 4, "one ledger row per standing pick");
+    assert.equal(new Set(first.ledger.map((row) => row.accountId)).size, 4, "no account credited twice");
+    assert.deepEqual(first.ledger.map((row) => [row.points, row.streakBefore, row.streakAfter]).sort(), [[0, 1, 0], [0, 1, 0], [77, 1, 2], [77, 1, 2]]);
+    assert.deepEqual(first.members.map((row) => [row.alias, row.points, row.streak, row.scored]), [["Picker 0", 77, 2, true], ["Picker 1", 0, 0, true], ["Picker 2", 77, 2, true], ["Picker 3", 0, 0, true], ["Sage", 0, 0, false]]);
+    assert.equal(first.results.length, 5, "one result notification for the subject and each picker");
+    assert.equal(new Set(first.results).size, 5);
+    assert.equal(first.voidedPicks, 0);
+    await overlapping(12, (index) => index % 2 ? client.mutation(ref("runSweep"), { runId }, { skipQueue: true }) : client.mutation(ref("advance"), { runId, betId: seeded.betId }, { skipQueue: true }));
+    assert.deepEqual(await client.query(ref("settlementState"), { runId, ...seeded }), first);
+  });
+
+  await check("RPC.settlement-void-race", async () => {
+    const seeded = await client.mutation(ref("seedSettlement"), { runId, pickers: 3, challengers: 2 });
+    await overlapping(24, (index) => index % 2 ? client.mutation(ref("runSweep"), { runId }, { skipQueue: true }) : client.mutation(ref("advance"), { runId, betId: seeded.betId }, { skipQueue: true }));
+    const first = await client.query(ref("settlementState"), { runId, ...seeded });
+    assert.equal(first.state, "voided");
+    assert.equal(first.outcome, null);
+    assert.equal(first.finalizedAt, null);
+    assert.deepEqual(first.ledger, []);
+    assert.deepEqual(first.results, []);
+    assert.equal(first.voidedPicks, 3);
+    assert.ok(first.members.every((row) => row.points === 0 && row.scored === false && row.streak === (row.alias === "Sage" ? 0 : 1)));
+    await overlapping(8, () => client.mutation(ref("runSweep"), { runId }, { skipQueue: true }));
+    assert.deepEqual(await client.query(ref("settlementState"), { runId, ...seeded }), first);
+  });
+
+  await check("RPC.turn-worker-race", async () => {
+    const seeded = await client.mutation(ref("seedTurnGroup"), { runId });
+    await overlapping(24, () => client.mutation(ref("runTurns"), { runId }, { skipQueue: true }));
+    const first = await client.query(ref("turnState"), { runId, groupId: seeded.groupId });
+    assert.equal(first.turns.length, 1, "one turn for the group's local date");
+    assert.deepEqual({ creatorId: first.turns[0].creatorId, subjectId: first.turns[0].subjectId, status: first.turns[0].status }, { creatorId: seeded.firstCreator, subjectId: seeded.firstSubject, status: "assigned" });
+    assert.equal(first.notifications.length, 1, "one turn notification");
+    assert.equal(first.notifications[0].accountId, seeded.firstCreator);
+    await overlapping(8, () => client.mutation(ref("runTurns"), { runId }, { skipQueue: true }));
+    assert.deepEqual(await client.query(ref("turnState"), { runId, groupId: seeded.groupId }), first);
+  });
+
   await check("RPC.real-session-revocation", async () => {
     assert.deepEqual(await client.mutation(makeFunctionReference("v0Auth:revoke"), { token, allDevices: true, requestId: `${runId}_revoke` }), { revoked: true });
     await assert.rejects(client.query(makeFunctionReference("qaRpc:readMember"), { token, groupId: fixture.groupId }), (error) => error.data?.code === "AUTH_REQUIRED");
@@ -214,7 +261,7 @@ try {
   writeFileSync(resolve(output, "http-envelopes.json"), JSON.stringify(httpEvidence, null, 2) + "\n", { mode: 0o600 });
   metadata.finishedAt = new Date().toISOString();
   metadata.assertions = results;
-  metadata.gates = { realBackendProtocol: results.length === 18 && results.every((r) => r.status === "passing"), nativeTransport: false, canonicalProofHandlers: results.filter((r) => r.id.startsWith("RPC.canonical-proof")).length === 6 && results.filter((r) => r.id.startsWith("RPC.canonical-proof")).every((r) => r.status === "passing"), fullV0Ready: false };
+  metadata.gates = { realBackendProtocol: results.length === 21 && results.every((r) => r.status === "passing"), nativeTransport: false, canonicalProofHandlers: results.filter((r) => r.id.startsWith("RPC.canonical-proof")).length === 6 && results.filter((r) => r.id.startsWith("RPC.canonical-proof")).every((r) => r.status === "passing"), fullV0Ready: false };
   rmSync(state, { recursive: true, force: true });
   assert.equal(existsSync(state), false, "Private local database/storage state was not removed");
   metadata.cleanup = { productSourceUnchanged: true, fixtureEndpointAbsent: true, privateStateRemoved: true };
