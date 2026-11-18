@@ -71,8 +71,9 @@ describe("actual V0 read models and implemented reveal scheduler", () => {
     expect(await f.t.query(api.v0Groups.turn, { token: f.actors.friend.token, groupId: f.g1 })).toEqual({ id, groupId: f.g1, localDate: "2026-11-16", creatorId: f.actors.creator.id, subjectId: f.actors.subject.id, status: "assigned", assignedAt: T0 - 1000, passAt: T0 + 60_000, canPass: false });
     expect(await f.t.query(api.v0Groups.turn, { token: f.actors.creator.token, groupId: f.g2 })).toBeNull();
     await expect(f.t.mutation(api.v0Groups.passTurn, { token: f.actors.friend.token, groupId: f.g1, requestId: `${f.runId}_wrong` })).rejects.toMatchObject({ data: { code: "NOT_AVAILABLE" } });
-    await expect(f.t.mutation(api.v0Groups.passTurn, { token: f.actors.creator.token, groupId: f.g1, requestId: `${f.runId}_pass` })).rejects.toMatchObject({ data: { code: "POLICY_PENDING" } });
     expect((await f.t.run((ctx) => ctx.db.get(id)))?.status).toBe("assigned");
+    expect(await f.t.mutation(api.v0Groups.passTurn, { token: f.actors.creator.token, groupId: f.g1, requestId: `${f.runId}_pass` })).toMatchObject({ id, status: "passed", creatorId: f.actors.friend.id, canPass: false });
+    expect(await f.t.run((ctx) => ctx.db.get(id))).toMatchObject({ status: "passed", passedFromId: f.actors.creator.id });
   });
 
   for (const invalid of ["future", "new-viewer", "duplicate-subject", "no-bets", "blocked"] as const) {

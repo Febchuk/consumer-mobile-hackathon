@@ -2519,5 +2519,59 @@
     "B1.create.rate-bound",
     "B1.create.rate-bound.counts",
     "B1.create.one-per-day"
+  ],
+  "J3.1.one-turn.B": [
+    "B2.turn.assign-8am",
+    "B2.turn.duplicate-workers",
+    "B2.turn.join-after-turn",
+    "B2.turn.downtime",
+    "B2.turn.small-group",
+    "B2.turn.other-group",
+    "B2.turn.late-worker.ten-am",
+    "B2.turn.late-worker.one-pm",
+    "B2.turn.late-worker.eight-pm",
+    "B2.turn.late-worker.next-morning-early"
+  ],
+  "J3.1.neutral-push.B": [
+    "B2.turn.neutral-notification",
+    "B2.turn.assign-8am",
+    "B2.turn.notification-preference"
+  ],
+  "J3.1.fair-rotation.B": [
+    "B2.turn.rotation",
+    "B2.turn.skip-creator.no-eligible-subject",
+    "B2.turn.skip-subject.no-bets",
+    "B2.turn.skip-subject.creator-blocked",
+    "B2.turn.skip-subject.blocked-creator",
+    "B2.turn.skip-subject.deleted",
+    "B2.turn.skip-subject.left"
+  ],
+  "J3.1.noon-pass.B": [
+    "B2.turn.noon-pass",
+    "B2.turn.noon-pass.sent-kept",
+    "B2.turn.manual-pass",
+    "B2.turn.created-keeps",
+    "B2.turn.expire-8pm"
+  ],
+  "J3.1.dst-retries.B": [
+    "B2.turn.dst.spring-forward",
+    "B2.turn.dst.fall-back",
+    "B2.turn.zone-change",
+    "B2.turn.duplicate-workers",
+    "B2.turn.atomic-enqueue",
+    "B2.turn.invalid-zone"
+  ],
+  "N1.turn.B": [
+    "B2.turn.assign-8am",
+    "B2.turn.duplicate-workers",
+    "B2.turn.atomic-enqueue",
+    "B2.turn.dst.spring-forward",
+    "B2.turn.dst.fall-back"
+  ],
+  "N1.pass.B": [
+    "B2.turn.noon-pass",
+    "B2.turn.manual-pass",
+    "B2.turn.late-worker.ten-am",
+    "B2.turn.late-worker.one-pm"
   ]
 }

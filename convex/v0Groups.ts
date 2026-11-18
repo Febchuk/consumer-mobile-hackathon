@@ -3,7 +3,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { GroupSummary, Recap, Turn } from "./v0Contract";
 import { activeMember, canReadBet, fail, isBlocked, once, phoneHash, policyStatus, rateLimit, requireMember, requireSession } from "./v0Policy";
-import { currentTurn } from "./v0Turns";
+import { approvedPolicy, localDateAt } from "./v0GamePolicy";
+import { currentTurn, nextTurnStart, passTurn as passTurnTo, turnEndsAt } from "./v0Turns";
 
 function summary(group: Doc<"v0Groups">, member: Doc<"v0Memberships">): GroupSummary {
   return { id: group._id, name: group.name, timezone: group.timezone, alias: member.alias, points: member.points, streak: member.streak };
@@ -28,7 +29,7 @@ export const create = mutation({
     const result = await once(ctx, account._id, "groups.create", requestId, { name, timezone }, async () => {
       await rateLimit(ctx, `groups.create:${account._id}`, 10, 3_600_000);
       const now = Date.now();
-      const groupId = await ctx.db.insert("v0Groups", { name: cleanName, timezone, creatorId: account._id, createdAt: now, nextTurnAt: Number.MAX_SAFE_INTEGER });
+      const groupId = await ctx.db.insert("v0Groups", { name: cleanName, timezone, creatorId: account._id, createdAt: now, nextTurnAt: nextTurnStart(timezone, now) ?? Number.MAX_SAFE_INTEGER });
       const membershipId = await ctx.db.insert("v0Memberships", { groupId, accountId: account._id, joinedAt: now, alias: account.displayName, points: 0, streak: 0 });
       return summary((await ctx.db.get(groupId))!, (await ctx.db.get(membershipId))!);
     });
@@ -95,6 +96,8 @@ export const accept = mutation({
       if (!member) {
         const membershipId = await ctx.db.insert("v0Memberships", { groupId: group._id, accountId: account._id, joinedAt: now, alias: account.displayName, points: 0, streak: 0 });
         member = (await ctx.db.get(membershipId))!;
+        const localDate = localDateAt(group.timezone, now);
+        if (localDate && (group.lastTurnDate === undefined || group.lastTurnDate < localDate) && group.nextTurnAt > now) await ctx.db.patch(group._id, { nextTurnAt: now });
       }
       return summary(group, member);
     });
@@ -160,14 +163,19 @@ export const unlinkConversation = mutation({
   },
 });
 
+function turnView(group: Doc<"v0Groups">, assigned: Doc<"v0Turns">, accountId: Id<"v0Accounts">): Turn {
+  const endsAt = turnEndsAt(group, assigned);
+  return { id: assigned._id, groupId: group._id, localDate: assigned.localDate, creatorId: assigned.creatorId, subjectId: assigned.subjectId, status: assigned.status, assignedAt: assigned.assignedAt, passAt: assigned.passAt, canPass: assigned.creatorId === accountId && assigned.status === "assigned" && assigned.passedFromId === undefined && endsAt !== null && Date.now() < endsAt };
+}
+
 export const turn = query({
   args: { token: v.string(), groupId: v.id("v0Groups") },
   handler: async (ctx, { token, groupId }): Promise<Turn | null> => {
     const { account } = await requireSession(ctx, token);
     const member = await requireMember(ctx, groupId, account._id);
-    const assigned = await currentTurn(ctx, (await ctx.db.get(groupId))!, member);
-    if (!assigned) return null;
-    return { id: assigned._id, groupId, localDate: assigned.localDate, creatorId: assigned.creatorId, subjectId: assigned.subjectId, status: assigned.status, assignedAt: assigned.assignedAt, passAt: assigned.passAt, canPass: false };
+    const group = (await ctx.db.get(groupId))!;
+    const assigned = await currentTurn(ctx, group, member);
+    return assigned ? turnView(group, assigned, account._id) : null;
   },
 });
 
@@ -177,10 +185,16 @@ export const passTurn = mutation({
     const { account } = await requireSession(ctx, token);
     const member = await requireMember(ctx, groupId, account._id);
     if (!requestId || requestId.length > 128) fail("INVALID_INPUT", "A request identifier is required.");
-    const assigned = await currentTurn(ctx, (await ctx.db.get(groupId))!, member);
-    if (!assigned) return null;
-    if (assigned.creatorId !== account._id || assigned.status !== "assigned") fail("NOT_AVAILABLE");
-    return fail("POLICY_PENDING", "Turn reassignment rules are awaiting approval.");
+    const group = (await ctx.db.get(groupId))!;
+    return await once(ctx, account._id, "groups.passTurn", requestId, { groupId }, async () => {
+      const assigned = await currentTurn(ctx, group, member);
+      if (!assigned) return null;
+      if (!turnView(group, assigned, account._id).canPass) fail("NOT_AVAILABLE");
+      await rateLimit(ctx, `groups.passTurn:${account._id}`, 30, 3_600_000);
+      if (approvedPolicy.turnPassesPerDay !== 1 || !(await passTurnTo(ctx, group, assigned, Date.now()))) fail("NOT_AVAILABLE");
+      const passed = (await ctx.db.get(assigned._id))!;
+      return turnView(group, passed, account._id);
+    });
   },
 });
 
