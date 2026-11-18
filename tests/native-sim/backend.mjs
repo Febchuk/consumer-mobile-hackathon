@@ -38,7 +38,7 @@ async function body(request, limit = 1_048_576) {
  * Boots the pinned official Convex backend on loopback with the repository's real handlers, a per-run scratch copy of convex/
  * plus the test-only overlay, the fake phone-code provider, the app-facing gateway and the test-control server.
  */
-export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false }) {
+export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false, onClose = () => {} }) {
   assert.equal(sha256(readFileSync(binary)), expectedBinarySHA256, "The backend executable does not match its pin");
   assert.ok(!existsSync(directory) && realpathSync(dirname(directory)) === dirname(directory), "A fresh canonical scratch directory is required");
   assert.ok(!resolve(directory).startsWith(resolve(root) + "/") && Buffer.byteLength(directory) + 45 < 104, "Use a short scratch directory outside the repository");
@@ -70,6 +70,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
     rmSync(directory, { recursive: true, force: true });
     return { backendLog: redact(backendLog), providerStats: provider?.stats };
   })();
+  // Handed out before anything is started, so a caller interrupted during boot can still stop what boot began.
+  onClose(close);
 
   try {
     cpSync(resolve(root, "convex"), resolve(project, "convex"), { recursive: true });
@@ -86,9 +88,11 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
     writeFileSync(providerPath, providerSource.replace("https://verify.twilio.com", provider.origin));
     const instanceSecret = secret(randomBytes(32).toString("hex"));
     const adminKey = secret(execFileSync(binary, ["keygen", "admin-key", "--instance-name", "qa-" + runID, "--instance-secret", instanceSecret], { env: environment, encoding: "utf8", stdio: "pipe" }).trim());
+    assert.ok(!closing, "The backend was closed while it was starting");
     backend = spawn(binary, ["--interface", "127.0.0.1", "--port", String(ports.backend), "--site-proxy-port", String(ports.site), "--convex-http-proxy", provider.origin, "--instance-name", "qa-" + runID, "--instance-secret", instanceSecret, "--disable-beacon", "--local-storage", resolve(directory, "storage"), resolve(directory, "backend.sqlite3")], {
       cwd: project, env: { ...environment, HTTPS_PROXY: provider.origin, HTTP_PROXY: provider.origin }, stdio: ["ignore", "pipe", "pipe"],
     });
+    if (closing) backend.kill("SIGKILL");
     const collect = (data) => { backendLog = (backendLog + data.toString()).slice(-400_000); };
     backend.stdout.on("data", collect); backend.stderr.on("data", collect);
     const localFetch = async (input, init) => {

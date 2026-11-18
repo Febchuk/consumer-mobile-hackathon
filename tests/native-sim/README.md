@@ -18,7 +18,7 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 - The built app is refused if it carries an endpoint of its own; it only reaches the gateway named in the run manifest.
 - Outbound network is observed, not denied. Nothing on this lane blocks traffic (that needs root), so its manifest says `outboundNetworkDenied: false, outboundNetworkObserved: true`, the app shows `observed_not_denied` in its QA diagnostics, and `evidence.json` carries `networkIsolation: "observed"`. The QA runtime accepts that mode only in a QA build on a simulator with both origins on loopback; the root provisioner lane (`tests/simulator-provisioner`) still requires denial. Simulator system services do reach Apple and the evidence lists them. The runner samples established connections every five seconds and fails the run if the app, its extension or its test runner holds one that is not loopback; a connection shorter than the sampling gap can be missed.
 - `MessagesDriveTests` and `ProvisioningDriveTests` belong to the provisioner lane and need its fixtures. A default run skips them and lists them as blocked in `evidence.json`.
-- Ctrl-C or a termination signal at any point still deletes the simulator, stops the backend and writes the evidence.
+- Ctrl-C or a termination signal still deletes the simulator, stops the backend (also while it is starting) and writes the evidence. A signal that arrives during the Xcode build is handled when the build step returns.
 - The demo and the tests share fixed loopback ports (3210, 3211, 8198, 8199, 43128), so only one can run at a time.
 
 ## Known simulator limits
