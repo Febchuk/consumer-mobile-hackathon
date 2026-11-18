@@ -260,25 +260,34 @@ describe("approved server answer and challenge windows, not settlement policy", 
     expect(await scoreState(f)).toEqual(before);
   });
 
-  it("[APPROVED.settlement.stays-pending] expired challenge windows and multiple recorded challenges do not invent a majority verdict or reward", async () => {
+  it("[APPROVED.settlement.stays-pending] an expired challenge window follows the approved majority rule and still credits no reward for a voided bet", async () => {
     const f = await policyFixture();
     const before = await scoreState(f);
     await recordedAnswer(f);
     vi.setSystemTime(answerTime + 1000);
     await f.t.mutation(api.v0Bets.challenge, challengeArgs(f));
     await f.t.mutation(api.v0Bets.challenge, challengeArgs(f, f.actors.creator.token));
+    vi.setSystemTime(answerTime + hour - 1);
+    await f.t.run(async (ctx) => {
+      expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
+      expect(await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet })).toMatchObject({ state: "provisional" });
+      expect(await ctx.db.get(f.bet)).toMatchObject({ state: "provisional", provisionalOutcome: 0 });
+    });
     vi.setSystemTime(timeout + day);
     await f.t.run(async (ctx) => {
       expect(Date.now()).toBe(timeout + day);
+      expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 1 });
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
       const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
-      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "recap_schedule", "goal_confirmation"]) } });
+      expect(advanced).toMatchObject({ state: "voided", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "recap_schedule", "goal_confirmation"]) } });
       expect(advanced?.policy.missing).not.toContain("cutoff_limits");
-      expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "bet", state: "provisional", canAnswer: false, canChallenge: false, provisionalOutcome: 0 });
+      expect(advanced?.policy.missing).not.toContain("majority_rule");
+      expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "unavailable", state: "voided" });
+      expect(await ctx.db.get(f.bet)).toMatchObject({ state: "voided" });
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("outcome");
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("finalizedAt");
       expect(await ctx.db.query("v0Challenges").collect()).toHaveLength(2);
-      expect((await ctx.db.query("v0Picks").collect()).every((pick) => pick.voidedAt === undefined)).toBe(true);
+      expect((await ctx.db.query("v0Picks").collect()).every((pick) => pick.voidedAt === timeout + day)).toBe(true);
     });
     expect(await scoreState(f)).toEqual(before);
   });

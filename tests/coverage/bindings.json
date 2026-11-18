@@ -1796,7 +1796,8 @@
     "APPROVED.challenge.boundary.earlier.-1",
     "APPROVED.challenge.boundary.later.-1",
     "APPROVED.challenge.unique-late-ack",
-    "APPROVED.answer.late-full-hour"
+    "APPROVED.answer.late-full-hour",
+    "B4.finalize.no-early-result"
   ],
   "J5.3.timeout-policy.B": [
     "APPROVED.unanswered.answer-boundary.-1",
@@ -1830,7 +1831,9 @@
     "APPROVED.unanswered.ordering.answer-first.-1",
     "APPROVED.unanswered.ordering.sweep-first.-1",
     "APPROVED.unanswered.ordering.answer-first.0",
-    "APPROVED.unanswered.ordering.sweep-first.0"
+    "APPROVED.unanswered.ordering.sweep-first.0",
+    "B4.timeout.no-answer",
+    "B4.finalize.void-is-terminal"
   ],
   "J4.1.sentinel-scan.B": [
     "J4.1.card-sentinel-scan",
@@ -2583,5 +2586,66 @@
     "B2.turn.manual-pass",
     "B2.turn.late-worker.ten-am",
     "B2.turn.late-worker.one-pm"
+  ],
+  "J5.2.eligible-unique-vote.B": [
+    "B4.vote.unique",
+    "B4.vote.non-picker",
+    "B4.vote.ineligible",
+    "B4.vote.departed-member",
+    "B4.vote.departed-member.majority-kept",
+    "B4.vote.rejoined-member"
+  ],
+  "J5.2.minority-tie-majority.B": [
+    "B4.majority.0-pickers.0-challenges",
+    "B4.majority.1-pickers.0-challenges",
+    "B4.majority.1-pickers.1-challenges",
+    "B4.majority.2-pickers.0-challenges",
+    "B4.majority.2-pickers.1-challenges",
+    "B4.majority.2-pickers.2-challenges",
+    "B4.majority.3-pickers.1-challenges",
+    "B4.majority.3-pickers.2-challenges",
+    "B4.majority.4-pickers.2-challenges",
+    "B4.majority.4-pickers.3-challenges",
+    "B4.majority.5-pickers.2-challenges",
+    "B4.majority.5-pickers.3-challenges",
+    "B4.majority.6-pickers.3-challenges",
+    "B4.majority.6-pickers.4-challenges",
+    "B4.majority.6-pickers.6-challenges"
+  ],
+  "J5.2.deadline-race.B": [
+    "B4.deadline.challenge.-1",
+    "B4.deadline.challenge.0",
+    "B4.deadline.challenge.1",
+    "B4.deadline.stored-late"
+  ],
+  "J5.3.late-answer-race.B": [
+    "B4.timeout.late-answer-race.-1",
+    "B4.timeout.late-answer-race.0",
+    "B4.timeout.worker-first"
+  ],
+  "N1.finalization.B": [
+    "B4.majority.0-pickers.0-challenges",
+    "B4.majority.1-pickers.0-challenges",
+    "B4.majority.1-pickers.1-challenges",
+    "B4.majority.2-pickers.0-challenges",
+    "B4.majority.2-pickers.1-challenges",
+    "B4.majority.2-pickers.2-challenges",
+    "B4.majority.3-pickers.1-challenges",
+    "B4.majority.3-pickers.2-challenges",
+    "B4.majority.4-pickers.2-challenges",
+    "B4.majority.4-pickers.3-challenges",
+    "B4.majority.5-pickers.2-challenges",
+    "B4.majority.5-pickers.3-challenges",
+    "B4.majority.6-pickers.3-challenges",
+    "B4.majority.6-pickers.4-challenges",
+    "B4.majority.6-pickers.6-challenges",
+    "B4.finalize.exactly-once",
+    "B4.finalize.void-is-terminal"
+  ],
+  "N1.timeout.B": [
+    "B4.timeout.no-answer",
+    "B4.timeout.late-answer-race.-1",
+    "B4.timeout.late-answer-race.0",
+    "B4.finalize.unreadable-answer"
   ]
 }
