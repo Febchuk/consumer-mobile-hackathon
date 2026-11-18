@@ -2870,5 +2870,49 @@
   ],
   "N3.recap-preference.B": [
     "B6.recap.preference-at-delivery"
+  ],
+  "J3.1.one-turn.U": [
+    "NATIVE-UI.PickJourneyTests.testOnlyTodaysCreatorIsOfferedTheTurn",
+    "NATIVE-UI.PickJourneyTests.testCreatorPassesTheTurnOnce"
+  ],
+  "J3.2.durable-once.U": [
+    "NATIVE-UI.PickJourneyTests.testFriendConfirmsOnePickThatPersists"
+  ],
+  "J3.2.latency-budget.U": [
+    "NATIVE-UI.PickJourneyTests.testFriendConfirmsOnePickThatPersists"
+  ],
+  "J3.2.subject-denied.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectSeesOnlyTheSealedCard"
+  ],
+  "J3.4.cutoff-before-reveal.U": [
+    "NATIVE-UI.PickJourneyTests.testNoPickIsOfferedAfterTheReveal"
+  ],
+  "J4.2.locked-response.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectSeesOnlyTheSealedCard"
+  ],
+  "J4.3.quiet-veto.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectVetoesInOneTapAndThePickIsVoided"
+  ],
+  "J4.3.one-action.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectVetoesInOneTapAndThePickIsVoided"
+  ],
+  "J4.3.exactly-once-void.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectVetoesInOneTapAndThePickIsVoided"
+  ],
+  "J5.1.pick-controls-closed.U": [
+    "NATIVE-UI.PickJourneyTests.testNoPickIsOfferedAfterTheReveal"
+  ],
+  "J5.2.subject-answer.U": [
+    "NATIVE-UI.RevealJourneyTests.testSubjectRevealsWithoutRubbingAndAnswers"
+  ],
+  "J5.2.eligible-unique-vote.U": [
+    "NATIVE-UI.RevealJourneyTests.testFriendChallengesOnceDuringTheHour"
+  ],
+  "J5.2.no-early-score.U": [
+    "NATIVE-UI.RevealJourneyTests.testSubjectRevealsWithoutRubbingAndAnswers",
+    "NATIVE-UI.RevealJourneyTests.testResultAndPointsAppearAfterTheChallengeHour"
+  ],
+  "J5.3.timeout-policy.U": [
+    "NATIVE-UI.RevealJourneyTests.testUnansweredBetBecomesUnavailable"
   ]
 }
