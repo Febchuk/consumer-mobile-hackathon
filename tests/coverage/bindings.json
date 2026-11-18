@@ -1833,7 +1833,10 @@
     "APPROVED.unanswered.ordering.answer-first.0",
     "APPROVED.unanswered.ordering.sweep-first.0",
     "B4.timeout.no-answer",
-    "B4.finalize.void-is-terminal"
+    "B4.finalize.void-is-terminal",
+    "B4.finalize.after-deadline.picker-deletes",
+    "B4.finalize.after-deadline.subject-leaves",
+    "B4.finalize.after-deadline.picker-blocks-subject"
   ],
   "J4.1.sentinel-scan.B": [
     "J4.1.card-sentinel-scan",
@@ -2596,7 +2599,13 @@
     "B4.vote.rejoined-member",
     "B4.vote.left-after-deadline.challenger-leaves",
     "B4.vote.left-after-deadline.non-challenger-leaves",
-    "B4.vote.left-after-deadline.only-challenger-leaves"
+    "B4.vote.left-after-deadline.only-challenger-leaves",
+    "B4.vote.after-deadline.challenger-deletes",
+    "B4.vote.after-deadline.non-challenger-deletes",
+    "B4.vote.after-deadline.challenger-blocks-subject",
+    "B4.vote.after-deadline.subject-leaves",
+    "B4.vote.after-deadline.subject-deletes",
+    "B4.vote.before-deadline.cleanup"
   ],
   "J5.2.minority-tie-majority.B": [
     "B4.majority.0-pickers.0-challenges",

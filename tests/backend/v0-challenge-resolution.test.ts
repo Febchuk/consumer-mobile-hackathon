@@ -174,6 +174,61 @@ describe("B4 challenge resolution: majority of pickers voids, otherwise the answ
     });
   }
 
+  for (const [name, actor, action, state] of [
+    ["challenger-deletes", "friend", "delete", "voided"],
+    ["non-challenger-deletes", "new", "delete", "voided"],
+    ["challenger-blocks-subject", "friend", "block", "voided"],
+    ["subject-leaves", "subject", "leave", "voided"],
+    ["subject-deletes", "subject", "delete", "gone"],
+  ] as const) {
+    it(`[B4.vote.after-deadline.${name}] settles a bet whose hour has ended before an account deletion, block or departure can change the count`, async () => {
+      const f = await setup(["creator", "friend", "new"]);
+      await answer(f);
+      await storeChallenge(f, "creator");
+      await storeChallenge(f, "friend");
+      vi.setSystemTime(deadline + 1000);
+      const token = f.actors[actor].token;
+      if (action === "delete") await f.t.mutation(api.v0Controls.deleteAccount, { token, requestId: `${f.runId}_delete` });
+      if (action === "leave") await f.t.mutation(api.v0Controls.leave, { token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      if (action === "block") await f.t.mutation(api.v0Controls.block, { token, accountId: f.actors.subject.id, requestId: `${f.runId}_block` });
+      vi.setSystemTime(deadline + 30_000);
+      await sweep(f);
+      const row = await f.t.run((ctx) => ctx.db.get(f.bet));
+      if (state === "gone") expect(row).toBeNull();
+      else expect(row).toMatchObject({ state });
+      expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);
+    });
+  }
+
+  for (const [name, actor, action] of [["picker-deletes", "new", "delete"], ["subject-leaves", "subject", "leave"], ["picker-blocks-subject", "friend", "block"]] as const) {
+    it(`[B4.finalize.after-deadline.${name}] lets a standing answer become final before a later deletion, block or departure can void it`, async () => {
+      const f = await setup(["creator", "friend", "new"]);
+      await answer(f, answeredAt, 1);
+      await storeChallenge(f, "creator");
+      vi.setSystemTime(deadline + 1000);
+      const token = f.actors[actor].token;
+      if (action === "delete") await f.t.mutation(api.v0Controls.deleteAccount, { token, requestId: `${f.runId}_delete` });
+      if (action === "leave") await f.t.mutation(api.v0Controls.leave, { token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      if (action === "block") await f.t.mutation(api.v0Controls.block, { token, accountId: f.actors.subject.id, requestId: `${f.runId}_block` });
+      vi.setSystemTime(deadline + 30_000);
+      await sweep(f);
+      expect(await bet(f)).toMatchObject({ state: "finalized", outcome: 1, finalizedAt: deadline + 1000 });
+    });
+  }
+
+  it("[B4.vote.before-deadline.cleanup] still lets a departure, block or deletion before the hour ends change who counts", async () => {
+    const f = await setup(["creator", "friend", "new"]);
+    await answer(f);
+    await storeChallenge(f, "creator");
+    await storeChallenge(f, "friend");
+    vi.setSystemTime(deadline - 1000);
+    await f.t.mutation(api.v0Controls.deleteAccount, { token: f.actors.friend.token, requestId: `${f.runId}_delete` });
+    expect((await bet(f)).state).toBe("provisional");
+    vi.setSystemTime(deadline);
+    await sweep(f);
+    expect(await bet(f)).toMatchObject({ state: "finalized", outcome: 0 });
+  });
+
   for (const stored of [-30 * minute, 2 * hour] as const) {
     it(`[B4.deadline.obsolete-stored.${stored}] resolves at one hour after the answer whatever deadline is stored on the bet`, async () => {
       const f = await setup(["creator"]);

@@ -92,7 +92,7 @@ The approved rules do not cover these. Each was decided the conservative way whi
 
 18. **A challenge is decided once, when the hour ends.** A bet is not voided early, even if a majority has already challenged.
 19. **Who counts:** people whose pick on that bet is still standing when the hour ends and who are still in the group. The subject never counts. A member who did not pick can still send a challenge, but it does not count.
-20. **A member who left counts for nothing.** Their pick leaves the total and their stored challenge is ignored, so they can neither help void a bet nor dilute the people who stayed.
+20. **A member who left counts for nothing.** Their pick leaves the total and their stored challenge is ignored, so they can neither help void a bet nor dilute the people who stayed. Once the hour has ended the count is fixed: a bet whose hour is over is settled before anyone's departure, block or account deletion takes effect.
 21. **A tie lets the answer stand,** because the rule says "more than half". If nobody picked, the answer stands and nobody scores.
 22. **An answer given just before the 24-hour limit still gets its full hour** of challenge time. The no-answer timeout does not void an answered bet.
 23. **If the bet's creator left the group, the reveal notification still goes** to the subject and the remaining pickers, and the bet plays out normally. Before, it was silently dropped, so the subject might never answer. It is still not sent when the creator's account was deleted (the bet is removed) or when the creator and subject have blocked each other (the bet is voided).
