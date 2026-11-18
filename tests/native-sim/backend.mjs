@@ -131,12 +131,14 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
       const started = performance.now();
       const reply = (status, payload) => { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(payload)); };
       const match = /^\/api\/(query|mutation|action)$/.exec(request.url ?? "");
-      let path = "invalid"; let outcome = "refused";
+      let path = "invalid"; let outcome = "refused"; let conversation;
       try {
         if (!match || request.method !== "POST" || request.socket.remoteAddress !== "127.0.0.1") return reply(404, { status: "error", errorMessage: "Not found", errorData: { code: "NOT_AVAILABLE" } });
         if ((request.headers["x-calledit-qa-run-id"] ?? "").toLowerCase() !== runID.toLowerCase() || request.headers["x-calledit-qa-manifest-sha256"] !== manifestSHA256) return reply(403, { status: "error", errorMessage: "Wrong QA run", errorData: { code: "FORBIDDEN" } });
         const input = JSON.parse((await body(request)).toString("utf8"));
         path = String(input.path);
+        // A one-way fingerprint, so a test can tell whether Messages kept the same conversation identity without seeing it.
+        if (typeof input.args?.[0]?.conversationKey === "string") conversation = createHash("sha256").update(input.args[0].conversationKey).digest("hex").slice(0, 8);
         if (allowed.get(path) !== match[1] || input.format !== "convex_encoded_json" || !Array.isArray(input.args) || input.args.length !== 1) return reply(403, { status: "error", errorMessage: "Not a public V0 function", errorData: { code: "NOT_AVAILABLE" } });
         const upstream = await localFetch(origin + "/api/" + match[1], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, args: input.args, format: "convex_encoded_json" }) });
         const envelope = await upstream.json();
@@ -159,7 +161,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         outcome = "gateway_error";
         if (!response.headersSent) reply(502, { status: "error", errorMessage: "Gateway failure", errorData: { code: "PROVIDER_UNAVAILABLE" } });
       } finally {
-        if (path !== "v0Runtime:attestation") calls.push({ at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started) });
+        if (path !== "v0Runtime:attestation") calls.push({ at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started), ...(conversation ? { conversation } : {}) });
       }
     });
     track(gateway);

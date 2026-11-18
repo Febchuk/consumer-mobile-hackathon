@@ -31,6 +31,8 @@ final class PickJourneyTests: JourneyCase {
         // Close Messages completely and come back: the pick is read from the server, not from memory.
         messages.terminate()
         try openExtension()
+        let identities = Set(try control.calls().filter { $0["path"] as? String == "v0Groups:resolveConversation" }.compactMap { $0["conversation"] as? String })
+        XCTAssertEqual(identities.count, 1, "[NATIVE-UI-PICK-10] Messages reports the same conversation identity after a relaunch")
         try tap(labelled("Open group", in: messages))
         let reopened = try openBet("bet-a")
         assertLabel(try required("bet.savedPick", in: reopened), "No · confidence 50 / 100", "NATIVE-UI-PICK-10")
