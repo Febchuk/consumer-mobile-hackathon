@@ -194,7 +194,7 @@
   "v0Groups:recap": {
     "kind": "query",
     "scope": "group_membership",
-    "rule": "visible time-window ledger; group/interval/block filters; no scheduled recap claim",
+    "rule": "visible time-window ledger; group/interval/block filters; recap rows written weekly by the recap worker",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [

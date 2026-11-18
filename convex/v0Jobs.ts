@@ -1,6 +1,7 @@
 import { internalMutation } from "./_generated/server";
 import { advanceBet } from "./v0Bets";
 import { approvedPolicy } from "./v0GamePolicy";
+import { advanceGroupRecap } from "./v0Recaps";
 import { advanceGroupTurn } from "./v0Turns";
 
 export const sweep = internalMutation({
@@ -25,6 +26,18 @@ export const turns = internalMutation({
     const unscheduled = await ctx.db.query("v0Groups").withIndex("by_next_turn", (q) => q.eq("nextTurnAt", Number.MAX_SAFE_INTEGER)).take(50);
     const counts = { assigned: 0, passed: 0, expired: 0, waiting: 0 };
     for (const group of [...due, ...unscheduled]) counts[await advanceGroupTurn(ctx, group, now)]++;
+    return counts;
+  },
+});
+
+export const recaps = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const unscheduled = await ctx.db.query("v0Groups").withIndex("by_next_recap", (q) => q.eq("nextRecapAt", undefined)).take(50);
+    const due = (await ctx.db.query("v0Groups").withIndex("by_next_recap", (q) => q.gt("nextRecapAt", undefined as unknown as number).lte("nextRecapAt", now)).take(50));
+    const counts = { sent: 0, skipped: 0, waiting: 0 };
+    for (const group of [...unscheduled, ...due]) counts[await advanceGroupRecap(ctx, group, now)]++;
     return counts;
   },
 });

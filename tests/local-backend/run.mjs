@@ -238,6 +238,21 @@ try {
     assert.deepEqual(await client.query(ref("turnState"), { runId, groupId: seeded.groupId }), first);
   });
 
+  await check("RPC.recap-worker-race", async () => {
+    const seeded = await client.mutation(ref("seedRecapGroup"), { runId });
+    assert.equal((await client.query(ref("recapState"), { runId, groupId: seeded.groupId })).nextRecapAt, null);
+    await overlapping(4, () => client.mutation(ref("runRecaps"), { runId }, { skipQueue: true }));
+    assert.deepEqual(await client.query(ref("recapState"), { runId, groupId: seeded.groupId }), { nextRecapAt: seeded.dueAt, recaps: [], notifications: [] }, "the scheduled worker finds an unscheduled group and sends nothing before Sunday 6:00 PM");
+    const outcomes = await overlapping(24, () => client.mutation(ref("runRecapAt"), { runId, groupId: seeded.groupId, now: seeded.dueAt + 60000 }, { skipQueue: true }));
+    assert.equal(outcomes.filter((outcome) => outcome === "sent").length, 1, "one worker sends the recap");
+    const first = await client.query(ref("recapState"), { runId, groupId: seeded.groupId });
+    assert.equal(first.recaps.length, 1, "one recap for the group's week");
+    assert.equal(first.recaps[0].endsAt, seeded.dueAt);
+    assert.deepEqual(first.notifications, [...seeded.recipients].sort(), "one recap notification per member with notifications on");
+    await overlapping(8, () => client.mutation(ref("runRecapAt"), { runId, groupId: seeded.groupId, now: seeded.dueAt + 3600000 }, { skipQueue: true }));
+    assert.deepEqual(await client.query(ref("recapState"), { runId, groupId: seeded.groupId }), first);
+  });
+
   await check("RPC.real-session-revocation", async () => {
     assert.deepEqual(await client.mutation(makeFunctionReference("v0Auth:revoke"), { token, allDevices: true, requestId: `${runId}_revoke` }), { revoked: true });
     await assert.rejects(client.query(makeFunctionReference("qaRpc:readMember"), { token, groupId: fixture.groupId }), (error) => error.data?.code === "AUTH_REQUIRED");
@@ -261,7 +276,7 @@ try {
   writeFileSync(resolve(output, "http-envelopes.json"), JSON.stringify(httpEvidence, null, 2) + "\n", { mode: 0o600 });
   metadata.finishedAt = new Date().toISOString();
   metadata.assertions = results;
-  metadata.gates = { realBackendProtocol: results.length === 21 && results.every((r) => r.status === "passing"), nativeTransport: false, canonicalProofHandlers: results.filter((r) => r.id.startsWith("RPC.canonical-proof")).length === 6 && results.filter((r) => r.id.startsWith("RPC.canonical-proof")).every((r) => r.status === "passing"), fullV0Ready: false };
+  metadata.gates = { realBackendProtocol: results.length === 22 && results.every((r) => r.status === "passing"), nativeTransport: false, canonicalProofHandlers: results.filter((r) => r.id.startsWith("RPC.canonical-proof")).length === 6 && results.filter((r) => r.id.startsWith("RPC.canonical-proof")).every((r) => r.status === "passing"), fullV0Ready: false };
   rmSync(state, { recursive: true, force: true });
   assert.equal(existsSync(state), false, "Private local database/storage state was not removed");
   metadata.cleanup = { productSourceUnchanged: true, fixtureEndpointAbsent: true, privateStateRemoved: true };

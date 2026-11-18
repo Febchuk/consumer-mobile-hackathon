@@ -34,6 +34,8 @@ export const approvedPolicy = {
   recapWindowDays: 7,
 };
 
+export const recapLateLimitMs = 24 * 60 * 60_000;
+
 export type ScoringPolicy = Pick<typeof approvedPolicy, "confidencePointScale" | "wrongPickPenaltyFraction" | "streakBonusPerCorrectPick" | "streakMultiplierCap">;
 
 function roundHalfUp(value: number) {
@@ -123,4 +125,18 @@ export function localInstant(timezone: string, localDate: string, hour: number, 
     return null;
   }
   return null;
+}
+
+export function recapWeek(timezone: string, now: number): { localDate: string; startsAt: number; endsAt: number; nextAt: number } | null {
+  const today = localDateAt(timezone, now);
+  if (!today) return null;
+  const midnight = Date.parse(`${today}T00:00:00Z`);
+  let back = (new Date(midnight).getUTCDay() - approvedPolicy.recapWeekday + 7) % 7;
+  const at = (dayOffset: number) => localInstant(timezone, today, approvedPolicy.recapHour, dayOffset);
+  const sameWeek = at(-back);
+  if (sameWeek === null) return null;
+  if (sameWeek > now) back += 7;
+  const [startsAt, endsAt, nextAt] = [at(-back - approvedPolicy.recapWindowDays), at(-back), at(7 - back)];
+  if (startsAt === null || endsAt === null || nextAt === null || !(startsAt < endsAt && endsAt <= now && now < nextAt)) return null;
+  return { localDate: new Date(midnight - back * 24 * 60 * 60_000).toISOString().slice(0, 10), startsAt, endsAt, nextAt };
 }
