@@ -2593,7 +2593,10 @@
     "B4.vote.ineligible",
     "B4.vote.departed-member",
     "B4.vote.departed-member.majority-kept",
-    "B4.vote.rejoined-member"
+    "B4.vote.rejoined-member",
+    "B4.vote.left-after-deadline.challenger-leaves",
+    "B4.vote.left-after-deadline.non-challenger-leaves",
+    "B4.vote.left-after-deadline.only-challenger-leaves"
   ],
   "J5.2.minority-tie-majority.B": [
     "B4.majority.0-pickers.0-challenges",
@@ -2616,7 +2619,9 @@
     "B4.deadline.challenge.-1",
     "B4.deadline.challenge.0",
     "B4.deadline.challenge.1",
-    "B4.deadline.stored-late"
+    "B4.deadline.stored-late",
+    "B4.deadline.obsolete-stored.-1800000",
+    "B4.deadline.obsolete-stored.7200000"
   ],
   "J5.3.late-answer-race.B": [
     "B4.timeout.late-answer-race.-1",

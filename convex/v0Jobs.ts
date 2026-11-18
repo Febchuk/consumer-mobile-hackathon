@@ -10,7 +10,7 @@ export const sweep = internalMutation({
     const open = await ctx.db.query("v0Bets").withIndex("by_state_reveal", (q) => q.eq("state", "open").lte("revealAt", now)).take(100);
     const locked = await ctx.db.query("v0Bets").withIndex("by_state_reveal", (q) => q.eq("state", "locked").lte("revealAt", now)).take(100);
     const unanswered = await ctx.db.query("v0Bets").withIndex("by_state_reveal", (q) => q.eq("state", "revealed").lte("revealAt", now - approvedPolicy.unansweredDurationMs)).take(100);
-    const answered = await ctx.db.query("v0Bets").withIndex("by_state_challenge", (q) => q.eq("state", "provisional").lte("challengeDeadline", now)).take(100);
+    const answered = await ctx.db.query("v0Bets").withIndex("by_state_answered", (q) => q.eq("state", "provisional").lte("answeredAt", now - approvedPolicy.challengeDurationMs)).take(100);
     const stuck = (await ctx.db.query("v0Bets").withIndex("by_state_reveal", (q) => q.eq("state", "provisional").lte("revealAt", now - approvedPolicy.unansweredDurationMs - approvedPolicy.challengeDurationMs)).take(100)).filter((bet) => !answered.some((row) => row._id === bet._id));
     for (const bet of [...open, ...locked, ...unanswered, ...answered, ...stuck]) await advanceBet(ctx, bet);
     return { advanced: open.length + locked.length + unanswered.length + answered.length + stuck.length };

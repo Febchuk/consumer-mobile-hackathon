@@ -247,10 +247,9 @@ export const advance = internalMutation({
 export async function challengeTally(ctx: QueryCtx, bet: Doc<"v0Bets">, deadline: number) {
   const pickers = new Set<Id<"v0Accounts">>();
   for (const pick of await ctx.db.query("v0Picks").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {
-    if (pick.voidedAt !== undefined || pick.accountId === bet.subjectId) continue;
-    const account = await ctx.db.get(pick.accountId);
-    const member = await activeMember(ctx, bet.groupId, pick.accountId);
-    if (account && account.deletedAt === undefined && member?._id === pick.membershipId) pickers.add(pick.accountId);
+    if ((pick.voidedAt !== undefined && pick.voidedAt < deadline) || pick.accountId === bet.subjectId) continue;
+    const member = await ctx.db.get(pick.membershipId);
+    if (member && member.accountId === pick.accountId && member.groupId === bet.groupId && member.joinedAt < deadline && (member.leftAt === undefined || member.leftAt >= deadline)) pickers.add(pick.accountId);
   }
   const challengers = new Set<Id<"v0Accounts">>();
   for (const challenge of await ctx.db.query("v0Challenges").withIndex("by_bet", (q) => q.eq("betId", bet._id)).collect()) {

@@ -154,6 +154,40 @@ describe("B4 challenge resolution: majority of pickers voids, otherwise the answ
     expect((await bet(f)).state).toBe("voided");
   });
 
+  for (const [name, leaver, voided] of [["challenger-leaves", "friend", true], ["non-challenger-leaves", "revoked", true], ["only-challenger-leaves", "creator", false]] as const) {
+    it(`[B4.vote.left-after-deadline.${name}] counts pickers as they stood when the hour ended, not when the worker ran`, async () => {
+      const f = await setup(["creator", "friend", "revoked"]);
+      await answer(f);
+      await storeChallenge(f, "creator");
+      if (voided) await storeChallenge(f, "friend");
+      vi.setSystemTime(deadline);
+      if (leaver === "revoked") await f.t.run(async (ctx) => {
+        const member = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q) => q.eq("groupId", f.g1).eq("accountId", f.actors.revoked.id)).unique();
+        await ctx.db.patch(member!._id, { leftAt: deadline });
+        const pick = (await ctx.db.query("v0Picks").collect()).find((row) => row.accountId === f.actors.revoked.id);
+        await ctx.db.patch(pick!._id, { voidedAt: deadline });
+      });
+      else await f.t.mutation(api.v0Controls.leave, { token: f.actors[leaver].token, groupId: f.g1, requestId: `${f.runId}_leave` });
+      vi.setSystemTime(deadline + 30_000);
+      await sweep(f);
+      expect((await bet(f)).state).toBe(voided ? "voided" : "finalized");
+    });
+  }
+
+  for (const stored of [-30 * minute, 2 * hour] as const) {
+    it(`[B4.deadline.obsolete-stored.${stored}] resolves at one hour after the answer whatever deadline is stored on the bet`, async () => {
+      const f = await setup(["creator"]);
+      await answer(f);
+      await f.t.run((ctx) => ctx.db.patch(f.bet, { challengeDeadline: deadline + stored }));
+      vi.setSystemTime(deadline - 1);
+      expect(await sweep(f)).toEqual({ advanced: 0 });
+      expect((await bet(f)).state).toBe("provisional");
+      vi.setSystemTime(deadline);
+      expect(await sweep(f)).toEqual({ advanced: 1 });
+      expect(await bet(f)).toMatchObject({ state: "finalized", finalizedAt: deadline });
+    });
+  }
+
   it("[B4.vote.rejoined-member] does not count a pick or challenge made under a membership that ended", async () => {
     const f = await setup(["creator", "friend"]);
     await answer(f);
