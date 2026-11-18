@@ -143,7 +143,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3]
+        attempt: [1, 2, 3, 4, 5]
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -187,10 +187,26 @@ jobs:
         with:
           path: ~/.cache/calledit/convex-local-backend
           key: convex-local-backend-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/qa-runtime/binary-pins.json') }}
+      - name: Quiet the runner so the simulator gets the CPU
+        run: |
+          # Host Spotlight indexing competes with the simulator on a three-core runner.
+          sudo mdutil -a -i off || true
+          # With a hardware keyboard attached the simulator drops typed characters under load.
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
       - name: Run the native UI lane on a new simulator against the loopback backend
         run: |
+          (
+            while true; do
+              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
+              sleep 30
+            done
+          ) &
+          sampler=$!
+          status=0
           env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
-            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence"
+            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" || status=$?
+          kill "$sampler" || true
+          exit "$status"
       - name: Report the lane's result
         if: ${{ !cancelled() }}
         run: |
@@ -217,6 +233,7 @@ jobs:
         with:
           name: native-ui-evidence-${{ matrix.attempt }}
           path: |
+            ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
             !${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
