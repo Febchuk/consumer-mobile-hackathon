@@ -45,7 +45,7 @@ async function recordedAnswer(f: Fixture, at = answerTime) {
     expect(Date.now()).toBe(at);
     const result = await ctx.runMutation(api.v0Bets.answer, answerArgs(f));
     expect(result).toEqual({ state: "provisional", challengeDeadline: at + hour });
-    expect(await ctx.db.get(f.bet)).toMatchObject({ state: "provisional", answeredAt: at, provisionalOutcome: 0, answerDeadline: timeout, challengeDeadline: at + hour, policyVersion: "v0-policy.2" });
+    expect(await ctx.db.get(f.bet)).toMatchObject({ state: "provisional", answeredAt: at, provisionalOutcome: 0, answerDeadline: timeout, challengeDeadline: at + hour, policyVersion: "v0-policy.3" });
     return result;
   });
 }
@@ -272,7 +272,7 @@ describe("approved server answer and challenge windows, not settlement policy", 
       expect(Date.now()).toBe(timeout + day);
       expect(await ctx.runMutation(internal.v0Jobs.sweep, {})).toEqual({ advanced: 0 });
       const advanced = await ctx.runMutation(internal.v0Bets.advance, { betId: f.bet });
-      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.2", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "creator_rule", "turn_schedule", "recap_schedule", "goal_confirmation"]) } });
+      expect(advanced).toMatchObject({ state: "provisional", policy: { status: "pending", version: "v0-policy.3", missing: expect.arrayContaining(["streaks", "reward_rounding", "majority_rule", "turn_schedule", "recap_schedule", "goal_confirmation"]) } });
       expect(advanced?.policy.missing).not.toContain("cutoff_limits");
       expect(await ctx.runQuery(api.v0Bets.get, { token: f.actors.friend.token, locator: f.locator })).toMatchObject({ view: "bet", state: "provisional", canAnswer: false, canChallenge: false, provisionalOutcome: 0 });
       expect(await ctx.db.get(f.bet)).not.toHaveProperty("outcome");
@@ -482,12 +482,12 @@ describe("approved next strictly future group-local 20:00 default", () => {
   });
 
   for (const [name, zone, reveal, cutoff, code] of [
-    ["la-default", "America/Los_Angeles", undefined, undefined, "POLICY_PENDING"],
-    ["tokyo-default", "Asia/Tokyo", undefined, undefined, "POLICY_PENDING"],
-    ["utc-default", "UTC", undefined, undefined, "POLICY_PENDING"],
+    ["la-default", "America/Los_Angeles", undefined, undefined, "FORBIDDEN"],
+    ["tokyo-default", "Asia/Tokyo", undefined, undefined, "FORBIDDEN"],
+    ["utc-default", "UTC", undefined, undefined, "FORBIDDEN"],
     ["invalid-default-zone", "Synthetic/Invalid", undefined, CUTOFF, "INVALID_INPUT"],
-    ["explicit-override", "UTC", T0 + 123_456, T0 + 123_456, "POLICY_PENDING"],
-    ["override-bypasses-default-zone", "Synthetic/Invalid", REVEAL, REVEAL, "POLICY_PENDING"],
+    ["explicit-override", "UTC", T0 + 123_456, T0 + 123_456, "INVALID_INPUT"],
+    ["override-bypasses-default-zone", "Synthetic/Invalid", REVEAL, REVEAL, "FORBIDDEN"],
     ["reveal-past", "UTC", T0 + 59_999, CUTOFF, "INVALID_INPUT"],
     ["reveal-now", "UTC", T0 + 60_000, CUTOFF, "INVALID_INPUT"],
     ["reveal-nonfinite", "UTC", Infinity, CUTOFF, "INVALID_INPUT"],

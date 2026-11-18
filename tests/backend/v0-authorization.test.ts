@@ -115,7 +115,7 @@ describe("SEC1 actual V0 public authorization matrix", () => {
         expect(await invoke(f, path, f.actors.creator.token)).toEqual({ saved: true, option: 0, confidence: 0.5, updatedAt: T0 });
         expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toHaveLength(1);
       } else {
-        await expect(invoke(f, path, f.actors.creator.token)).rejects.toMatchObject({ data: { code: "POLICY_PENDING" } });
+        await expect(invoke(f, path, f.actors.creator.token)).rejects.toMatchObject({ data: { code: path === "v0Bets:create" ? "FORBIDDEN" : "POLICY_PENDING" } });
         expect(await f.t.run((ctx) => ctx.db.query("v0Picks").collect())).toEqual([]);
       }
       expect(await f.t.run((ctx) => ctx.db.query("v0Ledger").collect())).toEqual([]);

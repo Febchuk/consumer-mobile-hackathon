@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { BetView, CardLocator } from "./v0Contract";
-import { activeMember, canReadBet, fail, isBlocked, once, policyStatus, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
+import { activeMember, canReadBet, fail, isBlocked, once, policyStatus, randomToken, rateLimit, requireBet, requireMember, requireSession } from "./v0Policy";
+import { activeMembers, currentTurn, turnEndsAt } from "./v0Turns";
 import { format } from "./v0Schema";
 import { validateCandidate } from "./v0Safety";
 import { queueNotification } from "./v0Notifications";
@@ -125,22 +126,33 @@ export const create = mutation({
   args: { token: v.string(), groupId: v.id("v0Groups"), subjectId: v.id("v0Accounts"), question: v.string(), contextLine: v.string(), format, options: v.array(v.string()), line: v.optional(v.number()), cutoffAt: v.optional(v.number()), revealAt: v.optional(v.number()), source: v.union(v.literal("manual"), v.literal("template"), v.literal("history"), v.literal("hosted_ai")), requestId: v.string() },
   handler: async (ctx, args) => {
     const { account } = await requireSession(ctx, args.token);
-    await requireMember(ctx, args.groupId, account._id);
+    const member = await requireMember(ctx, args.groupId, account._id);
     await requireMember(ctx, args.groupId, args.subjectId);
     const subject = await ctx.db.get(args.subjectId);
     if (args.subjectId === account._id || !subject || subject.deletedAt !== undefined || subject.noBets || await isBlocked(ctx, account._id, args.subjectId)) fail("NOT_AVAILABLE");
-    validateCandidate(args, { blockedTopics: [...subject.blockedTopics, ...account.blockedTopics], contextLine: args.contextLine });
+    const candidate = validateCandidate(args, { blockedTopics: [...subject.blockedTopics, ...account.blockedTopics], contextLine: args.contextLine });
     const group = (await ctx.db.get(args.groupId))!;
-    let revealAt = args.revealAt;
-    if (revealAt === undefined) {
-      try {
-        revealAt = nextDefaultRevealAt(group.timezone, Date.now()) ?? undefined;
-      } catch {
-        fail("INVALID_INPUT", "Choose a valid group timezone.");
+    return await once(ctx, account._id, "bets.create", args.requestId, { groupId: args.groupId, subjectId: args.subjectId, question: args.question, contextLine: args.contextLine, format: args.format, options: args.options, line: args.line, cutoffAt: args.cutoffAt, revealAt: args.revealAt, source: args.source }, async () => {
+      const now = Date.now();
+      let revealAt = args.revealAt;
+      if (revealAt === undefined) {
+        try {
+          revealAt = nextDefaultRevealAt(group.timezone, now) ?? undefined;
+        } catch {
+          fail("INVALID_INPUT", "Choose a valid group timezone.");
+        }
       }
-    }
-    if (revealAt === undefined || !Number.isFinite(revealAt) || revealAt <= Date.now() || (args.cutoffAt !== undefined && (!Number.isFinite(args.cutoffAt) || args.cutoffAt !== revealAt))) fail("INVALID_INPUT", "New confirmations must end at the future reveal time.");
-    return fail("POLICY_PENDING", "Creator rules are awaiting approval.");
+      if (revealAt === undefined || !Number.isFinite(revealAt) || revealAt <= now || (args.cutoffAt !== undefined && (!Number.isFinite(args.cutoffAt) || args.cutoffAt !== revealAt))) fail("INVALID_INPUT", "New confirmations must end at the future reveal time.");
+      if (args.revealAt !== undefined && (revealAt - now < approvedPolicy.customRevealMinLeadMs || revealAt - now > approvedPolicy.customRevealMaxLeadMs)) fail("INVALID_INPUT", "Choose a reveal time between 10 minutes and 7 days from now.");
+      const turn = await currentTurn(ctx, group, member);
+      const endsAt = turn ? turnEndsAt(group, turn) : null;
+      if (!turn || endsAt === null || now >= endsAt || turn.creatorId !== account._id || turn.subjectId !== args.subjectId || (turn.status !== "assigned" && turn.status !== "passed") || turn.betId !== undefined) fail("FORBIDDEN", "Only today's creator can send today's bet.");
+      if ((await activeMembers(ctx, group._id)).length < approvedPolicy.minActiveMembers) fail("FORBIDDEN", "A group needs at least 3 members to play.");
+      await rateLimit(ctx, `bets.create:${account._id}`, 10, 3_600_000);
+      const betId = await ctx.db.insert("v0Bets", { groupId: group._id, creatorId: account._id, subjectId: args.subjectId, createdAt: now, question: candidate.question, contextLine: args.contextLine.normalize("NFKC").trim().replace(/\s+/gu, " "), format: candidate.format, options: candidate.options, ...(candidate.line === undefined ? {} : { line: candidate.line }), source: args.source, state: "open", cutoffAt: revealAt, revealAt, policyVersion: approvedPolicy.version, locator: randomToken() });
+      await ctx.db.patch(turn._id, { status: "created", betId });
+      return { betId, groupId: group._id, card: await cardFor(ctx, (await ctx.db.get(betId))!) };
+    });
   },
 });
 

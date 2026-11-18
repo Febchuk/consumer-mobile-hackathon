@@ -47,14 +47,14 @@ describe("J8.1 no bets about me on every path that exists today", () => {
     it("[J8.1.no-bets.create-" + source + "] refuses a bet about an opted-out subject before the creator gate, for any creator, and only while the preference is on", async () => {
       const f = await v0Fixture();
       const args = (role: Role, requestId: string) => ({ token: f.actors[role].token, groupId: f.g1, subjectId: f.actors.subject.id, question: "Will Sage bring a puzzle to the picnic?", contextLine: "A synthetic picnic", format: "yes_no", options: ["Yes", "No"], revealAt: REVEAL, source, requestId });
-      await expectCode(f.t.mutation(createRef, args("creator", "before")), "POLICY_PENDING");
+      await expectCode(f.t.mutation(createRef, args("creator", "before")), "FORBIDDEN");
       await noBets(f, true, "opt-out");
       const before = await f.t.run(async (ctx) => ({ bets: await ctx.db.query("v0Bets").collect(), turns: await ctx.db.query("v0Turns").collect(), outbox: await ctx.db.query("v0Outbox").collect() }));
       for (const role of ["creator", "friend"] as const) await expectCode(f.t.mutation(createRef, args(role, "during-" + role)), "NOT_AVAILABLE");
       expect(await f.t.run(async (ctx) => ({ bets: await ctx.db.query("v0Bets").collect(), turns: await ctx.db.query("v0Turns").collect(), outbox: await ctx.db.query("v0Outbox").collect() }))).toEqual(before);
       expect((await f.t.query(api.v0Groups.members, { token: f.actors.creator.token, groupId: f.g1 })).find((member) => member.accountId === f.actors.subject.id)).toMatchObject({ noBets: true });
       await noBets(f, false, "opt-in");
-      await expectCode(f.t.mutation(createRef, args("creator", "after")), "POLICY_PENDING");
+      await expectCode(f.t.mutation(createRef, args("creator", "after")), "FORBIDDEN");
     });
   }
 

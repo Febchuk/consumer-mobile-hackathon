@@ -1,18 +1,38 @@
 import type { Doc } from "./_generated/dataModel";
 import type { BetState } from "./v0Contract";
 
+const wrongPickPenaltyFraction: number = 0;
+
 export const approvedPolicy = {
-  version: "v0-policy.2",
-  economics: "reward_only",
+  version: "v0-policy.3",
+  approvedOn: "2026-11-17",
+  economics: wrongPickPenaltyFraction === 0 ? "reward_only" : "confidence_penalty",
   confidenceMin: 0.01,
   confidenceMax: 1,
   confidencePointScale: 100,
+  wrongPickPenaltyFraction,
+  streakBonusPerCorrectPick: 0.1,
+  streakMultiplierCap: 2,
   pickLock: "final_confirmation",
   pickAdmissionEnd: "reveal",
   defaultRevealHour: 20,
+  customRevealMinLeadMs: 10 * 60_000,
+  customRevealMaxLeadMs: 7 * 24 * 60 * 60_000,
   challengeDurationMs: 60 * 60_000,
   unansweredDurationMs: 24 * 60 * 60_000,
-} as const;
+  turnStartHour: 8,
+  turnPassHour: 12,
+  turnEndHour: 20,
+  turnPassesPerDay: 1,
+  minActiveMembers: 3,
+  betsPerGroupPerDay: 1,
+  goalTargetMinPoints: 100,
+  goalTargetMaxPoints: 1_000_000,
+  goalProposalDurationMs: 7 * 24 * 60 * 60_000,
+  recapWeekday: 0,
+  recapHour: 18,
+  recapWindowDays: 7,
+};
 
 export function answerDeadlineFor(bet: Doc<"v0Bets">) {
   return bet.revealAt + approvedPolicy.unansweredDurationMs;
@@ -48,6 +68,43 @@ export function nextDefaultRevealAt(timezone: string, now: number): number | nul
       if (observed === target && candidate > now) return candidate;
       candidate += target - observed;
     }
+  }
+  return null;
+}
+
+function zoneClock(timezone: string) {
+  const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  return (time: number) => {
+    const parts = formatter.formatToParts(time);
+    const part = (name: string) => Number(parts.find((entry) => entry.type === name)?.value);
+    return Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+  };
+}
+
+export function localDateAt(timezone: string, now: number): string | null {
+  if (!Number.isFinite(now)) return null;
+  try {
+    return new Date(zoneClock(timezone)(now)).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+export function localInstant(timezone: string, localDate: string, hour: number, dayOffset = 0): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return null;
+  const target = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + dayOffset, hour);
+  if (!Number.isFinite(target)) return null;
+  try {
+    const clock = zoneClock(timezone);
+    let candidate = target;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const observed = clock(candidate);
+      if (observed === target) return candidate;
+      candidate += target - observed;
+    }
+  } catch {
+    return null;
   }
   return null;
 }
