@@ -15,7 +15,7 @@ struct BetView: View {
     @State private var confirmation = PickConfirmationState()
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 14) {
             if let card, model.isActive {
                 switch card.content {
                 case .sealed(let canVeto): sealed(card, canVeto: canVeto)
@@ -32,6 +32,7 @@ struct BetView: View {
             } else if error == nil { ProgressView().frame(maxWidth: .infinity).padding(40) }
             ErrorText(text: error)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bet.screen")
         .task(id: model.isActive) { if model.isActive { await poll() } }
         .onChange(of: model.activeTick) { _, _ in Task { await load() } }

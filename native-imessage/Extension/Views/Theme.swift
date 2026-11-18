@@ -128,6 +128,7 @@ struct InsetRow<Content: View>: View {
                 .padding(.horizontal, 16)
                 .frame(minHeight: 44)
                 .padding(.vertical, 6)
+                .contentShape(Rectangle())
             if !last { Divider().padding(.leading, 16) }
         }
     }

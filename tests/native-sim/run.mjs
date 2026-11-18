@@ -207,12 +207,12 @@ async function main() {
   const testEnvironment = { ...environment, TEST_RUNNER_CALLED_IT_QA_RUN_ID: runID, TEST_RUNNER_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64"), TEST_RUNNER_CALLED_IT_QA_CONTROL_URL: backend.controlOrigin + "/control", TEST_RUNNER_CALLED_IT_QA_CONTROL_TOKEN: backend.controlToken };
   const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
   let testLog = "";
-  const onData = (data) => { const text = data.toString(); testLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
+  const onData = (data) => { const text = data.toString(); testLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
   tests.stdout.on("data", onData); tests.stderr.on("data", onData);
   const status = await new Promise((accept) => tests.once("exit", accept));
   log("test.log", backend.redact(testLog));
-  const cases = [...testLog.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
-  evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed: cases.filter((test) => test.result === "failed").length, cases, resultBundle: bundle };
+  const cases = [...testLog.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
+  evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed: cases.filter((test) => test.result === "failed").length, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle };
   evidence.status = status === 0 && cases.length > 0 && evidence.tests.failed === 0 ? "passed" : cases.length === 0 ? "blocked" : "failed";
   exitCode = evidence.status === "passed" ? 0 : 1;
 }
@@ -235,6 +235,6 @@ try {
   }
   evidence.finishedAt = new Date().toISOString();
   log("evidence.json", JSON.stringify(evidence, null, 2) + "\n");
-  say("status " + evidence.status + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed" : "") + "; evidence in " + output);
+  say("status " + evidence.status + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed, " + evidence.tests.blocked + " blocked" : "") + "; evidence in " + output);
 }
 process.exit(exitCode);
