@@ -206,7 +206,7 @@
   "v0Groups:board": {
     "kind": "query",
     "scope": "group_membership",
-    "rule": "room balances and block/deletion filters; no global wallet",
+    "rule": "room balances and block/deletion filters; no global wallet; shared goal with group points earned since activation, points only",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -218,7 +218,7 @@
   "v0Groups:proposeGoal": {
     "kind": "mutation",
     "scope": "group_membership",
-    "rule": "POLICY_PENDING; no goal mutation before approval",
+    "rule": "any active member proposes a name and points target; one waiting proposal, none while the active goal is unreached; proposer counts as first confirmation",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [
@@ -230,7 +230,7 @@
   "v0Groups:confirmGoal": {
     "kind": "mutation",
     "scope": "group_membership",
-    "rule": "POLICY_PENDING; no confirmation mutation before approval",
+    "rule": "active member confirms the waiting proposal once; active when more than half of active members confirmed; hidden from a member blocked with the proposer",
     "source": "v0Groups.ts",
     "authenticated": true,
     "minimumAssertions": [

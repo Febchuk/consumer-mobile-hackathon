@@ -2783,5 +2783,35 @@
   ],
   "SEC4.global-wallet.B": [
     "B3.ledger.per-group"
+  ],
+  "J7.4.setter-consent.B": [
+    "B5.propose.any-member.creator",
+    "B5.propose.any-member.friend",
+    "B5.propose.any-member.subject",
+    "B5.propose.any-member.new",
+    "B5.propose.non-member.outsider",
+    "B5.propose.non-member.left",
+    "B5.propose.non-member.revoked",
+    "B5.confirm.majority.5-members",
+    "B5.confirm.majority.4-members",
+    "B5.confirm.majority.3-members",
+    "B5.confirm.majority.2-members",
+    "B5.confirm.majority.1-members",
+    "B5.confirm.idempotent",
+    "B5.confirm.departed",
+    "B5.confirm.nothing-pending",
+    "B5.one-goal.pending",
+    "B5.one-goal.active",
+    "B5.blocked.proposal-hidden"
+  ],
+  "J7.4.group-progress.B": [
+    "B5.one-goal.active",
+    "B5.progress.group-points",
+    "B5.progress.penalty-ignored"
+  ],
+  "J7.4.no-individual-reward.B": [
+    "B5.progress.penalty-ignored",
+    "B5.reward.points-only",
+    "B5.sealed"
   ]
 }

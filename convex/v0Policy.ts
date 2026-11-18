@@ -105,7 +105,7 @@ export async function once<T>(ctx: MutationCtx, accountId: Id<"v0Accounts">, sco
   return result;
 }
 
-export const policyStatus = { status: "pending" as const, version: approvedPolicy.version, approved: approvedPolicy, missing: ["recap_schedule", "goal_confirmation"] };
+export const policyStatus = { status: "pending" as const, version: approvedPolicy.version, approved: approvedPolicy, missing: ["recap_schedule"] };
 
 export function legacyUnavailable(): never {
   return fail("NOT_AVAILABLE", "This app version is no longer supported. Update Called It and sign in by phone.");

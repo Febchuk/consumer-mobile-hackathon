@@ -1,10 +1,11 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
-import type { GroupSummary, Recap, Turn } from "./v0Contract";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Goal, GroupSummary, Recap, Turn } from "./v0Contract";
 import { activeMember, canReadBet, fail, isBlocked, once, phoneHash, policyStatus, rateLimit, requireMember, requireSession } from "./v0Policy";
 import { approvedPolicy, localDateAt } from "./v0GamePolicy";
-import { currentTurn, nextTurnStart, passTurn as passTurnTo, turnEndsAt } from "./v0Turns";
+import { validateCandidate } from "./v0Safety";
+import { activeMembers, currentTurn, nextTurnStart, passTurn as passTurnTo, turnEndsAt } from "./v0Turns";
 
 function summary(group: Doc<"v0Groups">, member: Doc<"v0Memberships">): GroupSummary {
   return { id: group._id, name: group.name, timezone: group.timezone, alias: member.alias, points: member.points, streak: member.streak };
@@ -235,24 +236,79 @@ export const board = query({
       if (person && person.deletedAt === undefined) rows.push({ accountId: person._id, alias: member.alias, points: member.points, streak: member.streak });
     }
     rows.sort((a, b) => b.points - a.points || a.alias.localeCompare(b.alias) || a.accountId.localeCompare(b.accountId));
-    return { groupId, rows, goal: null, policy: policyStatus };
+    return { groupId, rows, goal: await boardGoal(ctx, groupId, account._id), policy: policyStatus };
   },
 });
 
 export const proposeGoal = mutation({
   args: { token: v.string(), groupId: v.id("v0Groups"), label: v.string(), targetPoints: v.number(), requestId: v.string() },
-  handler: async (ctx, { token, groupId }) => {
+  handler: async (ctx, { token, groupId, label, targetPoints, requestId }): Promise<Goal> => {
     const { account } = await requireSession(ctx, token);
     await requireMember(ctx, groupId, account._id);
-    return fail("POLICY_PENDING", "Group goal rules are awaiting approval.");
+    if (label.length > 160 || !Number.isInteger(targetPoints) || targetPoints < approvedPolicy.goalTargetMinPoints || targetPoints > approvedPolicy.goalTargetMaxPoints) fail("INVALID_INPUT", "Enter a goal name and a whole number of points.");
+    const cleanLabel = validateCandidate({ question: label, format: "yes_no", options: ["Yes", "No"] }, { blockedTopics: account.blockedTopics }).question;
+    if (cleanLabel.length > 80) fail("INVALID_INPUT", "Enter a shorter goal name.");
+    return await once(ctx, account._id, "groups.proposeGoal", requestId, { groupId, label, targetPoints }, async () => {
+      const goals = await groupGoals(ctx, groupId);
+      if (goals.pending || (goals.active && goals.activeProgress < goals.active.targetPoints)) fail("CONFLICT", "This group already has a shared goal.");
+      await rateLimit(ctx, `groups.proposeGoal:${account._id}`, 10, 3_600_000);
+      const goalId = await ctx.db.insert("v0Goals", { groupId, proposerId: account._id, label: cleanLabel, targetPoints, confirmedBy: [account._id], state: "proposed", createdAt: Date.now() });
+      return await settleGoal(ctx, (await ctx.db.get(goalId))!);
+    });
   },
 });
 
 export const confirmGoal = mutation({
   args: { token: v.string(), groupId: v.id("v0Groups"), requestId: v.string() },
-  handler: async (ctx, { token, groupId }) => {
+  handler: async (ctx, { token, groupId, requestId }): Promise<Goal> => {
     const { account } = await requireSession(ctx, token);
     await requireMember(ctx, groupId, account._id);
-    return fail("POLICY_PENDING", "Group goal rules are awaiting approval.");
+    return await once(ctx, account._id, "groups.confirmGoal", requestId, { groupId }, async () => {
+      const { pending } = await groupGoals(ctx, groupId);
+      if (!pending || await isBlocked(ctx, account._id, pending.proposerId)) fail("NOT_AVAILABLE");
+      await rateLimit(ctx, `groups.confirmGoal:${account._id}`, 30, 3_600_000);
+      if (!pending.confirmedBy.includes(account._id)) await ctx.db.patch(pending._id, { confirmedBy: [...pending.confirmedBy, account._id] });
+      return await settleGoal(ctx, (await ctx.db.get(pending._id))!);
+    });
   },
 });
+
+async function groupGoals(ctx: QueryCtx, groupId: Id<"v0Groups">) {
+  const now = Date.now();
+  const rows = (await ctx.db.query("v0Goals").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()).filter((goal) => Number.isFinite(goal.createdAt) && goal.createdAt <= now);
+  const confirmed = rows.filter((goal) => goal.state === "confirmed" && goal.confirmedAt !== undefined && Number.isFinite(goal.confirmedAt) && goal.confirmedAt <= now).sort((a, b) => b.confirmedAt! - a.confirmedAt! || b._creationTime - a._creationTime);
+  const active = confirmed[0] ?? null;
+  const pending = rows.filter((goal) => goal.state === "proposed" && now < goal.createdAt + approvedPolicy.goalProposalDurationMs && (!active || goal.createdAt >= active.confirmedAt!)).sort((a, b) => b.createdAt - a.createdAt || b._creationTime - a._creationTime)[0] ?? null;
+  let activeProgress = 0;
+  if (active) {
+    for (const entry of await ctx.db.query("v0Ledger").withIndex("by_group", (q) => q.eq("groupId", groupId)).collect()) {
+      if (Number.isFinite(entry.points) && entry.points > 0 && entry.createdAt >= active.confirmedAt! && entry.createdAt <= now) activeProgress += entry.points;
+    }
+  }
+  return { active, activeProgress, pending };
+}
+
+async function goalView(ctx: QueryCtx, goal: Doc<"v0Goals">, progressPoints: number, viewerId: Id<"v0Accounts">): Promise<Goal> {
+  const confirmedBy: Id<"v0Accounts">[] = [];
+  for (const accountId of goal.confirmedBy) {
+    if (await activeMember(ctx, goal.groupId, accountId) && !(await isBlocked(ctx, viewerId, accountId))) confirmedBy.push(accountId);
+  }
+  return { id: goal._id, label: goal.label, targetPoints: goal.targetPoints, confirmedBy, state: goal.state, progressPoints };
+}
+
+async function settleGoal(ctx: MutationCtx, goal: Doc<"v0Goals">): Promise<Goal> {
+  const members = await activeMembers(ctx, goal.groupId);
+  const confirmers = members.filter((entry) => goal.confirmedBy.includes(entry.account._id)).length;
+  if (goal.state === "proposed" && confirmers * 2 > members.length) {
+    await ctx.db.patch(goal._id, { state: "confirmed", confirmedAt: Date.now() });
+    goal = (await ctx.db.get(goal._id))!;
+  }
+  return await goalView(ctx, goal, 0, goal.proposerId);
+}
+
+async function boardGoal(ctx: QueryCtx, groupId: Id<"v0Groups">, viewerId: Id<"v0Accounts">): Promise<Goal | null> {
+  const { active, activeProgress, pending } = await groupGoals(ctx, groupId);
+  if (active && activeProgress < active.targetPoints) return await goalView(ctx, active, activeProgress, viewerId);
+  if (pending && !(await isBlocked(ctx, viewerId, pending.proposerId))) return await goalView(ctx, pending, 0, viewerId);
+  return active ? await goalView(ctx, active, activeProgress, viewerId) : null;
+}

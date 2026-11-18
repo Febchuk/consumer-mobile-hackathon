@@ -52,6 +52,6 @@ export const v0Tables = {
     .index("by_reporter", ["reporterId"]),
   v0ProviderCleanup: defineTable({ accountId: v.id("v0Accounts"), provider: v.literal("twilio_verify"), references: v.array(v.string()), state: v.union(v.literal("pending"), v.literal("manual_required"), v.literal("complete")), attempts: v.number(), availableAt: v.number(), createdAt: v.number() })
     .index("by_account", ["accountId"]).index("by_state_available", ["state", "availableAt"]),
-  v0Goals: defineTable({ groupId: v.id("v0Groups"), proposerId: v.id("v0Accounts"), label: v.string(), targetPoints: v.number(), confirmedBy: v.array(v.id("v0Accounts")), state: v.union(v.literal("proposed"), v.literal("confirmed")), createdAt: v.number() })
+  v0Goals: defineTable({ groupId: v.id("v0Groups"), proposerId: v.id("v0Accounts"), label: v.string(), targetPoints: v.number(), confirmedBy: v.array(v.id("v0Accounts")), state: v.union(v.literal("proposed"), v.literal("confirmed")), createdAt: v.number(), confirmedAt: v.optional(v.number()) })
     .index("by_group", ["groupId"]),
 };
