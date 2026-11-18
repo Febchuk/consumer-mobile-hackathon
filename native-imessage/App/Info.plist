@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>CalledIt Messages</string>
+	<string>Called It</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,9 +17,50 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.mikunad.calledit.host</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>calledit-host</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CalledItAPIURL</key>
+	<string>$(CALLED_IT_API_URL)</string>
+	<key>CalledItAPNsEnvironment</key>
+	<string>$(CALLED_IT_APNS_ENVIRONMENT)</string>
+	<key>CalledItAppGroup</key>
+	<string>$(CALLED_IT_APP_GROUP)</string>
+	<key>CalledItBuildChannel</key>
+	<string>$(CALLED_IT_BUILD_CHANNEL)</string>
+	<key>CalledItExpectedAPIHost</key>
+	<string>$(CALLED_IT_EXPECTED_API_HOST)</string>
+	<key>CalledItExpectedBackendConfigVersion</key>
+	<string>$(CALLED_IT_EXPECTED_BACKEND_CONFIG_VERSION)</string>
+	<key>CalledItExpectedBackendDeploymentID</key>
+	<string>$(CALLED_IT_EXPECTED_BACKEND_DEPLOYMENT_ID)</string>
+	<key>CalledItExpectedBackendSourceRevision</key>
+	<string>$(CALLED_IT_EXPECTED_BACKEND_SOURCE_REVISION)</string>
+	<key>CalledItExpectedCardHost</key>
+	<string>$(CALLED_IT_EXPECTED_CARD_HOST)</string>
+	<key>CalledItFixtureMode</key>
+	<false/>
+	<key>CalledItKeychainGroup</key>
+	<string>$(CALLED_IT_KEYCHAIN_GROUP)</string>
+	<key>CalledItReleaseEnvironment</key>
+	<string>$(CALLED_IT_ENVIRONMENT)</string>
+	<key>CalledItSourceRevision</key>
+	<string>$(CALLED_IT_SOURCE_REVISION)</string>
+	<key>CalledItSupportURL</key>
+	<string>$(CALLED_IT_SUPPORT_URL)</string>
+	<key>CalledItWebURL</key>
+	<string>$(CALLED_IT_WEB_URL)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
