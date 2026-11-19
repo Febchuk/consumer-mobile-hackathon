@@ -39,3 +39,11 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 ## Full runs are split into parts
 
 A QA activation lasts at most one hour and the whole suite takes longer. A run without `--only` therefore runs the journey classes in parts. Each part is a complete run with its own simulator, backend and activation, and writes its own evidence under `part-<n>/` in the output directory. The top-level `evidence.json` lists the planned parts, each part's status, commit, simulator, test cases, latency measurements and retries, and the totals. The combined status is never better than the worst part, and a part that did not run or wrote no evidence makes the run `blocked`. Every `JourneyCase` class in `native-imessage/UITests` lands in exactly one part; a class with more than 16 tests stops the run before anything starts.
+
+## Failed calls, injected faults and fixture retries
+
+- The gateway records every app call that ends in an error with no product code: the server's message, the HTTP status, the caller and the test. They are in `appCallFailures` in `evidence.json` and beside the call in a failed test's `JOURNEY-DIAGNOSTIC calls` line.
+- A test can make the app's next calls to one public function fail with `control.failNext(path, count:)`. The gateway answers them itself with a codeless server error, logs them with outcome `injected`, and `reset` clears what is left. `ResilienceJourneyTests` uses this to prove the app retries a failed load by itself and otherwise shows the error with "Try again".
+- Under load the local backend can exceed its one-second function limit. A fixture call that times out changed nothing, so the harness repeats it up to twice and records each repeat as a `fixture-retry`. Like every retry, it turns a pass into `passed-with-retries`.
+- Before the build and again before the tests start, the runner waits until xcodebuild offers the run's simulator as a destination. A test start that still cannot find it is repeated once and recorded as a `destination` retry.
+- A second tap on a conversation Messages ignored is recorded as a `retap` retry.

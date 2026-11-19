@@ -110,7 +110,7 @@ struct BoardView: View {
             history = []
             recap = nil
             self.error = error.localizedDescription
-            model.handle(error)
+            model.handle(error, loading: true)
         }
     }
 

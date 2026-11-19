@@ -41,6 +41,7 @@ class JourneyCase: XCTestCase {
             throw Blocked()
         }
         control = try QAControl()
+        QAControl.currentTest = name
         try control.reset()
         host = XCUIApplication(bundleIdentifier: NativeQARun.hostBundle)
         messages = XCUIApplication(bundleIdentifier: "com.apple.MobileSMS")
@@ -57,7 +58,12 @@ class JourneyCase: XCTestCase {
         add(picture)
         let logged = (try? control.calls()) ?? []
         let first = logged.first?["at"] as? Double ?? 0
-        let calls = logged.map { "\($0["path"] ?? "?")=\($0["outcome"] ?? "?")@\(Int((($0["at"] as? Double ?? first) - first) / 1000))s/\($0["caller"] ?? "?")" }
+        let calls: [String] = logged.map { call in
+            let seconds = Int(((call["at"] as? Double ?? first) - first) / 1000)
+            var line = "\(call["path"] ?? "?")=\(call["outcome"] ?? "?")@\(seconds)s/\(call["caller"] ?? "?")"
+            if let error = call["error"] as? String { line += " [\(call["status"] ?? "?") \(error)]" }
+            return line
+        }
         print("JOURNEY-DIAGNOSTIC calls: " + calls.joined(separator: " "))
         if messages.state == .runningForeground, let content = try? visibleContent(of: messages) { print("JOURNEY-DIAGNOSTIC screen:\n" + content + "\nJOURNEY-DIAGNOSTIC end") }
     }
@@ -176,8 +182,14 @@ class JourneyCase: XCTestCase {
         if keyboard.exists, !target.isHittable || (!typing && target.frame.maxY > keyboard.frame.minY) {
             // The way a person puts the keyboard away here: drag the content down into it.
             let surface: XCUIElement = container ?? messages
-            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 10 * Self.pace)
+            let gone = { XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !keyboard.exists }, object: nil)], timeout: 10 * Self.pace) == .completed }
+            // Where the screen gives the keyboard a Done button, that is the sure way; otherwise drag the content down into it.
+            let done = surface.buttons["auth.keyboardDone"]
+            if done.exists, done.isHittable { done.tap() }
+            if !done.exists || !gone() {
+                surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+                _ = gone()
+            }
         }
         if !target.isHittable {
             // Scroll toward the target, a screen at a time, on a long page.
@@ -185,7 +197,7 @@ class JourneyCase: XCTestCase {
             for _ in 0..<6 where !target.isHittable {
                 if target.frame.midY > surface.frame.midY { surface.swipeUp() } else { surface.swipeDown() }
             }
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 15 * Self.pace)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in target.isHittable }, object: nil)], timeout: 15 * Self.pace)
             // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
             var last = CGRect.null
             let atRest = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -197,7 +209,8 @@ class JourneyCase: XCTestCase {
         }
         if !target.isEnabled || !target.isHittable {
             // On a slow machine a control can exist before it can be used.
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES AND enabled == YES"), object: target)], timeout: 15 * Self.pace)
+            // A block predicate is asked directly; a format predicate makes XCTest capture a full element description on every poll.
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in target.isHittable && target.isEnabled }, object: nil)], timeout: 30 * Self.pace)
         }
         guard target.isEnabled, target.isHittable else {
             XCTFail("[NATIVE-UI-ACTION] \(target) must be enabled and on screen", file: file, line: line)
@@ -317,15 +330,25 @@ class JourneyCase: XCTestCase {
         while firstRun.waitForExistence(timeout: field.exists ? 0 : 4 * Self.pace) { firstRun.tap() }
         if !field.exists || element("ConversationTitle", in: messages).label != title {
             let back = element("BackButton", in: messages)
-            if !cell.waitForExistence(timeout: 3 * Self.pace), back.exists { back.tap() }
+            // Messages can open on an empty "New Message" draft or inside the other conversation; both lead back to the list.
+            let cancel = messages.buttons["Cancel"]
+            if !cell.waitForExistence(timeout: 3 * Self.pace) {
+                if element("ConversationTitle", in: messages).label == "New Message", cancel.exists { cancel.tap() } else if back.exists { back.tap() }
+            }
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == YES AND hittable == YES"), object: cell)
             guard XCTWaiter.wait(for: [ready], timeout: 15 * Self.pace) == .completed else {
                 XCTFail("[NATIVE-UI-MESSAGES] synthetic conversation \(title) is missing or cannot be tapped", file: file, line: line)
                 throw Blocked()
             }
             cell.tap()
+            // Under load Messages can swallow the tap and stay on the list. One more tap is allowed, and recorded.
+            let opened = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in field.exists }, object: nil)
+            if XCTWaiter.wait(for: [opened], timeout: 15 * Self.pace) != .completed, cell.exists, cell.isHittable {
+                try recordRetry("retap", "Messages stayed on the conversation list after the first tap on a conversation")
+                cell.tap()
+            }
         }
-        assertLabel(try required("ConversationTitle", in: messages, file: file, line: line), title, "NATIVE-UI-MESSAGES", file: file, line: line)
+        assertLabel(try required("ConversationTitle", in: messages, timeout: 30, file: file, line: line), title, "NATIVE-UI-MESSAGES", file: file, line: line)
         if !element("navigation.settings", in: messages).waitForExistence(timeout: 2 * Self.pace) {
             try tap(labelled("add", in: messages, file: file, line: line), file: file, line: line)
             try tap(labelled("Called It", .cell, in: messages, file: file, line: line), file: file, line: line)

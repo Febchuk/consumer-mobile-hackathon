@@ -78,7 +78,7 @@ struct LinkRoomView: View {
             let result: [GroupInvitation]? = try await API.query("v0Groups:invitations", ["token": token])
             guard model.token == token else { return }
             invitations = result ?? []
-        } catch { model.handle(error) }
+        } catch { model.handle(error, loading: true) }
     }
 
     private func accept(_ invitation: GroupInvitation) async {

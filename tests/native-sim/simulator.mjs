@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 
 const simctl = (args, options = {}) => execFileSync("xcrun", ["simctl", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000, ...options });
 
@@ -28,6 +29,31 @@ export function createDedicatedSimulator({ runID, deviceType, runtime }) {
   simctl(["boot", udid]);
   simctl(["bootstatus", udid, "-b"], { timeout: 600_000 });
   return { udid, name };
+}
+
+/**
+ * xcodebuild keeps its own list of devices, and on a busy machine that list can lag behind simctl or lose a device that
+ * was just created. This waits until the run's simulator is listed and booted for simctl and offered as a destination by
+ * xcodebuild, booting it again if it was shut down. It returns how long that took, or throws when it never happens.
+ */
+export async function waitForDestination(udid, { project, scheme, cwd, env, timeoutMs = 300_000 }) {
+  const started = Date.now();
+  let seen = "never listed";
+  while (Date.now() - started < timeoutMs) {
+    const device = listDevices().find((item) => item.udid === udid);
+    assert.ok(device, "The run's simulator no longer exists");
+    if (device.state !== "Booted") {
+      spawnSync("xcrun", ["simctl", "boot", udid], { stdio: "ignore", timeout: 120_000 });
+      spawnSync("xcrun", ["simctl", "bootstatus", udid, "-b"], { stdio: "ignore", timeout: 300_000 });
+      seen = "listed, " + device.state;
+    } else {
+      const shown = spawnSync("xcodebuild", ["-showdestinations", "-project", project, "-scheme", scheme], { cwd, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+      if (((shown.stdout ?? "") + (shown.stderr ?? "")).includes("id:" + udid)) return { waitedMs: Date.now() - started };
+      seen = "booted, not offered by xcodebuild";
+    }
+    await delay(3000);
+  }
+  throw new Error("xcodebuild never offered the run's simulator as a destination (" + seen + ")");
 }
 
 // A fresh simulator has no Apple account. This proves it rather than assuming it: the account store must be empty.

@@ -60,7 +60,7 @@ struct ProofView: View {
             let result: [ProofReference]? = try await API.query("v0Proof:list", ["token": token, "betId": betID])
             guard model.token == token, model.isActive else { return }
             references = result ?? []
-        } catch { references = []; clear(); self.error = error.localizedDescription; model.handle(error) }
+        } catch { references = []; clear(); self.error = error.localizedDescription; model.handle(error, loading: true) }
     }
 
     private func read(_ reference: ProofReference) async {

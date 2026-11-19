@@ -11,6 +11,8 @@ struct QAControl {
 
     private let endpoint: URL
     private let token: String
+    /// The test now running, sent with every call so a retry the harness makes on its behalf is recorded against it.
+    static var currentTest = ""
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         guard let raw = environment["CALLED_IT_QA_CONTROL_URL"], let url = URL(string: raw), url.scheme == "http", url.host == "127.0.0.1",
@@ -25,6 +27,7 @@ struct QAControl {
     func call(_ operation: String, _ arguments: [String: Any] = [:]) throws -> Any {
         var body = arguments
         body["op"] = operation
+        if body["test"] == nil { body["test"] = Self.currentTest }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
@@ -91,6 +94,12 @@ struct QAControl {
     /// Writes a retry or a measurement into the run's evidence. Never pass private text here.
     func note(test: String, kind: String, detail: String) throws {
         try call("note", ["test": test, "kind": kind, "detail": detail])
+    }
+
+    /// The app's next `count` calls to one public function fail with a server error that carries no code, as an overloaded
+    /// server's would. They never reach the backend.
+    func failNext(_ path: String, count: Int) throws {
+        try call("failNext", ["path": path, "count": count])
     }
 
     /// The public functions the app has called since the last reset, in order, without their arguments.

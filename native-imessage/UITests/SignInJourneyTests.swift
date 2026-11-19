@@ -11,12 +11,15 @@ final class SignInJourneyTests: JourneyCase {
         code.tap()
         try enter("111111", into: code, called: "auth.code")
         try tap("auth.verify", in: host)
+        // The error is the last row of the form and can be below the fold once the keyboard is away.
+        if !element("auth.error", in: host).waitForExistence(timeout: 10 * Self.pace) { host.swipeUp() }
         _ = try required("auth.error", in: host, "NATIVE-UI-CODE-02")
         XCTAssertFalse(element("auth.returnToMessages", in: host).exists, "[NATIVE-UI-CODE-02] a wrong code does not sign in")
         XCTAssertEqual(try appSessions(.finn).count, 0, "[NATIVE-UI-CODE-03] no session after a wrong code")
         XCTAssertEqual(try appCalls("v0Auth:verifyCode"), 0, "[NATIVE-UI-CODE-03]")
 
         // The person can correct the code without starting over.
+        if !element("auth.code", in: host).exists { host.swipeDown() }
         let again = try required("auth.code", in: host, "NATIVE-UI-CODE-04")
         again.tap()
         clear(again)

@@ -38,7 +38,7 @@ struct DailyTurnView: View {
             guard model.token == token else { return }
             guard result == nil || result?.groupId == groupID else { throw NativeError.invalidLink }
             turn = result
-        } catch { turn = nil; model.handle(error) }
+        } catch { turn = nil; model.handle(error, loading: true) }
     }
 
     private func pass() async {

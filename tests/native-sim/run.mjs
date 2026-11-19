@@ -12,7 +12,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
 import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, ports } from "./guard.mjs";
-import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime } from "./simulator.mjs";
+import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime, waitForDestination } from "./simulator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
@@ -71,7 +71,7 @@ if (!options("--only").length && !flag("--demo") && !flag("--backend-only")) {
     const code = await new Promise((accept) => current.once("exit", accept));
     let evidence = null;
     try { evidence = JSON.parse(readFileSync(resolve(directory, "evidence.json"), "utf8")); } catch { /* a part that wrote no evidence is recorded as such */ }
-    combined.parts.push({ part: index + 1, classes: part.map((item) => item.name), exitCode: code, directory, status: evidence?.status ?? "no-evidence", sourceRevision: evidence?.sourceRevision ?? null, simulator: evidence?.simulator ?? null, toolchain: evidence?.toolchain ?? null, tests: evidence?.tests ? { passed: evidence.tests.passed, failed: evidence.tests.failed, blocked: evidence.tests.blocked, cases: evidence.tests.cases } : null, latencyBudgets: evidence?.latencyBudgets ?? null, retries: evidence?.retries ?? [], waitScale: evidence?.waitScale ?? null, appContactedNonLoopback: evidence?.safety?.outboundNetwork?.appContactedNonLoopback ?? null });
+    combined.parts.push({ part: index + 1, classes: part.map((item) => item.name), exitCode: code, directory, status: evidence?.status ?? "no-evidence", sourceRevision: evidence?.sourceRevision ?? null, simulator: evidence?.simulator ?? null, toolchain: evidence?.toolchain ?? null, tests: evidence?.tests ? { passed: evidence.tests.passed, failed: evidence.tests.failed, blocked: evidence.tests.blocked, cases: evidence.tests.cases } : null, latencyBudgets: evidence?.latencyBudgets ?? null, retries: evidence?.retries ?? [], waitScale: evidence?.waitScale ?? null, appCallFailures: evidence?.appCallFailures ?? [], appContactedNonLoopback: evidence?.safety?.outboundNetwork?.appContactedNonLoopback ?? null });
   }
   const statuses = combined.parts.map((part) => part.status);
   combined.interruptedBy = stopped ?? null;
@@ -92,6 +92,7 @@ const output = resolve(option("--output") ?? resolve(scratchRoot, "native-sim-" 
 assert.ok(!existsSync(output), "The output directory already exists: " + output);
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
+const runnerRetries = [];
 const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, latencyBudgets: { mode: referenceHardware ? "enforced" : "measured-only", measurements: [] }, waitScale, retries: [], strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
 let backend; let closeBackend; let simulator; let sampler; let exitCode = 1;
 const egress = new Map();
@@ -228,6 +229,7 @@ async function main() {
 
     say("building the QA app and UI tests");
     run("xcodegen", ["generate"], { cwd: native });
+    await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment });
     const derived = resolve(native, "build/native-sim");
     const build = spawnSync("xcodebuild", ["build-for-testing", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", derived, "CALLED_IT_SOURCE_REVISION=" + sourceRevision, "DEVELOPMENT_TEAM=", "CODE_SIGN_IDENTITY=-"], { cwd: native, env: environment, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
     log("build.log", (build.stdout ?? "") + (build.stderr ?? ""));
@@ -269,12 +271,23 @@ async function main() {
   const bundle = resolve(output, "native-ui.xcresult");
   say("running " + selection.join(" "));
   const testEnvironment = { ...environment, TEST_RUNNER_CALLED_IT_QA_RUN_ID: runID, TEST_RUNNER_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64"), TEST_RUNNER_CALLED_IT_QA_CONTROL_URL: backend.controlOrigin + "/control", TEST_RUNNER_CALLED_IT_QA_CONTROL_TOKEN: backend.controlToken, TEST_RUNNER_CALLED_IT_QA_WAIT_SCALE: String(waitScale), ...(referenceHardware ? { TEST_RUNNER_CALLED_IT_QA_REFERENCE_HARDWARE: "1" } : {}) };
-  const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
-  child = tests;
-  let testLog = "";
-  const onData = (data) => { const text = data.toString(); testLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
-  tests.stdout.on("data", onData); tests.stderr.on("data", onData);
-  const status = await new Promise((accept) => tests.once("exit", accept));
+  let testLog = ""; let status;
+  // The build and the backend boot take minutes, and xcodebuild can lose sight of the simulator meanwhile. The device is
+  // checked again before the tests start, and a start that still cannot find it is repeated once and recorded as a retry.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const waited = await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment });
+    evidence.simulator.destinationWaitMs = (evidence.simulator.destinationWaitMs ?? 0) + waited.waitedMs;
+    rmSync(bundle, { recursive: true, force: true });
+    const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+    child = tests;
+    let attemptLog = "";
+    const onData = (data) => { const text = data.toString(); attemptLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
+    tests.stdout.on("data", onData); tests.stderr.on("data", onData);
+    status = await new Promise((accept) => tests.once("exit", accept));
+    testLog += attemptLog;
+    if (attempt === 2 || /Test Case '/.test(attemptLog) || !/Unable to find a device matching the provided destination specifier/.test(attemptLog)) break;
+    runnerRetries.push({ at: Date.now(), test: "(runner)", kind: "destination", detail: "xcodebuild could not find the run's simulator when starting the tests; started once more" });
+  }
   log("test.log", backend.redact(testLog));
   const cases = [...testLog.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
   evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed: cases.filter((test) => test.result === "failed").length, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle };
@@ -301,7 +314,9 @@ try {
   if (backend) {
     const notes = backend.notes();
     evidence.latencyBudgets.measurements = notes.filter((note) => note.kind === "latency");
-    evidence.retries = notes.filter((note) => note.kind !== "latency");
+    evidence.retries = [...runnerRetries, ...notes.filter((note) => note.kind !== "latency")];
+    // App calls that ended in an error with no product code, with the server's message and HTTP status. "injected" ones were asked for by a test.
+    evidence.appCallFailures = backend.failures();
     // A pass that needed a retry is never reported as a clean pass.
     if (evidence.status === "passed" && evidence.retries.length) evidence.status = "passed-with-retries";
   }

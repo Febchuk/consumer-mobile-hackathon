@@ -239,7 +239,7 @@ struct BetView: View {
         } catch {
             card = nil
             self.error = error.localizedDescription
-            model.handle(error)
+            model.handle(error, loading: true)
         }
     }
 
