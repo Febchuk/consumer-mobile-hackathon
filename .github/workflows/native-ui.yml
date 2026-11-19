@@ -8,6 +8,7 @@ name: Native UI
 # the integration branch. GitHub starts scheduled and manually dispatched runs only from the workflow file on the
 # default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -29,25 +30,27 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }}
+    name: ${{ matrix.shard }} (diagnostics ${{ matrix.diagnostics }})
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the run starts.
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
-        shard: [pick, reveal, controls, privacy, start-board]
+        diagnostics: [keep, "off"]
+        # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
           - shard: pick
             classes: PickJourneyTests
-          - shard: reveal
-            classes: RevealJourneyTests
-          - shard: controls
-            classes: ControlsJourneyTests
-          - shard: privacy
-            classes: SubjectPrivacyJourneyTests
-          - shard: start-board
-            classes: StartJourneyTests BoardJourneyTests
+          - shard: reveal-membership
+            classes: RevealJourneyTests MembershipJourneyTests
+          - shard: controls-resilience
+            classes: ControlsJourneyTests ResilienceJourneyTests
+          - shard: privacy-create
+            classes: SubjectPrivacyJourneyTests CreateJourneyTests
+          - shard: start-board-signin
+            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -108,11 +111,20 @@ jobs:
           ) &
           sampler=$!
           status=0
+          lanePath="$PATH"
+          if [ "${{ matrix.diagnostics }}" = off ]; then
+            # The lane calls xcodebuild by name. This wrapper adds one argument to its test run so Xcode does not
+            # collect system diagnostics into the result bundle; everything else passes through unchanged.
+            mkdir -p "$RUNNER_TEMP/xcodebuild-wrapper"
+            printf '%s\n' '#!/bin/bash' 'for argument in "$@"; do' '  if [ "$argument" = test-without-building ]; then exec /usr/bin/xcodebuild "$@" -collect-test-diagnostics never; fi' 'done' 'exec /usr/bin/xcodebuild "$@"' > "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+            chmod +x "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+            lanePath="$RUNNER_TEMP/xcodebuild-wrapper:$PATH"
+          fi
           only=()
           for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
           # Scale 3 did no better than 2 when measured (2 of 5 shards passed against 3 of 5).
-          env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
+          env -i PATH="$lanePath" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
             node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
             --wait-scale "$WAIT_SCALE" "${only[@]}" || status=$?
           kill "$sampler" || true
@@ -141,7 +153,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.shard }}
+          name: native-ui-evidence-${{ matrix.diagnostics }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -152,7 +164,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.shard }}
+          name: native-ui-xcresult-${{ matrix.diagnostics }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -164,7 +176,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal controls privacy start-board
+      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -178,7 +190,7 @@ jobs:
           const root = process.env.EVIDENCE_ROOT, prefix = process.env.PREFIX;
           const rows = process.env.SHARDS.split(" ").map((shard) => {
             const file = path.join(root, prefix + shard, "native-ui-evidence", "evidence.json");
-            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [] };
+            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [], appCallFailures: [] };
             const e = JSON.parse(fs.readFileSync(file, "utf8"));
             const cases = e.tests?.cases ?? [];
             return {
@@ -188,7 +200,7 @@ jobs:
               simulator: e.simulator ? "iOS " + e.simulator.runtimeVersion + " (" + e.simulator.runtimeBuild + ")" : "none",
               minutes: Math.round((Date.parse(e.finishedAt) - Date.parse(e.startedAt)) / 6000) / 10,
               testMinutes: Math.round(cases.reduce((sum, test) => sum + test.seconds, 0) / 6) / 10,
-              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], latency: e.latencyBudgets?.measurements ?? [],
+              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], appCallFailures: e.appCallFailures ?? [], latency: e.latencyBudgets?.measurements ?? [],
               classes: [...new Set(cases.map((test) => test.id.split("/")[0]))], failures: cases.filter((test) => test.result === "failed").map((test) => test.id),
             };
           });
@@ -196,25 +208,33 @@ jobs:
           const ran = new Set(rows.flatMap((row) => row.classes));
           const missing = expected.filter((name) => !ran.has(name));
           const overall = rows.some((row) => row.status === "failed") || missing.length ? "failed" : rows.some((row) => row.status === "passed-with-retries") ? "passed-with-retries" : "passed";
+          const kinds = {};
+          for (const note of rows.flatMap((row) => row.retries)) kinds[note.kind] = (kinds[note.kind] ?? 0) + 1;
+          const byKind = Object.entries(kinds).map(([kind, count]) => count + " " + kind).join(", ") || "none";
           const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
           const lines = [
             "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
-            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
+            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + ") and " + total("appCallFailures") + " failed app calls across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
             "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
             ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
             ...(missing.length ? ["Journey classes in the repository that no shard ran: " + missing.join(", ") + ". Add them to the matrix.", ""] : []),
             ...rows.flatMap((row) => row.failures.map((id) => "- Failed: " + id)),
             ...rows.flatMap((row) => row.retries.map((note) => "- Retry in " + row.shard + ": " + JSON.stringify(note))),
+            ...rows.flatMap((row) => row.appCallFailures.map(({ at, ...failure }) => "- Failed app call in " + row.shard + ": " + JSON.stringify(failure))),
             ...rows.flatMap((row) => row.appOutsideLoopback?.length ? ["- App connection outside loopback in " + row.shard + ": " + row.appOutsideLoopback.join(", ")] : []), "",
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));
-          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, shards: rows }, null, 2) + "\n");
+          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, retriesByKind: kinds, shards: rows }, null, 2) + "\n");
           process.exitCode = overall === "failed" ? 1 : 0;
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
-          PREFIX="native-ui-evidence-" node "$RUNNER_TEMP/combine.cjs"
+          status=0
+          for diagnostics in keep off; do
+            PREFIX="native-ui-evidence-$diagnostics-" node "$RUNNER_TEMP/combine.cjs" || status=1
+          done
+          exit "$status"
       - name: Keep the combined result
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
