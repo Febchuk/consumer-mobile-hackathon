@@ -139,6 +139,7 @@ struct RecentBets: View {
             error = nil
         } catch {
             bets = []
+            if error is CancellationError { return }
             self.error = error.localizedDescription
             model.handle(error, loading: true)
         }

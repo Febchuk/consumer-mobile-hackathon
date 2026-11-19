@@ -47,3 +47,14 @@ A QA activation lasts at most one hour and the whole suite takes longer. A run w
 - Under load the local backend can exceed its one-second function limit. A fixture call that times out changed nothing, so the harness repeats it up to twice and records each repeat as a `fixture-retry`. Like every retry, it turns a pass into `passed-with-retries`.
 - Before the build and again before the tests start, the runner waits until xcodebuild offers the run's simulator as a destination. A test start that still cannot find it is repeated once and recorded as a `destination` retry.
 - A second tap on a conversation Messages ignored is recorded as a `retap` retry.
+- Cancelling an empty "New Message" draft that Messages opened on is recorded as a `draft-cancel` retry.
+
+## One retry of a failed test, for slow shared runners only
+
+`--retry-failed-once` is off by default. With it, each test that failed is run once more, by itself, in a new xcodebuild session; the test's own set-up ends both apps and resets the backend, so nothing of the first attempt is left.
+
+- A test that passes on its second attempt counts as passed, with `attempts: 2` and its first failure in `tests.cases`, a `test-retry` entry in `retries`, and a record in `tests.testRetries` holding both attempts' messages and result bundles (`native-ui.xcresult` and `native-ui-retry-<n>.xcresult`; the second attempts' output is `test-retry.log`). The run reports `passed-with-retries` and names the test.
+- A test that fails twice fails the run.
+- `tests.testRetryCounts` (and `testRetryCounts` in a combined run) maps each retried test to how often it needed the retry, so a test that needs one repeatedly across runs can be found by adding these up.
+- A failed test is not retried when the QA activation has less than eight minutes left; it is listed in `tests.notRetried` and stays failed.
+- The option is refused together with `--reference-hardware`. The reference run on a real Mac is the zero-retry release gate, and a reference record that held a retried test would be failed.
