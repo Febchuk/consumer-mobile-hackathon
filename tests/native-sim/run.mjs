@@ -11,7 +11,7 @@ import { homedir, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
-import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, ports } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, applyTestRetries, combineStatuses, failureMessages, inheritedCredentials, networkIsolation, parseTestCases, planParts, ports, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
 import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime, waitForDestination } from "./simulator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -30,10 +30,13 @@ const referenceHardware = flag("--reference-hardware");
 const waitScale = Number(option("--wait-scale") ?? 1);
 assert.ok(Number.isFinite(waitScale) && waitScale >= 1 && waitScale <= 8, "--wait-scale takes a number from 1 to 8");
 assert.ok(!(referenceHardware && waitScale !== 1), "Reference hardware runs at wait scale 1");
+// Off by default. On a slow shared runner a failed test may be run once more in a fresh launch; a pass on the second attempt is
+// recorded as a test-retry and never reads as a clean pass. Refused on reference hardware.
+const retryFailedOnce = retryPolicy({ retryFailedOnce: flag("--retry-failed-once"), referenceHardware });
 const configVersion = "native-sim.1";
 
 if (flag("--help")) {
-  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--demo] [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator] [--reference-hardware] [--wait-scale <1-8>]");
+  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--demo] [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator] [--reference-hardware] [--wait-scale <1-8>] [--retry-failed-once]");
   process.exit(0);
 }
 
@@ -71,17 +74,21 @@ if (!options("--only").length && !flag("--demo") && !flag("--backend-only")) {
     const code = await new Promise((accept) => current.once("exit", accept));
     let evidence = null;
     try { evidence = JSON.parse(readFileSync(resolve(directory, "evidence.json"), "utf8")); } catch { /* a part that wrote no evidence is recorded as such */ }
-    combined.parts.push({ part: index + 1, classes: part.map((item) => item.name), exitCode: code, directory, status: evidence?.status ?? "no-evidence", sourceRevision: evidence?.sourceRevision ?? null, simulator: evidence?.simulator ?? null, toolchain: evidence?.toolchain ?? null, tests: evidence?.tests ? { passed: evidence.tests.passed, failed: evidence.tests.failed, blocked: evidence.tests.blocked, cases: evidence.tests.cases } : null, latencyBudgets: evidence?.latencyBudgets ?? null, retries: evidence?.retries ?? [], waitScale: evidence?.waitScale ?? null, appCallFailures: evidence?.appCallFailures ?? [], appContactedNonLoopback: evidence?.safety?.outboundNetwork?.appContactedNonLoopback ?? null });
+    combined.parts.push({ part: index + 1, classes: part.map((item) => item.name), exitCode: code, directory, status: evidence?.status ?? "no-evidence", sourceRevision: evidence?.sourceRevision ?? null, simulator: evidence?.simulator ?? null, toolchain: evidence?.toolchain ?? null, tests: evidence?.tests ? { passed: evidence.tests.passed, failed: evidence.tests.failed, blocked: evidence.tests.blocked, cases: evidence.tests.cases } : null, latencyBudgets: evidence?.latencyBudgets ?? null, retries: evidence?.retries ?? [], waitScale: evidence?.waitScale ?? null, testRetries: evidence?.tests?.testRetries ?? [], appCallFailures: evidence?.appCallFailures ?? [], appContactedNonLoopback: evidence?.safety?.outboundNetwork?.appContactedNonLoopback ?? null });
   }
   const statuses = combined.parts.map((part) => part.status);
   combined.interruptedBy = stopped ?? null;
   combined.status = combineStatuses(statuses, parts.length);
   combined.totals = { passed: 0, failed: 0, blocked: 0, retries: 0 };
   for (const part of combined.parts) { combined.totals.passed += part.tests?.passed ?? 0; combined.totals.failed += part.tests?.failed ?? 0; combined.totals.blocked += part.tests?.blocked ?? 0; combined.totals.retries += part.retries.length; }
+  // Every test that needed its one retry, by name, and how often across the parts of this run.
+  combined.testRetries = combined.parts.flatMap((part) => part.testRetries);
+  combined.testRetryCounts = testRetryCounts(combined.testRetries);
+  combined.passedOnRetry = combined.testRetries.filter((retry) => retry.passedOnRetry).map((retry) => retry.test);
   combined.notRun = ["MessagesDriveTests", "ProvisioningDriveTests"].map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
   combined.finishedAt = new Date().toISOString();
   writeFileSync(resolve(combinedOutput, "evidence.json"), JSON.stringify(combined, null, 2) + "\n", { mode: 0o600 });
-  say("all parts: status " + combined.status + " (outbound network " + networkIsolation + ", not denied): " + combined.totals.passed + " passed, " + combined.totals.failed + " failed, " + combined.totals.blocked + " blocked, " + combined.totals.retries + " recorded retries; evidence in " + combinedOutput);
+  say("all parts: status " + combined.status + " (outbound network " + networkIsolation + ", not denied): " + combined.totals.passed + " passed, " + combined.totals.failed + " failed, " + combined.totals.blocked + " blocked, " + combined.totals.retries + " recorded retries" + (combined.passedOnRetry.length ? " (passed only on a second attempt: " + combined.passedOnRetry.join(", ") + ")" : "") + "; evidence in " + combinedOutput);
   process.exit(combined.status === "passed" ? 0 : 1);
 }
 
@@ -94,7 +101,7 @@ mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
 const runnerRetries = [];
 const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, latencyBudgets: { mode: referenceHardware ? "enforced" : "measured-only", measurements: [] }, waitScale, retries: [], strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
-let backend; let closeBackend; let simulator; let sampler; let exitCode = 1;
+let backend; let closeBackend; let simulator; let sampler; let exitCode = 1; let activationEnds = 0;
 const egress = new Map();
 const appEgress = new Set();
 // The two older UI test classes need the root provisioner's fixtures (tests/simulator-provisioner), which this lane does not supply.
@@ -245,6 +252,7 @@ async function main() {
   }
 
   const manifest = buildManifest({ runID, simulatorUDID: simulator?.udid ?? randomUUID().toUpperCase(), nativeSourceRevision: sourceRevision, backendSourceRevision: sourceRevision, apiOrigin: "http://127.0.0.1:" + ports.api, cardOrigin: "http://127.0.0.1:" + ports.site, fixtureSetID, configVersion, now: Date.now() - 5000, lifetimeMs: 3_600_000 });
+  activationEnds = Date.now() - 5000 + 3_600_000;
   const manifestBytes = Buffer.from(JSON.stringify(manifest));
   evidence.manifestSHA256 = sha256(manifestBytes);
   evidence.safety.apiTarget = manifest.apiOrigin;
@@ -289,9 +297,37 @@ async function main() {
     runnerRetries.push({ at: Date.now(), test: "(runner)", kind: "destination", detail: "xcodebuild could not find the run's simulator when starting the tests; started once more" });
   }
   log("test.log", backend.redact(testLog));
-  const cases = [...testLog.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
-  evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed: cases.filter((test) => test.result === "failed").length, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle };
-  evidence.status = status === 0 && cases.length > 0 && evidence.tests.failed === 0 ? "passed" : cases.length === 0 ? "blocked" : "failed";
+  let cases = parseTestCases(testLog).map((test) => test.result === "failed" ? { ...test, failures: failureMessages(backend.redact(testLog), test.id), resultBundle: bundle } : test);
+  const firstFailures = cases.filter((test) => test.result === "failed");
+  let testRetries = []; const notRetried = [];
+  if (retryFailedOnce && firstFailures.length) {
+    // Each failed test gets one more attempt, by itself, in a new xcodebuild session: the test's own set-up ends both apps and
+    // resets the backend, so nothing of the first attempt is left. The first attempt's log and result bundle are kept.
+    const secondAttempts = new Map(); let retryLog = "";
+    for (const [index, test] of firstFailures.entries()) {
+      if (activationEnds - Date.now() < 8 * 60_000) { notRetried.push({ test: test.id, reason: "the QA activation was about to expire" }); continue; }
+      say("retrying " + test.id + " once in a fresh launch");
+      await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment });
+      const retryBundle = resolve(output, "native-ui-retry-" + (index + 1) + ".xcresult");
+      const again = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", retryBundle, "-only-testing:CalledItUITests/" + test.id], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+      child = again;
+      let attemptLog = "";
+      const onData = (data) => { const text = data.toString(); attemptLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
+      again.stdout.on("data", onData); again.stderr.on("data", onData);
+      await new Promise((accept) => again.once("exit", accept));
+      retryLog += attemptLog;
+      const result = parseTestCases(attemptLog).find((item) => item.id === test.id);
+      secondAttempts.set(test.id, result ? { ...result, failures: failureMessages(backend.redact(attemptLog), test.id), resultBundle: retryBundle } : { result: "failed", seconds: null, failures: ["the second attempt produced no result"], resultBundle: retryBundle });
+    }
+    log("test-retry.log", backend.redact(retryLog));
+    const settled = applyTestRetries(cases, secondAttempts);
+    cases = settled.cases; testRetries = settled.retries;
+    for (const retry of testRetries) runnerRetries.push({ at: Date.now(), test: "-[" + retry.test.replace("/", " ") + "]", kind: "test-retry", detail: (retry.passedOnRetry ? "failed once, then passed in a fresh launch" : "failed twice") + "; first failure: " + (retry.firstAttempt.failures[0] ?? "no message captured") });
+  }
+  const failed = cases.filter((test) => test.result === "failed").length;
+  evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle, retryFailedOnce, testRetries, testRetryCounts: testRetryCounts(testRetries), notRetried };
+  // A run whose only failures were tests that then passed on their one retry is a pass with retries, never a clean pass.
+  evidence.status = cases.length === 0 ? "blocked" : failed === 0 && (status === 0 || (testRetries.length > 0 && testRetries.length === firstFailures.length)) ? "passed" : "failed";
   if (appEgress.size) {
     evidence.status = "failed";
     console.error("[native-sim] the app contacted an address that is not loopback: " + [...appEgress].join(", "));
@@ -319,6 +355,8 @@ try {
     evidence.appCallFailures = backend.failures();
     // A pass that needed a retry is never reported as a clean pass.
     if (evidence.status === "passed" && evidence.retries.length) evidence.status = "passed-with-retries";
+    // Belt and braces: the option is refused up front, and a reference record that somehow held a retried test is failed here.
+    if (referenceRunHasTestRetry(evidence)) { evidence.status = "failed"; evidence.error = "A reference-hardware run contained a test retry"; exitCode = 1; }
   }
   if (closeBackend) {
     evidence.backend ??= {};

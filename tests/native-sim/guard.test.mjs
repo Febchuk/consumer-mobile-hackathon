@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, applyTestRetries, failureMessages, parseTestCases, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 test("only canonical numeric loopback HTTP origins are accepted", () => {
   assert.equal(assertLoopbackOrigin("http://127.0.0.1:8199"), "http://127.0.0.1:8199");
@@ -68,4 +70,42 @@ test("a combined run is never better than its worst or missing part", () => {
   assert.equal(combineStatuses(["passed"], 2), "blocked");
   assert.equal(combineStatuses(["passed", "blocked"], 2), "blocked");
   assert.equal(combineStatuses(["passed", "no-evidence"], 2), "blocked");
+});
+
+test("the one-time test retry is refused on reference hardware", () => {
+  assert.equal(retryPolicy({ retryFailedOnce: false, referenceHardware: true }), false);
+  assert.equal(retryPolicy({ retryFailedOnce: true, referenceHardware: false }), true);
+  assert.throws(() => retryPolicy({ retryFailedOnce: true, referenceHardware: true }), /refused with --reference-hardware/);
+  const run = spawnSync(process.execPath, [fileURLToPath(new URL("./run.mjs", import.meta.url)), "--reference-hardware", "--retry-failed-once"], { encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /refused with --reference-hardware/);
+});
+
+test("a test that passes on its second attempt is recorded, and one that fails twice stays failed", () => {
+  const log = [
+    "/x/A.swift:9: error: -[CalledItUITests.A testOne] : failed - first message",
+    "Test Case '-[CalledItUITests.A testOne]' failed (10.5 seconds).",
+    "Test Case '-[CalledItUITests.A testTwo]' passed (3.0 seconds).",
+    "/x/B.swift:4: error: -[CalledItUITests.B testThree] : failed - other message",
+    "Test Case '-[CalledItUITests.B testThree]' failed (7.0 seconds).",
+    "Test Case '-[CalledItUITests.B testFour]' failed (1.0 seconds).",
+  ].join("\n");
+  const cases = parseTestCases(log).map((item) => item.result === "failed" ? { ...item, failures: failureMessages(log, item.id), resultBundle: "first" } : item);
+  assert.deepEqual(cases.map((item) => item.id + ":" + item.result), ["A/testOne:failed", "A/testTwo:passed", "B/testThree:failed", "B/testFour:failed"]);
+  assert.deepEqual(cases[0].failures, ["failed - first message"]);
+  const settled = applyTestRetries(cases, new Map([["A/testOne", { result: "passed", seconds: 9, failures: [], resultBundle: "second" }], ["B/testThree", { result: "failed", seconds: 8, failures: ["failed - again"], resultBundle: "third" }]]));
+  assert.deepEqual(settled.cases.map((item) => item.id + ":" + item.result + ":" + (item.attempts ?? 1)), ["A/testOne:passed:2", "A/testTwo:passed:1", "B/testThree:failed:2", "B/testFour:failed:1"]);
+  assert.deepEqual(settled.cases[0].firstAttempt, { result: "failed", seconds: 10.5, failures: ["failed - first message"], resultBundle: "first" });
+  assert.deepEqual(settled.retries.map((retry) => retry.test + ":" + retry.passedOnRetry), ["A/testOne:true", "B/testThree:false"]);
+  assert.deepEqual(testRetryCounts([...settled.retries, ...settled.retries]), { "A/testOne": 2, "B/testThree": 2 });
+  // Nothing is retried, nothing changes.
+  assert.deepEqual(applyTestRetries(cases, new Map()), { cases, retries: [] });
+});
+
+test("a reference-hardware record with a retried test is recognised", () => {
+  const retried = { retries: [{ kind: "test-retry" }], tests: { cases: [{ attempts: 2 }], testRetries: [{}] } };
+  assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "enforced" }, ...retried }), true);
+  assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "enforced" }, retries: [], tests: { cases: [{ attempts: 2 }] } }), true);
+  assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "enforced" }, retries: [{ kind: "retype" }], tests: { cases: [{}], testRetries: [] } }), false);
+  assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "measured-only" }, ...retried }), false);
 });
