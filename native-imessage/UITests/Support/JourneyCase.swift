@@ -98,6 +98,23 @@ class JourneyCase: XCTestCase {
         throw Blocked()
     }
 
+    /// Empties a focused field, as a person would with the delete key, and requires it to be empty.
+    func clear(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let held = field.value as? String ?? ""
+        guard !held.isEmpty, held != field.placeholderValue else { return }
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: held.count))
+        let empty = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let now = field.value as? String ?? ""
+            return now.isEmpty || now == field.placeholderValue
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [empty], timeout: 10 * Self.pace), .completed, "[NATIVE-UI-TYPE] the field could not be emptied", file: file, line: line)
+    }
+
+    /// The fixture rows of app sign-ins for one person, leaving out the harness's control sessions.
+    func appSessions(_ actor: Actor) throws -> [[String: Any]] {
+        try control.rows("sessions").filter { $0["actor"] as? String == actor.rawValue && $0["control"] as? Bool != true }
+    }
+
     // MARK: Fixture lookups
 
     func groupID(_ key: String) throws -> String {
@@ -147,17 +164,27 @@ class JourneyCase: XCTestCase {
         return target
     }
 
+    /// Whether a control with this exact label is on screen right now; for asserting that something is absent.
+    func labelled(_ label: String, in container: XCUIElement, timeout: TimeInterval, quiet: Bool) -> Bool {
+        container.descendants(matching: .button).matching(NSPredicate(format: "label == %@", label)).firstMatch.waitForExistence(timeout: timeout)
+    }
+
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
         let keyboard = ((container as? XCUIApplication) ?? messages).keyboards.firstMatch
         let typing = [.textField, .secureTextField, .textView].contains(target.elementType)
-        if keyboard.exists, !typing, !target.isHittable || target.frame.maxY > keyboard.frame.minY {
+        // A field that can be touched keeps the keyboard; anything else under or behind it needs the keyboard gone first.
+        if keyboard.exists, !target.isHittable || (!typing && target.frame.maxY > keyboard.frame.minY) {
             // The way a person puts the keyboard away here: drag the content down into it.
             let surface: XCUIElement = container ?? messages
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
             _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 10 * Self.pace)
         }
         if !target.isHittable {
-            (container ?? messages).swipeUp()
+            // Scroll toward the target, a screen at a time, on a long page.
+            let surface: XCUIElement = container ?? messages
+            for _ in 0..<6 where !target.isHittable {
+                if target.frame.midY > surface.frame.midY { surface.swipeUp() } else { surface.swipeDown() }
+            }
             _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 15 * Self.pace)
             // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
             var last = CGRect.null
@@ -233,9 +260,9 @@ class JourneyCase: XCTestCase {
 
     // MARK: Host app
 
-    /// Signs in through the real phone-code screen with the fake code. A session left by an earlier test in this run
-    /// is signed out first, so the screen under test always starts signed out.
-    func signIn(_ actor: Actor, file: StaticString = #filePath, line: UInt = #line) throws {
+    /// Launches the host app and returns its phone field. A session left by an earlier test in this run is signed
+    /// out first, so the screen under test always starts signed out.
+    func launchHostSignedOut(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         host.launchEnvironment = run.launchEnvironment
         host.launch()
         let phone = element("auth.phone", in: host)
@@ -249,6 +276,12 @@ class JourneyCase: XCTestCase {
             signOut.tap()
             _ = try required("auth.phone", in: host, timeout: 15, "NATIVE-UI-AUTH", file: file, line: line)
         }
+        return phone
+    }
+
+    /// Signs in through the real phone-code screen with the fake code.
+    func signIn(_ actor: Actor, file: StaticString = #filePath, line: UInt = #line) throws {
+        let phone = try launchHostSignedOut(file: file, line: line)
         assertLabel(try required("qa.runtime.endpointPolicy", in: host), "loopback_only", "NATIVE-UI-RUNTIME", file: file, line: line)
         assertLabel(try required("qa.runtime.apiOrigin", in: host), run.manifest.apiOrigin, "NATIVE-UI-RUNTIME", file: file, line: line)
         assertLabel(try required("qa.runtime.networkIsolation", in: host), run.networkIsolation == "denied" ? "denied" : "observed_not_denied", "NATIVE-UI-RUNTIME", file: file, line: line)
