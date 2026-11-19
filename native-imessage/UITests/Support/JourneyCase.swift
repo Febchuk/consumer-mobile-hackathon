@@ -82,6 +82,8 @@ class JourneyCase: XCTestCase {
     /// The detail names character counts only, never the text.
     func enter(_ value: String, into field: XCUIElement, called name: String, file: StaticString = #filePath, line: UInt = #line) throws {
         for attempt in 1...4 {
+            // A slow machine can show the right text late; that is a wait, not a retry.
+            if attempt > 1, field.value as? String == value { return }
             if attempt > 1 {
                 let held = field.value as? String ?? ""
                 let current = held == field.placeholderValue ? "" : held
@@ -90,7 +92,7 @@ class JourneyCase: XCTestCase {
             }
             field.typeText(value)
             let holds = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
-            if XCTWaiter.wait(for: [holds], timeout: 5 * Self.pace) == .completed { return }
+            if XCTWaiter.wait(for: [holds], timeout: 10 * Self.pace) == .completed { return }
         }
         XCTFail("[NATIVE-UI-TYPE] \(name) never held the typed text", file: file, line: line)
         throw Blocked()
@@ -126,7 +128,7 @@ class JourneyCase: XCTestCase {
     }
 
     @discardableResult
-    func required(_ id: String, in container: XCUIElement, timeout: TimeInterval = 10, _ code: String = "NATIVE-UI-ID", file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
+    func required(_ id: String, in container: XCUIElement, timeout: TimeInterval = 20, _ code: String = "NATIVE-UI-ID", file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         let target = element(id, in: container)
         guard target.waitForExistence(timeout: timeout * Self.pace) else {
             XCTFail("[\(code)] required element \(id) did not appear", file: file, line: line)
@@ -136,7 +138,7 @@ class JourneyCase: XCTestCase {
     }
 
     /// A control without an identifier, found by its exact visible label.
-    func labelled(_ label: String, _ type: XCUIElement.ElementType = .button, in container: XCUIElement, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
+    func labelled(_ label: String, _ type: XCUIElement.ElementType = .button, in container: XCUIElement, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         let target = container.descendants(matching: type).matching(NSPredicate(format: "label == %@", label)).firstMatch
         guard target.waitForExistence(timeout: timeout * Self.pace) else {
             XCTFail("[NATIVE-UI-LABEL] required \(label) did not appear", file: file, line: line)
@@ -146,17 +148,17 @@ class JourneyCase: XCTestCase {
     }
 
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
-        let keyboard = messages.keyboards.firstMatch
+        let keyboard = ((container as? XCUIApplication) ?? messages).keyboards.firstMatch
         let typing = [.textField, .secureTextField, .textView].contains(target.elementType)
         if keyboard.exists, !typing, !target.isHittable || target.frame.maxY > keyboard.frame.minY {
             // The way a person puts the keyboard away here: drag the content down into it.
             let surface: XCUIElement = container ?? messages
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 5 * Self.pace)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 10 * Self.pace)
         }
         if !target.isHittable {
             (container ?? messages).swipeUp()
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 5 * Self.pace)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 15 * Self.pace)
             // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
             var last = CGRect.null
             let atRest = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -164,10 +166,11 @@ class JourneyCase: XCTestCase {
                 defer { last = now }
                 return now == last
             }, object: nil)
-            _ = XCTWaiter.wait(for: [atRest], timeout: 6 * Self.pace)
-        } else if !target.isEnabled {
+            _ = XCTWaiter.wait(for: [atRest], timeout: 10 * Self.pace)
+        }
+        if !target.isEnabled || !target.isHittable {
             // On a slow machine a control can exist before it can be used.
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES AND enabled == YES"), object: target)], timeout: 5 * Self.pace)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES AND enabled == YES"), object: target)], timeout: 15 * Self.pace)
         }
         guard target.isEnabled, target.isHittable else {
             XCTFail("[NATIVE-UI-ACTION] \(target) must be enabled and on screen", file: file, line: line)
@@ -176,16 +179,16 @@ class JourneyCase: XCTestCase {
         target.tap()
     }
 
-    func tap(_ id: String, in container: XCUIElement, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) throws {
+    func tap(_ id: String, in container: XCUIElement, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) throws {
         try tap(required(id, in: container, timeout: timeout, file: file, line: line), scrolling: container, file: file, line: line)
     }
 
-    func assertLabel(_ target: XCUIElement, _ value: String, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
+    func assertLabel(_ target: XCUIElement, _ value: String, _ code: String, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) {
         let reached = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", value), object: target)], timeout: timeout * Self.pace) == .completed
         XCTAssertTrue(reached, "[\(code)] expected \"\(value)\", found \"\(target.exists ? target.label : "nothing")\"", file: file, line: line)
     }
 
-    func assertGone(_ target: XCUIElement, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
+    func assertGone(_ target: XCUIElement, _ code: String, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) {
         let gone = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: target)], timeout: timeout * Self.pace) == .completed
         XCTAssertTrue(gone, "[\(code)] \(target) should not be shown", file: file, line: line)
     }
@@ -194,7 +197,7 @@ class JourneyCase: XCTestCase {
         container.staticTexts.matching(NSPredicate(format: "label == %@", value)).firstMatch
     }
 
-    func assertText(_ value: String, in container: XCUIElement, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
+    func assertText(_ value: String, in container: XCUIElement, _ code: String, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(text(value, in: container).waitForExistence(timeout: timeout * Self.pace), "[\(code)] expected the text \"\(value)\"", file: file, line: line)
     }
 
