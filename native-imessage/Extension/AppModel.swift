@@ -102,6 +102,8 @@ final class AppModel: ObservableObject {
     }
 
     func handle(_ failure: Error, loading: Bool = false) {
+        // A load that was cancelled because its screen was replaced has nothing to tell the person.
+        if failure is CancellationError { return }
         if loading, let code = (failure as? APIError)?.code, ["TRANSPORT", "UNKNOWN", "PROVIDER_UNAVAILABLE", "RATE_LIMITED"].contains(code) { canRetryLoad = true }
         if (failure as? APIError)?.code == "AUTH_REQUIRED" {
             if let configuration = try? Config.load(), let session {
