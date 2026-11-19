@@ -1,12 +1,13 @@
 name: Native UI
 
 # The native UI lane (tests/native-sim) on hosted macOS runners, split by test class so every shard finishes well inside
-# the QA build's 60-minute activation (measured: 24 to 35 minutes a shard). Each shard has its own runner, simulator and
-# loopback backend, and the summary job combines their evidence into one result. It is not a required check: in five
-# measured full runs of the 41 tests, two passed (both with recorded retries) and three failed, 21 of 25 shards passing.
-# Five of the six failed tests were Messages left on an empty New Message draft, so the conversation could not be
-# tapped. It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled
-# and manually dispatched runs only from the workflow file on the default branch.
+# the QA build's 60-minute activation (measured: 25 to 36 minutes a shard). Each shard has its own runner, simulator and
+# loopback backend, and the summary job combines their evidence into one result. A failed test is run once more by
+# itself; a pass on the second attempt is recorded and the run reports passed-with-retries, never passed. Measured with
+# that retry on 6e0a572: five of five full runs of the 41 tests green, four of them without a second attempt of any
+# test. Without it, on the same tests, two of five were green. It is not a required check. It runs when asked, nightly,
+# and after native changes land on the integration branch. GitHub starts scheduled and manually dispatched runs only
+# from the workflow file on the default branch.
 on:
   workflow_dispatch:
   schedule:
@@ -31,8 +32,9 @@ jobs:
   shard:
     name: ${{ matrix.shard }}
     runs-on: macos-26
-    # The QA build stops accepting its launch manifest 60 minutes after the run starts.
-    timeout-minutes: 55
+    # The QA build stops accepting its launch manifest 60 minutes after the lane issues it, about nine minutes into the
+    # job, and the lane itself stops retrying failed tests eight minutes before that. This limit only catches a hang.
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
@@ -119,10 +121,12 @@ jobs:
           only=()
           for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
+          # A failed test is run once more by itself; a pass on that second attempt is recorded as a test-retry and the
+          # shard reports passed-with-retries, never passed.
           # Scale 3 did no better than 2 when measured (2 of 5 shards passed against 3 of 5).
           env -i PATH="$lanePath" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
             node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
-            --wait-scale "$WAIT_SCALE" "${only[@]}" || status=$?
+            --wait-scale "$WAIT_SCALE" --retry-failed-once "${only[@]}" || status=$?
           kill "$sampler" || true
           exit "$status"
       - name: Report the lane's result
@@ -153,15 +157,15 @@ jobs:
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
-            !${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+            !${{ runner.temp }}/native-ui-evidence/*.xcresult
           if-no-files-found: warn
           retention-days: 14
-      - name: Keep the result bundle
+      - name: Keep the result bundles (the first session and one per retried test)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: native-ui-xcresult-${{ matrix.shard }}
-          path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          path: ${{ runner.temp }}/native-ui-evidence/*.xcresult
           if-no-files-found: warn
           retention-days: 14
 
@@ -186,7 +190,7 @@ jobs:
           const root = process.env.EVIDENCE_ROOT, prefix = process.env.PREFIX;
           const rows = process.env.SHARDS.split(" ").map((shard) => {
             const file = path.join(root, prefix + shard, "native-ui-evidence", "evidence.json");
-            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [], appCallFailures: [] };
+            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [], appCallFailures: [], testRetries: [], notRetried: [] };
             const e = JSON.parse(fs.readFileSync(file, "utf8"));
             const cases = e.tests?.cases ?? [];
             return {
@@ -196,7 +200,7 @@ jobs:
               simulator: e.simulator ? "iOS " + e.simulator.runtimeVersion + " (" + e.simulator.runtimeBuild + ")" : "none",
               minutes: Math.round((Date.parse(e.finishedAt) - Date.parse(e.startedAt)) / 6000) / 10,
               testMinutes: Math.round(cases.reduce((sum, test) => sum + test.seconds, 0) / 6) / 10,
-              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], appCallFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome !== "injected"), injectedFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome === "injected").length, latency: e.latencyBudgets?.measurements ?? [],
+              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], testRetries: e.tests?.testRetries ?? [], notRetried: e.tests?.notRetried ?? [], appCallFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome !== "injected"), injectedFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome === "injected").length, latency: e.latencyBudgets?.measurements ?? [],
               classes: [...new Set(cases.map((test) => test.id.split("/")[0]))], failures: cases.filter((test) => test.result === "failed").map((test) => test.id),
             };
           });
@@ -207,21 +211,25 @@ jobs:
           const kinds = {};
           for (const note of rows.flatMap((row) => row.retries)) kinds[note.kind] = (kinds[note.kind] ?? 0) + 1;
           const byKind = Object.entries(kinds).map(([kind, count]) => count + " " + kind).join(", ") || "none";
+          const testRetryCounts = {};
+          for (const retry of rows.flatMap((row) => row.testRetries)) testRetryCounts[retry.test] = (testRetryCounts[retry.test] ?? 0) + 1;
           const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
           const lines = [
             "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
-            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + ") and " + total("appCallFailures") + " failed app calls (not counting " + rows.reduce((sum, row) => sum + (row.injectedFailures ?? 0), 0) + " the tests injected) across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
+            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + "), of which " + Object.keys(testRetryCounts).length + " were second attempts of a failed test, and " + total("appCallFailures") + " failed app calls (not counting " + rows.reduce((sum, row) => sum + (row.injectedFailures ?? 0), 0) + " the tests injected) across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
             "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
             ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
             ...(missing.length ? ["Journey classes in the repository that no shard ran: " + missing.join(", ") + ". Add them to the matrix.", ""] : []),
             ...rows.flatMap((row) => row.failures.map((id) => "- Failed: " + id)),
-            ...rows.flatMap((row) => row.retries.map((note) => "- Retry in " + row.shard + ": " + JSON.stringify(note))),
+            ...rows.flatMap((row) => row.testRetries.map((retry) => "- Test retried in " + row.shard + ": " + retry.test + (retry.passedOnRetry ? " passed on its second attempt" : " failed twice") + "; first failure: " + (retry.firstAttempt?.failures?.[0] ?? "no message captured"))),
+            ...rows.flatMap((row) => row.notRetried.map((skipped) => "- Not retried in " + row.shard + ": " + skipped.test + " (" + skipped.reason + ")")),
+            ...rows.flatMap((row) => row.retries.filter((note) => note.kind !== "test-retry").map((note) => "- Retry in " + row.shard + ": " + JSON.stringify(note))),
             ...rows.flatMap((row) => row.appCallFailures.map(({ at, ...failure }) => "- Failed app call in " + row.shard + ": " + JSON.stringify(failure))),
             ...rows.flatMap((row) => row.appOutsideLoopback?.length ? ["- App connection outside loopback in " + row.shard + ": " + row.appOutsideLoopback.join(", ")] : []), "",
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));
-          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, retriesByKind: kinds, shards: rows }, null, 2) + "\n");
+          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, retriesByKind: kinds, testRetryCounts, shards: rows }, null, 2) + "\n");
           process.exitCode = overall === "failed" ? 1 : 0;
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
