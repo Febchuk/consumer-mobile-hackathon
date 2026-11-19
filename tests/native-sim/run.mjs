@@ -5,13 +5,13 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
-import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, inheritedCredentials, networkIsolation, ports } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, ports } from "./guard.mjs";
 import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime } from "./simulator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +45,45 @@ const run = (command, args, extra = {}) => execFileSync(command, args, { encodin
 
 const guard = spawnSync(process.execPath, ["--test", resolve(here, "guard.test.mjs")], { cwd: root, env: environment, stdio: "inherit" });
 if (guard.status !== 0) { console.error("[native-sim] The loopback guard's own tests failed; nothing was started."); process.exit(1); }
+
+// A QA activation lasts at most one hour, and the whole suite takes longer than that. A run without --only therefore
+// runs the journey classes in parts, each a complete run of this script with its own simulator, backend and activation,
+// and writes one combined evidence.json. Every class found in the UI test sources lands in exactly one part.
+if (!options("--only").length && !flag("--demo") && !flag("--backend-only")) {
+  const sources = resolve(native, "UITests");
+  const classes = readdirSync(sources).filter((name) => name.endsWith(".swift")).flatMap((name) => {
+    const text = readFileSync(resolve(sources, name), "utf8");
+    return [...text.matchAll(/^final class (\w+): JourneyCase/gm)].map((match) => ({ name: match[1], tests: (text.match(/^ {4}func test\w+\(\)/gm) ?? []).length }));
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  const parts = planParts(classes);
+  const combinedOutput = resolve(option("--output") ?? resolve(realpathSync(homedir()) + "/.capy/work", "native-sim-" + randomUUID().slice(0, 8).toUpperCase()));
+  assert.ok(!existsSync(combinedOutput), "The output directory already exists: " + combinedOutput);
+  mkdirSync(combinedOutput, { recursive: true, mode: 0o700 });
+  const passThrough = argv.filter((value, index) => value !== "--output" && argv[index - 1] !== "--output");
+  const combined = { lane: "native-sim", networkIsolation, startedAt: new Date().toISOString(), status: "blocked", plannedParts: parts.map((part) => part.map((item) => item.name)), parts: [] };
+  let current; let stopped;
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => { stopped = signal; current?.kill("SIGTERM"); });
+  for (const [index, part] of parts.entries()) {
+    if (stopped) break;
+    const directory = resolve(combinedOutput, "part-" + (index + 1));
+    say("part " + (index + 1) + " of " + parts.length + ": " + part.map((item) => item.name).join(", "));
+    current = spawn(process.execPath, [fileURLToPath(import.meta.url), ...passThrough, ...part.flatMap((item) => ["--only", item.name]), "--output", directory], { cwd: root, env: process.env, stdio: "inherit" });
+    const code = await new Promise((accept) => current.once("exit", accept));
+    let evidence = null;
+    try { evidence = JSON.parse(readFileSync(resolve(directory, "evidence.json"), "utf8")); } catch { /* a part that wrote no evidence is recorded as such */ }
+    combined.parts.push({ part: index + 1, classes: part.map((item) => item.name), exitCode: code, directory, status: evidence?.status ?? "no-evidence", sourceRevision: evidence?.sourceRevision ?? null, simulator: evidence?.simulator ?? null, toolchain: evidence?.toolchain ?? null, tests: evidence?.tests ? { passed: evidence.tests.passed, failed: evidence.tests.failed, blocked: evidence.tests.blocked, cases: evidence.tests.cases } : null, latencyBudgets: evidence?.latencyBudgets ?? null, retries: evidence?.retries ?? [], waitScale: evidence?.waitScale ?? null, appContactedNonLoopback: evidence?.safety?.outboundNetwork?.appContactedNonLoopback ?? null });
+  }
+  const statuses = combined.parts.map((part) => part.status);
+  combined.interruptedBy = stopped ?? null;
+  combined.status = combineStatuses(statuses, parts.length);
+  combined.totals = { passed: 0, failed: 0, blocked: 0, retries: 0 };
+  for (const part of combined.parts) { combined.totals.passed += part.tests?.passed ?? 0; combined.totals.failed += part.tests?.failed ?? 0; combined.totals.blocked += part.tests?.blocked ?? 0; combined.totals.retries += part.retries.length; }
+  combined.notRun = ["MessagesDriveTests", "ProvisioningDriveTests"].map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
+  combined.finishedAt = new Date().toISOString();
+  writeFileSync(resolve(combinedOutput, "evidence.json"), JSON.stringify(combined, null, 2) + "\n", { mode: 0o600 });
+  say("all parts: status " + combined.status + " (outbound network " + networkIsolation + ", not denied): " + combined.totals.passed + " passed, " + combined.totals.failed + " failed, " + combined.totals.blocked + " blocked, " + combined.totals.retries + " recorded retries; evidence in " + combinedOutput);
+  process.exit(combined.status === "passed" ? 0 : 1);
+}
 
 const runID = randomUUID().toUpperCase();
 const scratchRoot = realpathSync(homedir()) + "/.capy/work";

@@ -41,6 +41,24 @@ export function appConnections(rows) {
   return rows.filter((row) => /^CalledIt/.test(row.process));
 }
 
+// Packs the journey classes, in name order, into runs small enough to finish inside one QA activation.
+export function planParts(classes, limit = 16) {
+  const parts = [];
+  for (const item of classes) {
+    assert.ok(item.tests > 0 && item.tests <= limit, item.name + " has " + item.tests + " tests; a class must have between 1 and " + limit);
+    const open = parts.find((part) => part.reduce((sum, member) => sum + member.tests, 0) + item.tests <= limit);
+    if (open) open.push(item); else parts.push([item]);
+  }
+  return parts;
+}
+
+// The whole run is only as good as its worst part, and a missing part is never a pass.
+export function combineStatuses(statuses, planned) {
+  if (statuses.length !== planned || statuses.some((status) => !["passed", "passed-with-retries", "failed"].includes(status))) return statuses.includes("failed") ? "failed" : "blocked";
+  if (statuses.includes("failed")) return "failed";
+  return statuses.includes("passed-with-retries") ? "passed-with-retries" : "passed";
+}
+
 export function buildManifest({ runID, simulatorUDID, nativeSourceRevision, backendSourceRevision, apiOrigin, cardOrigin, fixtureSetID, configVersion, now, lifetimeMs }) {
   assertLoopbackOrigin(apiOrigin);
   assertLoopbackOrigin(cardOrigin);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, inheritedCredentials, networkIsolation } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts } from "./guard.mjs";
 
 test("only canonical numeric loopback HTTP origins are accepted", () => {
   assert.equal(assertLoopbackOrigin("http://127.0.0.1:8199"), "http://127.0.0.1:8199");
@@ -50,4 +50,22 @@ test("the observed-network code cannot be compiled into a Debug or Release build
   }
   assert.match(block("QA"), /SWIFT_ACTIVE_COMPILATION_CONDITIONS: "\$\(inherited\) QA"/);
   assert.match(readFileSync(new URL("../../native-imessage/Shared/QANetworkIsolation.swift", import.meta.url), "utf8"), /^#if QA\n/);
+});
+
+test("every class lands in exactly one part and no part outgrows an activation", () => {
+  const classes = [{ name: "A", tests: 7 }, { name: "B", tests: 6 }, { name: "C", tests: 4 }, { name: "D", tests: 3 }, { name: "E", tests: 16 }];
+  const parts = planParts(classes);
+  assert.deepEqual(parts.flat().map((item) => item.name).sort(), ["A", "B", "C", "D", "E"]);
+  for (const part of parts) assert.ok(part.reduce((sum, item) => sum + item.tests, 0) <= 16);
+  assert.throws(() => planParts([{ name: "Huge", tests: 17 }]));
+  assert.throws(() => planParts([{ name: "Empty", tests: 0 }]));
+});
+
+test("a combined run is never better than its worst or missing part", () => {
+  assert.equal(combineStatuses(["passed", "passed"], 2), "passed");
+  assert.equal(combineStatuses(["passed", "passed-with-retries"], 2), "passed-with-retries");
+  assert.equal(combineStatuses(["passed", "failed"], 2), "failed");
+  assert.equal(combineStatuses(["passed"], 2), "blocked");
+  assert.equal(combineStatuses(["passed", "blocked"], 2), "blocked");
+  assert.equal(combineStatuses(["passed", "no-evidence"], 2), "blocked");
 });
