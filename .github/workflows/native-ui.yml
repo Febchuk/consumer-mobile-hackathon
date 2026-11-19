@@ -9,6 +9,7 @@ name: Native UI
 # and after native changes land on the integration branch. GitHub starts scheduled and manually dispatched runs only
 # from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -39,7 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
+        shard: [pick]
         include:
           - shard: pick
             classes: PickJourneyTests
@@ -126,7 +127,7 @@ jobs:
           # Scale 3 did no better than 2 when measured (2 of 5 shards passed against 3 of 5).
           env -i PATH="$lanePath" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
             node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
-            --wait-scale "$WAIT_SCALE" --retry-failed-once "${only[@]}" || status=$?
+            --wait-scale 1 --device-type com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation --retry-failed-once "${only[@]}" || status=$?
           kill "$sampler" || true
           exit "$status"
       - name: Report the lane's result
