@@ -59,6 +59,67 @@ export function combineStatuses(statuses, planned) {
   return statuses.includes("passed-with-retries") ? "passed-with-retries" : "passed";
 }
 
+// One xcodebuild attempt's results, read from its output.
+export function parseTestCases(log) {
+  return [...log.matchAll(/Test Case '-\[CalledItUITests\.(\w+) (\w+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)/g)].map((match) => ({ id: match[1] + "/" + match[2], result: match[3], seconds: Number(match[4]) }));
+}
+
+// The failure messages xcodebuild printed for one test, without the file path in front.
+export function failureMessages(log, id) {
+  const [suite, name] = id.split("/");
+  const marker = "error: -[CalledItUITests." + suite + " " + name + "] : ";
+  return log.split("\n").filter((line) => line.includes(marker)).map((line) => line.slice(line.indexOf(marker) + marker.length).trim().slice(0, 400));
+}
+
+// The one-time retry of a failed test is for slow shared runners only. The reference run is the zero-retry release gate.
+export function retryPolicy({ retryFailedOnce, referenceHardware }) {
+  assert.ok(!(retryFailedOnce && referenceHardware), "--retry-failed-once is refused with --reference-hardware: the reference run is the zero-retry release gate");
+  return Boolean(retryFailedOnce);
+}
+
+/**
+ * Folds second attempts into the first results. A test counts as passed only if its second attempt passed, it then carries
+ * attempts: 2 and its first failure, and every second attempt, passed or not, is returned as a retry record. A failed test
+ * with no second attempt stays failed.
+ */
+export function applyTestRetries(cases, secondAttempts) {
+  const retries = [];
+  const settled = cases.map((test) => {
+    const again = secondAttempts.get(test.id);
+    if (test.result !== "failed" || !again) return test;
+    const firstAttempt = { result: "failed", seconds: test.seconds, failures: test.failures ?? [], resultBundle: test.resultBundle ?? null };
+    const secondAttempt = { result: again.result === "passed" ? "passed" : "failed", seconds: again.seconds ?? null, failures: again.failures ?? [], resultBundle: again.resultBundle ?? null };
+    retries.push({ test: test.id, passedOnRetry: secondAttempt.result === "passed", firstAttempt, secondAttempt });
+    return { id: test.id, result: secondAttempt.result, seconds: secondAttempt.seconds ?? test.seconds, attempts: 2, firstAttempt, ...(secondAttempt.result === "failed" ? { failures: secondAttempt.failures } : {}) };
+  });
+  return { cases: settled, retries };
+}
+
+// The tests a selection names, from the classes found in the sources; null when it names a class the sources do not have.
+export function expectedTests(only, classes) {
+  const ids = [];
+  for (const item of only) {
+    const [suite, test] = item.replace(/^CalledItUITests\//, "").split("/");
+    const tests = classes.get(suite);
+    if (!tests) return null;
+    ids.push(...(test ? [suite + "/" + test] : tests.map((name) => suite + "/" + name)));
+  }
+  return ids;
+}
+
+// How often each test needed its retry, so a test that needs one again and again across runs can be seen.
+export function testRetryCounts(retries) {
+  const counts = {};
+  for (const retry of retries) counts[retry.test] = (counts[retry.test] ?? 0) + 1;
+  return counts;
+}
+
+// A reference-hardware record must never contain a retried test, whatever produced it.
+export function referenceRunHasTestRetry(evidence) {
+  if (evidence.latencyBudgets?.mode !== "enforced") return false;
+  return (evidence.retries ?? []).some((retry) => retry.kind === "test-retry") || (evidence.tests?.testRetries ?? []).length > 0 || (evidence.tests?.cases ?? []).some((test) => (test.attempts ?? 1) > 1);
+}
+
 export function buildManifest({ runID, simulatorUDID, nativeSourceRevision, backendSourceRevision, apiOrigin, cardOrigin, fixtureSetID, configVersion, now, lifetimeMs }) {
   assertLoopbackOrigin(apiOrigin);
   assertLoopbackOrigin(cardOrigin);
