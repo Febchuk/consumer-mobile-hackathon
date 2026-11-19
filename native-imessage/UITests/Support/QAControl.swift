@@ -88,6 +88,11 @@ struct QAControl {
         try inspect()[table] as? [[String: Any]] ?? []
     }
 
+    /// Writes a retry or a measurement into the run's evidence. Never pass private text here.
+    func note(test: String, kind: String, detail: String) throws {
+        try call("note", ["test": test, "kind": kind, "detail": detail])
+    }
+
     /// The public functions the app has called since the last reset, in order, without their arguments.
     func calls() throws -> [[String: Any]] {
         try call("calls") as? [[String: Any]] ?? []

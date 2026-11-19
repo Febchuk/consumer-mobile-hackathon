@@ -24,10 +24,16 @@ const flag = (name) => argv.includes(name);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const say = (message) => console.log("[native-sim] " + message);
 const fixtureSetID = "synthetic-v0-native-journeys";
+// Product latency budgets are enforced only when the machine is declared as reference hardware; otherwise they are
+// measured and recorded. Waits in the test helpers can be stretched for a slower machine without touching a budget.
+const referenceHardware = flag("--reference-hardware");
+const waitScale = Number(option("--wait-scale") ?? 1);
+assert.ok(Number.isFinite(waitScale) && waitScale >= 1 && waitScale <= 8, "--wait-scale takes a number from 1 to 8");
+assert.ok(!(referenceHardware && waitScale !== 1), "Reference hardware runs at wait scale 1");
 const configVersion = "native-sim.1";
 
 if (flag("--help")) {
-  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--demo] [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator]");
+  console.log("Usage: node tests/native-sim/run.mjs [--only <Class[/test]>]... [--demo] [--backend-only] [--output <dir>] [--runtime <id|version>] [--device-type <id>] [--keep-simulator] [--reference-hardware] [--wait-scale <1-8>]");
   process.exit(0);
 }
 
@@ -47,7 +53,7 @@ const output = resolve(option("--output") ?? resolve(scratchRoot, "native-sim-" 
 assert.ok(!existsSync(output), "The output directory already exists: " + output);
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
-const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
+const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, latencyBudgets: { mode: referenceHardware ? "enforced" : "measured-only", measurements: [] }, waitScale, retries: [], strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
 let backend; let closeBackend; let simulator; let sampler; let exitCode = 1;
 const egress = new Map();
 const appEgress = new Set();
@@ -223,7 +229,7 @@ async function main() {
   if (!only.length) evidence.notRun = provisionerOnly.map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
   const bundle = resolve(output, "native-ui.xcresult");
   say("running " + selection.join(" "));
-  const testEnvironment = { ...environment, TEST_RUNNER_CALLED_IT_QA_RUN_ID: runID, TEST_RUNNER_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64"), TEST_RUNNER_CALLED_IT_QA_CONTROL_URL: backend.controlOrigin + "/control", TEST_RUNNER_CALLED_IT_QA_CONTROL_TOKEN: backend.controlToken };
+  const testEnvironment = { ...environment, TEST_RUNNER_CALLED_IT_QA_RUN_ID: runID, TEST_RUNNER_CALLED_IT_QA_MANIFEST_BASE64: manifestBytes.toString("base64"), TEST_RUNNER_CALLED_IT_QA_CONTROL_URL: backend.controlOrigin + "/control", TEST_RUNNER_CALLED_IT_QA_CONTROL_TOKEN: backend.controlToken, TEST_RUNNER_CALLED_IT_QA_WAIT_SCALE: String(waitScale), ...(referenceHardware ? { TEST_RUNNER_CALLED_IT_QA_REFERENCE_HARDWARE: "1" } : {}) };
   const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
   child = tests;
   let testLog = "";
@@ -253,6 +259,13 @@ try {
     evidence.safety.outboundNetwork = { mode: networkIsolation, enforced: false, appContactedNonLoopback: [...appEgress], reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
     if (!flag("--keep-simulator")) evidence.simulator.deleted = destroySimulator(simulator.udid);
   }
+  if (backend) {
+    const notes = backend.notes();
+    evidence.latencyBudgets.measurements = notes.filter((note) => note.kind === "latency");
+    evidence.retries = notes.filter((note) => note.kind !== "latency");
+    // A pass that needed a retry is never reported as a clean pass.
+    if (evidence.status === "passed" && evidence.retries.length) evidence.status = "passed-with-retries";
+  }
   if (closeBackend) {
     evidence.backend ??= {};
     try { const retained = await closeBackend(); log("backend.log", retained.backendLog); evidence.backend.providerStats = retained.providerStats; evidence.backend.scratchRemoved = true; }
@@ -260,6 +273,6 @@ try {
   }
   evidence.finishedAt = new Date().toISOString();
   log("evidence.json", JSON.stringify(evidence, null, 2) + "\n");
-  say("status " + evidence.status + " (outbound network " + networkIsolation + ", not denied)" + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed, " + evidence.tests.blocked + " blocked" : "") + "; evidence in " + output);
+  say("status " + evidence.status + " (outbound network " + networkIsolation + ", not denied; latency budgets " + evidence.latencyBudgets.mode + "; " + evidence.retries.length + " recorded retries)" + (evidence.tests ? ": " + evidence.tests.passed + " passed, " + evidence.tests.failed + " failed, " + evidence.tests.blocked + " blocked" : "") + "; evidence in " + output);
 }
 process.exit(exitCode);

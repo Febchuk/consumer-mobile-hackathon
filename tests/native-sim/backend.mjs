@@ -55,6 +55,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const redact = (input) => { let text = String(input); for (const value of secrets) text = text.replaceAll(value, "[redacted]"); return text; };
   let backend; let provider; let gateway; let control; let backendLog = ""; let closing;
   const calls = [];
+  const notes = [];
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
 
@@ -225,6 +226,11 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         return { ...state, bets: state.bets.map((bet) => ({ ...bet, key: keys[bet.id] ?? null })), picks: state.picks.map((pick) => ({ ...pick, bet: keys[pick.betId] ?? pick.betId })), ledger: state.ledger.map((row) => ({ ...row, bet: keys[row.betId] ?? row.betId })), provider: { starts: provider.stats.starts, checks: provider.stats.checks, invalidCodes: provider.stats.invalidCodes } };
       },
       async calls() { return calls.slice(); },
+      // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
+      async note(input) {
+        assert.ok(["retype", "relaunch", "latency"].includes(input.kind), "Unknown note kind");
+        notes.push({ at: Date.now(), test: String(input.test).slice(0, 200), kind: input.kind, detail: redact(String(input.detail).slice(0, 300)) });
+      },
       // The click-through scenario: points on both boards, Cora's turn in G1, an open bet to pick in G2, a hidden bet
       // about Cora in G1 and a shared goal in G1 waiting for one more confirmation.
       async demo() {
@@ -257,7 +263,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
     track(control);
     await listen(gateway, ports.api);
     await listen(control, ports.control);
-    return Object.freeze({ origin, apiOrigin, cardOrigin, controlOrigin, controlToken, operations, redact, close, backendLog: () => redact(backendLog), providerStats: () => provider.stats, pid: backend.pid });
+    return Object.freeze({ origin, apiOrigin, cardOrigin, controlOrigin, controlToken, operations, redact, close, notes: () => notes.slice(), backendLog: () => redact(backendLog), providerStats: () => provider.stats, pid: backend.pid });
   } catch (error) {
     const retained = await close().catch(() => ({ backendLog: redact(backendLog) }));
     const failure = new Error("The local backend failed to start: " + redact(error?.message ?? error));

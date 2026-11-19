@@ -22,6 +22,12 @@ class JourneyCase: XCTestCase {
     /// The simulator's two built-in synthetic conversations. They exist on every fresh simulator and reach nobody.
     static let conversations = ["+1 (888) 555-1212", "+1 (555) 564-8583"]
 
+    /// Multiplies every wait in these helpers. 1 on the reference Mac; the harness raises it for a slower machine
+    /// (--wait-scale). It never changes a product latency budget: those go through `budget`.
+    static let pace: Double = min(8, max(1, Double(ProcessInfo.processInfo.environment["CALLED_IT_QA_WAIT_SCALE"] ?? "") ?? 1))
+    /// True only when the harness declared the machine as reference hardware (--reference-hardware).
+    static let referenceHardware = ProcessInfo.processInfo.environment["CALLED_IT_QA_REFERENCE_HARDWARE"] == "1"
+
     private(set) var run: NativeQARun!
     private(set) var control: QAControl!
     private(set) var host: XCUIApplication!
@@ -56,6 +62,40 @@ class JourneyCase: XCTestCase {
         if messages.state == .runningForeground, let content = try? visibleContent(of: messages) { print("JOURNEY-DIAGNOSTIC screen:\n" + content + "\nJOURNEY-DIAGNOSTIC end") }
     }
 
+    // MARK: Evidence
+
+    /// A product latency budget. The time is always written to the run's evidence; it fails the test only on declared
+    /// reference hardware, so a slow machine can neither pass it by luck nor fail it for being slow.
+    func budget(_ code: String, _ what: String, seconds: Double, limit: Double, file: StaticString = #filePath, line: UInt = #line) throws {
+        let mode = Self.referenceHardware ? "enforced" : "measured only"
+        try control.note(test: name, kind: "latency", detail: "\(code) \(what): \(String(format: "%.1f", seconds)) s against a budget of \(String(format: "%.0f", limit)) s, \(mode)")
+        if Self.referenceHardware { XCTAssertLessThan(seconds, limit, "[\(code)] \(what)", file: file, line: line) }
+    }
+
+    /// Every retry a helper makes is written to the run's evidence, so a retried pass cannot read as a clean one.
+    func recordRetry(_ kind: String, _ detail: String) throws {
+        try control.note(test: name, kind: kind, detail: detail)
+    }
+
+    /// Types into a focused field, then checks the field holds exactly that text; under load the simulator drops
+    /// keystrokes. A short or wrong value is cleared and typed again, at most three more times, each one recorded.
+    /// The detail names character counts only, never the text.
+    func enter(_ value: String, into field: XCUIElement, called name: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        for attempt in 1...4 {
+            if attempt > 1 {
+                let held = field.value as? String ?? ""
+                let current = held == field.placeholderValue ? "" : held
+                try recordRetry("retype", "\(name) held \(current.count) of \(value.count) characters on attempt \(attempt - 1)")
+                if !current.isEmpty { field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)) }
+            }
+            field.typeText(value)
+            let holds = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
+            if XCTWaiter.wait(for: [holds], timeout: 5 * Self.pace) == .completed { return }
+        }
+        XCTFail("[NATIVE-UI-TYPE] \(name) never held the typed text", file: file, line: line)
+        throw Blocked()
+    }
+
     // MARK: Fixture lookups
 
     func groupID(_ key: String) throws -> String {
@@ -88,7 +128,7 @@ class JourneyCase: XCTestCase {
     @discardableResult
     func required(_ id: String, in container: XCUIElement, timeout: TimeInterval = 10, _ code: String = "NATIVE-UI-ID", file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         let target = element(id, in: container)
-        guard target.waitForExistence(timeout: timeout) else {
+        guard target.waitForExistence(timeout: timeout * Self.pace) else {
             XCTFail("[\(code)] required element \(id) did not appear", file: file, line: line)
             throw Blocked()
         }
@@ -98,7 +138,7 @@ class JourneyCase: XCTestCase {
     /// A control without an identifier, found by its exact visible label.
     func labelled(_ label: String, _ type: XCUIElement.ElementType = .button, in container: XCUIElement, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         let target = container.descendants(matching: type).matching(NSPredicate(format: "label == %@", label)).firstMatch
-        guard target.waitForExistence(timeout: timeout) else {
+        guard target.waitForExistence(timeout: timeout * Self.pace) else {
             XCTFail("[NATIVE-UI-LABEL] required \(label) did not appear", file: file, line: line)
             throw Blocked()
         }
@@ -112,11 +152,11 @@ class JourneyCase: XCTestCase {
             // The way a person puts the keyboard away here: drag the content down into it.
             let surface: XCUIElement = container ?? messages
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 5)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 5 * Self.pace)
         }
         if !target.isHittable {
             (container ?? messages).swipeUp()
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 5)
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 5 * Self.pace)
             // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
             var last = CGRect.null
             let atRest = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -124,7 +164,10 @@ class JourneyCase: XCTestCase {
                 defer { last = now }
                 return now == last
             }, object: nil)
-            _ = XCTWaiter.wait(for: [atRest], timeout: 6)
+            _ = XCTWaiter.wait(for: [atRest], timeout: 6 * Self.pace)
+        } else if !target.isEnabled {
+            // On a slow machine a control can exist before it can be used.
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES AND enabled == YES"), object: target)], timeout: 5 * Self.pace)
         }
         guard target.isEnabled, target.isHittable else {
             XCTFail("[NATIVE-UI-ACTION] \(target) must be enabled and on screen", file: file, line: line)
@@ -138,12 +181,12 @@ class JourneyCase: XCTestCase {
     }
 
     func assertLabel(_ target: XCUIElement, _ value: String, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
-        let reached = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", value), object: target)], timeout: timeout) == .completed
+        let reached = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", value), object: target)], timeout: timeout * Self.pace) == .completed
         XCTAssertTrue(reached, "[\(code)] expected \"\(value)\", found \"\(target.exists ? target.label : "nothing")\"", file: file, line: line)
     }
 
     func assertGone(_ target: XCUIElement, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
-        let gone = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: target)], timeout: timeout) == .completed
+        let gone = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: target)], timeout: timeout * Self.pace) == .completed
         XCTAssertTrue(gone, "[\(code)] \(target) should not be shown", file: file, line: line)
     }
 
@@ -152,7 +195,7 @@ class JourneyCase: XCTestCase {
     }
 
     func assertText(_ value: String, in container: XCUIElement, _ code: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(text(value, in: container).waitForExistence(timeout: timeout), "[\(code)] expected the text \"\(value)\"", file: file, line: line)
+        XCTAssertTrue(text(value, in: container).waitForExistence(timeout: timeout * Self.pace), "[\(code)] expected the text \"\(value)\"", file: file, line: line)
     }
 
     /// Every label, identifier and value in one snapshot of the app's accessibility tree, to prove a private string is
@@ -195,7 +238,7 @@ class JourneyCase: XCTestCase {
         let phone = element("auth.phone", in: host)
         let signOut = element("auth.signOut", in: host)
         let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in phone.exists || signOut.exists }, object: nil)
-        guard XCTWaiter.wait(for: [settled], timeout: 20) == .completed else {
+        guard XCTWaiter.wait(for: [settled], timeout: 20 * Self.pace) == .completed else {
             XCTFail("[NATIVE-UI-AUTH] the host app showed neither sign-in nor a session", file: file, line: line)
             throw Blocked()
         }
@@ -207,11 +250,11 @@ class JourneyCase: XCTestCase {
         assertLabel(try required("qa.runtime.apiOrigin", in: host), run.manifest.apiOrigin, "NATIVE-UI-RUNTIME", file: file, line: line)
         assertLabel(try required("qa.runtime.networkIsolation", in: host), run.networkIsolation == "denied" ? "denied" : "observed_not_denied", "NATIVE-UI-RUNTIME", file: file, line: line)
         phone.tap()
-        phone.typeText(actor.phone)
+        try enter(actor.phone, into: phone, called: "auth.phone", file: file, line: line)
         try tap("auth.requestCode", in: host, file: file, line: line)
         let code = try required("auth.code", in: host, timeout: 15, "NATIVE-UI-AUTH", file: file, line: line)
         code.tap()
-        code.typeText("000000")
+        try enter("000000", into: code, called: "auth.code", file: file, line: line)
         try tap("auth.verify", in: host, file: file, line: line)
         _ = try required("auth.returnToMessages", in: host, timeout: 15, "NATIVE-UI-AUTH", file: file, line: line)
         assertLabel(try required("qa.runtime.attestationState", in: host), "attested", "NATIVE-UI-ATTESTATION", file: file, line: line)
@@ -224,33 +267,51 @@ class JourneyCase: XCTestCase {
     /// then requires the extension itself.
     func openExtension(conversation index: Int = 0, file: StaticString = #filePath, line: UInt = #line) throws {
         let title = Self.conversations[index]
-        messages.launch()
+        try launchMessages(file: file, line: line)
         // System onboarding sheets a fresh simulator may show: "Shared with You" (OK) and "Apple Intelligence in Messages" (Continue).
         let firstRun = messages.buttons.matching(NSPredicate(format: "label IN %@", ["OK", "Continue"])).firstMatch
         let cell = messages.cells.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
         let field = element("messageBodyField", in: messages)
         let started = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in firstRun.exists || cell.exists || field.exists }, object: nil)
-        guard XCTWaiter.wait(for: [started], timeout: 30) == .completed else {
+        guard XCTWaiter.wait(for: [started], timeout: 30 * Self.pace) == .completed else {
             XCTFail("[NATIVE-UI-MESSAGES] Messages showed no synthetic conversation", file: file, line: line)
             throw Blocked()
         }
         // A sheet can arrive a moment after the list it covers, and one can follow another.
-        while firstRun.waitForExistence(timeout: field.exists ? 0 : 4) { firstRun.tap() }
+        while firstRun.waitForExistence(timeout: field.exists ? 0 : 4 * Self.pace) { firstRun.tap() }
         if !field.exists || element("ConversationTitle", in: messages).label != title {
             let back = element("BackButton", in: messages)
-            if !cell.waitForExistence(timeout: 3), back.exists { back.tap() }
-            guard cell.waitForExistence(timeout: 10) else {
-                XCTFail("[NATIVE-UI-MESSAGES] synthetic conversation \(title) is missing", file: file, line: line)
+            if !cell.waitForExistence(timeout: 3 * Self.pace), back.exists { back.tap() }
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == YES AND hittable == YES"), object: cell)
+            guard XCTWaiter.wait(for: [ready], timeout: 15 * Self.pace) == .completed else {
+                XCTFail("[NATIVE-UI-MESSAGES] synthetic conversation \(title) is missing or cannot be tapped", file: file, line: line)
                 throw Blocked()
             }
             cell.tap()
         }
         assertLabel(try required("ConversationTitle", in: messages, file: file, line: line), title, "NATIVE-UI-MESSAGES", file: file, line: line)
-        if !element("navigation.settings", in: messages).waitForExistence(timeout: 2) {
+        if !element("navigation.settings", in: messages).waitForExistence(timeout: 2 * Self.pace) {
             try tap(labelled("add", in: messages, file: file, line: line), file: file, line: line)
             try tap(labelled("Called It", .cell, in: messages, file: file, line: line), file: file, line: line)
         }
         _ = try required("navigation.settings", in: messages, timeout: 30, "NATIVE-UI-EXTENSION", file: file, line: line)
+    }
+
+    /// Messages can time out on launch when the machine is overloaded. It gets a bounded wait and exactly one relaunch,
+    /// and the relaunch is written to the run's evidence.
+    private func launchMessages(file: StaticString, line: UInt) throws {
+        let tolerated = XCTExpectedFailure.Options()
+        tolerated.isStrict = false
+        for attempt in 1...2 {
+            XCTExpectFailure("Messages may time out on launch under load; one recorded relaunch is allowed", options: tolerated) { messages.launch() }
+            if messages.wait(for: .runningForeground, timeout: 60 * Self.pace) { return }
+            if attempt == 1 {
+                try recordRetry("relaunch", "Messages did not reach the foreground on the first launch")
+                messages.terminate()
+            }
+        }
+        XCTFail("[NATIVE-UI-MESSAGES] Messages did not start, also after one relaunch", file: file, line: line)
+        throw Blocked()
     }
 
     /// Links the open conversation to a fixture group through the real linking screen and lands on the group's home.
@@ -288,7 +349,7 @@ class JourneyCase: XCTestCase {
     func type(_ value: String, into id: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let field = try required(id, in: messages, file: file, line: line)
         try tap(field, scrolling: messages, file: file, line: line)
-        field.typeText(value)
+        try enter(value, into: field, called: id, file: file, line: line)
     }
 
     /// Opens a menu picker and chooses one entry by its visible name.
@@ -300,7 +361,7 @@ class JourneyCase: XCTestCase {
     /// Waits until the server shows what the tap should have caused.
     func eventually(_ code: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line, _ condition: @escaping () throws -> Bool) {
         let reached = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (try? condition()) ?? false }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [reached], timeout: timeout), .completed, "[\(code)] the server never showed the expected state", file: file, line: line)
+        XCTAssertEqual(XCTWaiter.wait(for: [reached], timeout: timeout * Self.pace), .completed, "[\(code)] the server never showed the expected state", file: file, line: line)
     }
 
     /// Conversation links made by the app, leaving out the harness's own control sessions.
