@@ -160,6 +160,66 @@ jobs:
             !${{ runner.temp }}/native-ui-evidence/*.xcresult
           if-no-files-found: warn
           retention-days: 14
+      - name: Export failure attachments as plain files
+        if: ${{ !cancelled() }}
+        run: |
+          # Xcode keeps a screen recording and any test attachment for a failed test inside its result bundle. This
+          # writes them out as PNG frames and text so they can be read on a machine without Xcode.
+          out="$RUNNER_TEMP/native-ui-failure-attachments"
+          raw="$RUNNER_TEMP/native-ui-attachments-raw"
+          mkdir -p "$out" "$raw"
+          cat > "$RUNNER_TEMP/frames.swift" <<'SWIFT'
+          import AVFoundation
+          import AppKit
+          // Writes the frames 0, 3, 8 and 20 seconds before the end of a recording, the last being the point of failure.
+          let arguments = CommandLine.arguments
+          let asset = AVURLAsset(url: URL(fileURLWithPath: arguments[1]))
+          let generator = AVAssetImageGenerator(asset: asset)
+          generator.appliesPreferredTrackTransform = true
+          generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+          generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+          let duration = CMTimeGetSeconds(asset.duration)
+          var written = 0
+          for back in [0.3, 3.0, 8.0, 20.0] where duration - back >= 0 || back == 0.3 {
+              let time = CMTime(seconds: max(0, duration - back), preferredTimescale: 600)
+              guard let image = try? generator.copyCGImage(at: time, actualTime: nil),
+                    let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
+              try data.write(to: URL(fileURLWithPath: arguments[2] + "-" + String(Int(back)) + "s-before-end.png"))
+              written += 1
+          }
+          print("\(written) frames from \(arguments[1])")
+          SWIFT
+          for bundle in "$RUNNER_TEMP"/native-ui-evidence/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            session="$(basename "$bundle" .xcresult)"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "$raw/$session" || { echo "::warning::could not export attachments from $session"; continue; }
+            [ -f "$raw/$session/manifest.json" ] || continue
+            cp "$raw/$session/manifest.json" "$out/$session-manifest.json"
+            # One line per attachment: exported file, then a readable name made of the test and the attachment's own name.
+            jq -r '.[] | .testIdentifier as $test | .attachments[]? | [.exportedFileName, (($test // "unknown-test") + "__" + (.suggestedHumanReadableName // .exportedFileName) | gsub("[^A-Za-z0-9._-]+"; "_"))] | @tsv' "$raw/$session/manifest.json" |
+            while IFS="$(printf '\t')" read -r file name; do
+              source="$raw/$session/$file"
+              [ -f "$source" ] || continue
+              target="$out/$session--${name%.*}"
+              case "$(printf '%s' "$file" | tr '[:upper:]' '[:lower:]')" in
+                *.png) cp "$source" "$target.png" ;;
+                *.jpg|*.jpeg|*.heic) sips -s format png "$source" --out "$target.png" > /dev/null ;;
+                *.mov|*.mp4) swift "$RUNNER_TEMP/frames.swift" "$source" "$target" || echo "::warning::no frames from $file" ;;
+                *.txt|*.log|*.json) cp "$source" "$target.${file##*.}" ;;
+                *) echo "left in the result bundle only: $file" ;;
+              esac
+            done
+          done
+          ls -l "$out"
+          echo "- Failure attachments exported: $(find "$out" -name '*.png' | wc -l | tr -d ' ') PNG frames, $(find "$out" -type f ! -name '*.png' ! -name '*-manifest.json' | wc -l | tr -d ' ') other files" >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the exported failure attachments
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-failure-attachments-${{ matrix.shard }}
+          path: ${{ runner.temp }}/native-ui-failure-attachments
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Keep the result bundles (the first session and one per retried test)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -213,9 +273,11 @@ jobs:
           const byKind = Object.entries(kinds).map(([kind, count]) => count + " " + kind).join(", ") || "none";
           const testRetryCounts = {};
           for (const retry of rows.flatMap((row) => row.testRetries)) testRetryCounts[retry.test] = (testRetryCounts[retry.test] ?? 0) + 1;
+          const firstAttemptFailed = [...new Set([...rows.flatMap((row) => row.testRetries.map((retry) => retry.test + (retry.passedOnRetry ? " (passed on its second attempt)" : " (failed twice)"))), ...rows.flatMap((row) => row.failures.filter((id) => !row.testRetries.some((retry) => retry.test === id)).map((id) => id + " (not retried)"))])];
           const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
           const lines = [
             "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
+            firstAttemptFailed.length ? "**First attempt failed in this run: " + firstAttemptFailed.join("; ") + ".** A test that appears here run after run is a defect, whatever the overall result." : "No test failed a first attempt in this run.", "",
             total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + "), of which " + Object.keys(testRetryCounts).length + " were second attempts of a failed test, and " + total("appCallFailures") + " failed app calls (not counting " + rows.reduce((sum, row) => sum + (row.injectedFailures ?? 0), 0) + " the tests injected) across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
             "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
             ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
@@ -229,7 +291,7 @@ jobs:
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));
-          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, retriesByKind: kinds, testRetryCounts, shards: rows }, null, 2) + "\n");
+          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, firstAttemptFailed, missingClasses: missing, retriesByKind: kinds, testRetryCounts, shards: rows }, null, 2) + "\n");
           process.exitCode = overall === "failed" ? 1 : 0;
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
