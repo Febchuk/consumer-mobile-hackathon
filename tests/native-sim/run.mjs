@@ -11,7 +11,7 @@ import { homedir, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
-import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, applyTestRetries, combineStatuses, failureMessages, inheritedCredentials, networkIsolation, parseTestCases, planParts, ports, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, applyTestRetries, combineStatuses, expectedTests, failureMessages, inheritedCredentials, networkIsolation, parseTestCases, planParts, ports, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
 import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime, waitForDestination } from "./simulator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -303,11 +303,21 @@ async function main() {
   // xcodebuild prints one of these lines only when the whole session ran to its end; a session that was killed or crashed
   // prints neither, and no retry can turn such a run into a pass.
   const sessionCompleted = status !== null && /\*\* TEST EXECUTE (SUCCEEDED|FAILED) \*\*/.test(testLog);
+  // The end line alone does not prove every selected test reported, so the results are also compared with the tests the
+  // selection names in the sources. A selected test with no result line blocks any recovery by retry.
+  const sources = resolve(native, "UITests");
+  const classes = new Map(readdirSync(sources).filter((name) => name.endsWith(".swift")).flatMap((name) => {
+    const text = readFileSync(resolve(sources, name), "utf8");
+    return [...text.matchAll(/^final class (\w+): JourneyCase/gm)].map((match) => [match[1], [...text.matchAll(/^ {4}func (test\w+)\(\)/gm)].map((found) => found[1])]);
+  }));
+  const expected = expectedTests(only, classes);
   const summarise = () => {
     const failed = cases.filter((test) => test.result === "failed").length;
     evidence.tests = { selection, exitStatus: status, sessionCompleted, passed: cases.filter((test) => test.result === "passed").length, failed, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle, retryFailedOnce, testRetries, testRetryCounts: testRetryCounts(testRetries), notRetried };
     // A run whose only failures were tests that then passed on their one retry is a pass with retries, never a clean pass.
-    const recovered = sessionCompleted && testRetries.length > 0 && testRetries.length === firstFailures.length;
+    const missing = expected ? expected.filter((id) => !cases.some((test) => test.id === id)) : null;
+    evidence.tests.missing = missing;
+    const recovered = sessionCompleted && missing !== null && missing.length === 0 && testRetries.length > 0 && testRetries.length === firstFailures.length;
     evidence.status = cases.length === 0 ? "blocked" : failed === 0 && (status === 0 || recovered) ? "passed" : "failed";
   };
   // The first attempt's results are on record before any retry starts, so a retry that cannot run loses nothing.

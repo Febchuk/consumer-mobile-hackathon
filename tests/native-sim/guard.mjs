@@ -95,6 +95,18 @@ export function applyTestRetries(cases, secondAttempts) {
   return { cases: settled, retries };
 }
 
+// The tests a selection names, from the classes found in the sources; null when it names a class the sources do not have.
+export function expectedTests(only, classes) {
+  const ids = [];
+  for (const item of only) {
+    const [suite, test] = item.replace(/^CalledItUITests\//, "").split("/");
+    const tests = classes.get(suite);
+    if (!tests) return null;
+    ids.push(...(test ? [suite + "/" + test] : tests.map((name) => suite + "/" + name)));
+  }
+  return ids;
+}
+
 // How often each test needed its retry, so a test that needs one again and again across runs can be seen.
 export function testRetryCounts(retries) {
   const counts = {};

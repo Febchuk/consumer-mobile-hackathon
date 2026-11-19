@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, applyTestRetries, failureMessages, parseTestCases, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
+import { appConnections, assertBuiltAppHasNoEndpoint, assertLoopbackOrigin, buildManifest, combineStatuses, inheritedCredentials, networkIsolation, planParts, applyTestRetries, expectedTests, failureMessages, parseTestCases, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -108,4 +108,11 @@ test("a reference-hardware record with a retried test is recognised", () => {
   assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "enforced" }, retries: [], tests: { cases: [{ attempts: 2 }] } }), true);
   assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "enforced" }, retries: [{ kind: "retype" }], tests: { cases: [{}], testRetries: [] } }), false);
   assert.equal(referenceRunHasTestRetry({ latencyBudgets: { mode: "measured-only" }, ...retried }), false);
+});
+
+test("a selection names its tests, and an unknown class names none", () => {
+  const classes = new Map([["A", ["testOne", "testTwo"]], ["B", ["testThree"]]]);
+  assert.deepEqual(expectedTests(["A", "CalledItUITests/B/testThree"], classes), ["A/testOne", "A/testTwo", "B/testThree"]);
+  assert.deepEqual(expectedTests(["A/testTwo"], classes), ["A/testTwo"]);
+  assert.equal(expectedTests(["Missing"], classes), null);
 });
