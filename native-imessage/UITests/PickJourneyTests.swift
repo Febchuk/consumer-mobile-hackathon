@@ -15,7 +15,7 @@ final class PickJourneyTests: JourneyCase {
         try choose(option: 1, in: screen)
         try tap("bet.confirmPick", in: screen)
         _ = try required("bet.confirmedPick", in: screen, "NATIVE-UI-PICK-03")
-        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - started, 10, "[NATIVE-UI-PICK-04] confirmed within ten seconds of the first tap")
+        try budget("NATIVE-UI-PICK-04", "pick confirmed after the first tap", seconds: ProcessInfo.processInfo.systemUptime - started, limit: 10)
         assertLabel(try required("bet.savedPick", in: screen), "No · confidence 50 / 100", "NATIVE-UI-PICK-05")
         assertLabel(try required("bet.saveConfirmation", in: screen), "The server confirmed and locked your pick.", "NATIVE-UI-PICK-06")
         XCTAssertFalse(element("bet.confirmPick", in: screen).exists, "[NATIVE-UI-PICK-07] a confirmed pick cannot be confirmed again")

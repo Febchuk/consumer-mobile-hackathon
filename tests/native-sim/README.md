@@ -21,6 +21,12 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 - Ctrl-C or a termination signal still deletes the simulator, stops the backend (also while it is starting) and writes the evidence. A signal that arrives during the Xcode build is handled when the build step returns.
 - The demo and the tests share fixed loopback ports (3210, 3211, 8198, 8199, 43128), so only one can run at a time.
 
+## Slow machines, retries and latency budgets
+
+- `--wait-scale <1-8>` stretches every wait in the test helpers for a slower machine such as a hosted runner. Waits are on real conditions (an element exists, can be touched, a value is held); the scale only bounds how long they may take.
+- Typing is verified: after typing, the helper checks the field holds exactly that text and retypes if not. Messages gets one relaunch if it does not reach the foreground. Each of these is written to `retries` in `evidence.json`, and a run that needed any is reported as `passed-with-retries`, never `passed`.
+- Product latency budgets (a pick confirmed within ten seconds) are always measured into `latencyBudgets.measurements`. They fail a test only with `--reference-hardware`, which cannot be combined with a wait scale; `latencyBudgets.mode` says which mode a run used.
+
 ## Known simulator limits
 
 - Messages on a simulator has no account, so no message is ever sent; tests use its built-in synthetic conversation.
