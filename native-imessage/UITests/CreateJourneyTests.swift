@@ -91,7 +91,17 @@ final class CreateJourneyTests: JourneyCase {
         try chooseMenu("compose.format", "This / That")
         try type("Which will the fixture pick", into: "compose.question")
         try type("Tea", into: "compose.optionA")
-        try type("Coffee", into: "compose.optionB")
+        // The keyboard's Next key moves to the second choice with the keyboard still up. The field that takes the keyboard
+        // comes fully above the keyboard and the Done bar, where the person can see what they type.
+        let first = try required("compose.optionA", in: messages, "NATIVE-UI-KEYBOARD-04")
+        let second = try required("compose.optionB", in: messages, "NATIVE-UI-KEYBOARD-04")
+        first.typeText("\n")
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (second.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-KEYBOARD-04] Next on the first choice moves the keyboard to the second")
+        let bar = try required("keyboard.done", in: messages, "NATIVE-UI-KEYBOARD-05")
+        let clear = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in second.frame.maxY <= bar.frame.minY && second.isHittable }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [clear], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-KEYBOARD-05] the field that took the keyboard is fully above the keyboard and the Done bar")
+        try enter("Coffee", into: second, called: "compose.optionB")
         try tap("compose.create", in: messages)
         requireDraftCard("NATIVE-UI-FORMAT-07")
         let bet = try control.rows("bets").first

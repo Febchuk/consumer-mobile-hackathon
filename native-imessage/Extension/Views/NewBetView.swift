@@ -19,7 +19,7 @@ struct NewBetView: View {
     @State private var error: String?
     @State private var requestID = UUID().uuidString
     @State private var lastPayload: Data?
-    private enum Field { case question, context }
+    private enum Field { case question, context, optionA, optionB }
     @FocusState private var focus: Field?
 
     var body: some View {
@@ -46,8 +46,12 @@ struct NewBetView: View {
                     InsetRow { TextField("Numeric line", text: $line).keyboardType(.decimalPad).accessibilityIdentifier("compose.line") }
                 }
                 if format == "this_that" {
-                    InsetRow { TextField("This", text: $optionA).accessibilityIdentifier("compose.optionA") }
-                    InsetRow { TextField("That", text: $optionB).accessibilityIdentifier("compose.optionB") }
+                    // The keyboard's Next key carries on to the second choice instead of putting the keyboard away.
+                    InsetRow {
+                        TextField("This", text: $optionA).focused($focus, equals: .optionA).submitLabel(.next).onSubmit { focus = .optionB }
+                            .accessibilityIdentifier("compose.optionA")
+                    }
+                    InsetRow { TextField("That", text: $optionB).focused($focus, equals: .optionB).accessibilityIdentifier("compose.optionB") }
                 }
                 InsetRow(last: true) {
                     DatePicker("Reveal", selection: $reveal).accessibilityIdentifier("compose.reveal")
@@ -94,8 +98,8 @@ struct NewBetView: View {
                     ideas = []
                     if !subjectID.isEmpty { await suggestions(group.id) }
                 }
-                // Create card is far below the multi-line fields, where the keyboard covers it. While one of them has the
-                // keyboard, the same action is offered beside Done on top of the keyboard.
+                // Create card is far below the fields, where the keyboard covers it. While one of them has the keyboard, the
+                // same action is offered beside Done on top of the keyboard.
                 .onChange(of: focus) { _, _ in offerCreate(group.id) }
                 .onChange(of: canCreate) { _, _ in offerCreate(group.id) }
                 .onDisappear { model.keyboardAction = nil }

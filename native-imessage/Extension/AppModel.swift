@@ -92,6 +92,17 @@ final class AppModel: ObservableObject {
 
     func dismissKeyboard() { controller?.view.endEditing(true) }
 
+    /// Brings the field that has the keyboard fully above the keyboard and the Done bar. It works on the field itself, so
+    /// it covers every form in the extension without each screen naming its fields.
+    func revealFocusedField() {
+        guard let field = controller?.view.focusedDescendant else { return }
+        var ancestor = field.superview
+        while let view = ancestor, !(view is UIScrollView) { ancestor = view.superview }
+        guard let scroll = ancestor as? UIScrollView else { return }
+        scroll.layoutIfNeeded()
+        scroll.scrollRectToVisible(field.convert(field.bounds, to: scroll).insetBy(dx: 0, dy: -16), animated: true)
+    }
+
     func retryLoad() async {
         canRetryLoad = false
         error = nil
@@ -242,6 +253,14 @@ final class AppModel: ObservableObject {
             }
             controller?.requestPresentationStyle(.compact)
         } catch { handle(error) }
+    }
+}
+
+private extension UIView {
+    var focusedDescendant: UIView? {
+        if isFirstResponder { return self }
+        for child in subviews { if let found = child.focusedDescendant { return found } }
+        return nil
     }
 }
 
