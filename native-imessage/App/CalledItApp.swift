@@ -115,5 +115,13 @@ struct ContainerView: View {
             }
         }
         .navigationTitle("Called It")
+        // The number pads have no return key, so the keyboard gets a button that puts it away.
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+                    .accessibilityIdentifier("auth.keyboardDone")
+            }
+        }
     }
 }

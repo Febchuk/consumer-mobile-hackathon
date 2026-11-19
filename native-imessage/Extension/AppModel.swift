@@ -18,6 +18,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var linkedRoomId: String?
     @Published var error: String?
     @Published var notice: String?
+    /// True after a screen's load failed for a passing reason, so the person is offered "Try again".
+    @Published private(set) var canRetryLoad = false
+    /// Changes when the person asks to try again; the current screen is rebuilt and loads from the start.
+    @Published private(set) var loadGeneration = 0
     @Published private(set) var pendingBet: NativeBet?
     @Published var activeTick = 0
     @Published var isActive = false
@@ -70,6 +74,14 @@ final class AppModel: ObservableObject {
         requestedSubjectID = nil
         sessions = [:]
         screen = .home
+        canRetryLoad = false
+    }
+
+    func retryLoad() async {
+        canRetryLoad = false
+        error = nil
+        await refresh()
+        loadGeneration += 1
     }
 
     func refresh() async {
@@ -85,11 +97,14 @@ final class AppModel: ObservableObject {
             linkedRoomId = result.groups.contains(where: { $0.id == link?.groupId }) ? link?.groupId : nil
             error = nil
         } catch {
-            handle(error)
+            handle(error, loading: true)
         }
     }
 
-    func handle(_ failure: Error) {
+    func handle(_ failure: Error, loading: Bool = false) {
+        // A load that was cancelled because its screen was replaced has nothing to tell the person.
+        if failure is CancellationError { return }
+        if loading, let code = (failure as? APIError)?.code, ["TRANSPORT", "UNKNOWN", "PROVIDER_UNAVAILABLE", "RATE_LIMITED"].contains(code) { canRetryLoad = true }
         if (failure as? APIError)?.code == "AUTH_REQUIRED" {
             if let configuration = try? Config.load(), let session {
                 try? SessionStore.delete(configuration: configuration)

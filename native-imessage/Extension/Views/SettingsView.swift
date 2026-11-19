@@ -100,7 +100,7 @@ struct SettingsView: View {
                 guard model.token == token else { return }
                 members = result ?? []
             }
-        } catch { model.handle(error) }
+        } catch { model.handle(error, loading: true) }
     }
 
     private func save() async {

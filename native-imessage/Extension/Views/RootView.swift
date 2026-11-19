@@ -19,9 +19,10 @@ struct RootView: View {
                             Button { model.go(.settings) } label: { Label("Settings", systemImage: "gearshape") }
                                 .accessibilityIdentifier("navigation.settings")
                         }
-                        content
+                        Group { content }.id(model.loadGeneration)
                         if let notice = model.notice { Text(notice).font(.footnote).accessibilityIdentifier("account.notice") }
                         ErrorText(text: model.error)
+                        RetryLoadButton()
                     }
                     .padding(16)
                 }
@@ -47,8 +48,21 @@ struct RootView: View {
             case .home:
                 if let room = model.linkedRoom { HomeView(room: room) }
                 else if model.me != nil { LinkRoomView() }
-                else { ProgressView().frame(maxWidth: .infinity).padding(40) }
+                else if model.error == nil { ProgressView().frame(maxWidth: .infinity).padding(40) }
             }
+        }
+    }
+}
+
+/// Shown under the error when a load failed for a passing reason: one tap loads the current screen again.
+struct RetryLoadButton: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        if model.error != nil, model.canRetryLoad {
+            SoftButton(title: "Try again") { Task { await model.retryLoad() } }
+                .accessibilityIdentifier("load.retry")
+                .accessibilityHint("Loads this screen again")
         }
     }
 }
@@ -86,7 +100,7 @@ struct RecentBets: View {
     var body: some View {
         SectionTitle(text: "Group bets")
         if !loaded { ProgressView() }
-        if loaded && bets.isEmpty { Footnote(text: "No available bets since you joined. Earlier cards stay unavailable, including after rejoining.") }
+        if loaded && bets.isEmpty && error == nil { Footnote(text: "No available bets since you joined. Earlier cards stay unavailable, including after rejoining.") }
         InsetGroup {
             ForEach(bets) { bet in
                 Button {
@@ -125,8 +139,9 @@ struct RecentBets: View {
             error = nil
         } catch {
             bets = []
+            if error is CancellationError { return }
             self.error = error.localizedDescription
-            model.handle(error)
+            model.handle(error, loading: true)
         }
         loaded = true
     }
@@ -160,6 +175,7 @@ struct CompactView: View {
                 PrimaryButton(title: "Link this conversation") { model.go(.groups) }
             }
             ErrorText(text: model.error)
+            RetryLoadButton()
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

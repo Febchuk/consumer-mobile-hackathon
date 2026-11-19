@@ -152,8 +152,35 @@ enum API {
         return envelope.value
     }
 
+    /// Pauses before the second and third attempt of a call that failed for a passing reason.
+    static let retryPauses: [UInt64] = [400_000_000, 1_200_000_000]
+
+    /// A failure worth one more try without asking the person. Reading is always safe to repeat. A change is repeated only
+    /// when the server itself reported an error with no product code, which means the change was not applied, and the call
+    /// carries a request identifier the server deduplicates on.
+    static func isPassing(_ code: String, kind: String, args: [String: Any]) -> Bool {
+        switch kind {
+        case "query": return code == "TRANSPORT" || code == "UNKNOWN"
+        case "mutation": return code == "UNKNOWN" && args["requestId"] is String
+        default: return false
+        }
+    }
+
     static func run<T: Decodable>(_ kind: String, _ path: String, _ args: [String: Any]) async throws -> T? {
-        try await run(kind, path, args, configuration: Config.load(), session: liveSession)
+        try await resilient(kind, path, args, configuration: Config.load(), session: liveSession, pauses: retryPauses)
+    }
+
+    /// One call with a bounded number of quiet retries: at most `pauses.count` more attempts, never for a refusal.
+    static func resilient<T: Decodable>(_ kind: String, _ path: String, _ args: [String: Any], configuration: RuntimeConfiguration, session: URLSession, pauses: [UInt64]) async throws -> T? {
+        var remaining = pauses[...]
+        while true {
+            do { return try await run(kind, path, args, configuration: configuration, session: session) }
+            catch let failure as APIError {
+                guard let pause = remaining.first, isPassing(failure.code, kind: kind, args: args) else { throw failure }
+                remaining = remaining.dropFirst()
+                try await Task.sleep(nanoseconds: pause)
+            }
+        }
     }
 
     static func run<T: Decodable>(_ kind: String, _ path: String, _ args: [String: Any], configuration: RuntimeConfiguration, session: URLSession) async throws -> T? {

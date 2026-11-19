@@ -56,6 +56,11 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   let backend; let provider; let gateway; let control; let backendLog = ""; let closing;
   const calls = [];
   const notes = [];
+  // Calls from the app that ended in an error with no product code, kept for the whole run so the cause can be read from evidence.
+  const failures = [];
+  // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
+  const faults = new Map();
+  let currentTest = "";
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
 
@@ -136,7 +141,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
       const started = performance.now();
       const reply = (status, payload) => { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(payload)); };
       const match = /^\/api\/(query|mutation|action)$/.exec(request.url ?? "");
-      let path = "invalid"; let outcome = "refused"; let conversation;
+      let path = "invalid"; let outcome = "refused"; let conversation; let status; let failure;
       try {
         if (!match || request.method !== "POST" || request.socket.remoteAddress !== "127.0.0.1") return reply(404, { status: "error", errorMessage: "Not found", errorData: { code: "NOT_AVAILABLE" } });
         if ((request.headers["x-calledit-qa-run-id"] ?? "").toLowerCase() !== runID.toLowerCase() || request.headers["x-calledit-qa-manifest-sha256"] !== manifestSHA256) return reply(403, { status: "error", errorMessage: "Wrong QA run", errorData: { code: "FORBIDDEN" } });
@@ -145,6 +150,12 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         // A one-way fingerprint, so a test can tell whether Messages kept the same conversation identity without seeing it.
         if (typeof input.args?.[0]?.conversationKey === "string") conversation = createHash("sha256").update(input.args[0].conversationKey).digest("hex").slice(0, 8);
         if (allowed.get(path) !== match[1] || input.format !== "convex_encoded_json" || !Array.isArray(input.args) || input.args.length !== 1) return reply(403, { status: "error", errorMessage: "Not a public V0 function", errorData: { code: "NOT_AVAILABLE" } });
+        const planned = faults.get(path) ?? 0;
+        if (planned > 0) {
+          faults.set(path, planned - 1);
+          outcome = "injected"; status = 560; failure = "Injected by the test";
+          return reply(560, { status: "error", errorMessage: "Injected failure" });
+        }
         const upstream = await localFetch(origin + "/api/" + match[1], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, args: input.args, format: "convex_encoded_json" }) });
         const envelope = await upstream.json();
         if (envelope.status === "success") {
@@ -160,13 +171,18 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         } else {
           const data = typeof envelope.errorData === "string" ? (() => { try { return JSON.parse(envelope.errorData); } catch { return { code: envelope.errorData }; } })() : envelope.errorData;
           outcome = data?.code ?? "UNKNOWN";
+          status = upstream.status;
+          if (!data?.code) failure = redact(String(envelope.errorMessage ?? "no error message")).replace(/\s+/g, " ").trim().slice(0, 300);
         }
         reply(upstream.status, envelope);
-      } catch {
+      } catch (error) {
         outcome = "gateway_error";
+        failure = redact(String(error?.message ?? error)).replace(/\s+/g, " ").trim().slice(0, 300);
         if (!response.headersSent) reply(502, { status: "error", errorMessage: "Gateway failure", errorData: { code: "PROVIDER_UNAVAILABLE" } });
       } finally {
-        if (path !== "v0Runtime:attestation") calls.push({ at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started), caller: String(request.headers["user-agent"] ?? "unknown").split("/")[0].slice(0, 40), ...(conversation ? { conversation } : {}) });
+        const call = { at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started), caller: String(request.headers["user-agent"] ?? "unknown").split("/")[0].slice(0, 40), ...(conversation ? { conversation } : {}), ...(status ? { status } : {}), ...(failure ? { error: failure } : {}) };
+        if (path !== "v0Runtime:attestation") calls.push(call);
+        if (failure) failures.push({ ...call, test: currentTest });
       }
     });
     track(gateway);
@@ -182,12 +198,24 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
       if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveArgs(item, state)]));
       return value;
     };
-    const internal = (kind, path, args) => kind === "query" ? admin.query(makeFunctionReference(path), args) : admin.mutation(makeFunctionReference(path), args);
+    // Under load the local backend can exceed its one-second function limit. A function that timed out changed nothing, so the
+    // fixture call is repeated, at most twice, and each repeat is written to the run's evidence as a retry.
+    const patient = async (name, attempt) => {
+      for (let tries = 1; ; tries++) {
+        try { return await attempt(); } catch (error) {
+          if (tries === 3 || !/Function execution timed out/.test(String(error?.message))) throw error;
+          notes.push({ at: Date.now(), test: currentTest || "(outside a test)", kind: "fixture-retry", detail: name + " hit the backend's function time limit on attempt " + tries });
+          await delay(500 * tries);
+        }
+      }
+    };
+    const internal = (kind, path, args) => patient(path, () => kind === "query" ? admin.query(makeFunctionReference(path), args) : admin.mutation(makeFunctionReference(path), args));
     const operations = {
       async reset(input) {
         const seeded = await internal("mutation", "qaNative:reset", { runID, tokens, ...(input.points ? { points: input.points } : {}) });
         fixture = { ...seeded, bets: {} };
         calls.length = 0;
+        faults.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
@@ -212,7 +240,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         const args = { ...resolveArgs(input.args ?? {}, fixture), token: tokens[input.actor] };
         const reference = makeFunctionReference(input.path);
         try {
-          const value = input.kind === "query" ? await client.query(reference, args) : input.kind === "mutation" ? await client.mutation(reference, args, { skipQueue: true }) : await client.action(reference, args);
+          const value = await patient(input.path, () => input.kind === "query" ? client.query(reference, args) : input.kind === "mutation" ? client.mutation(reference, args, { skipQueue: true }) : client.action(reference, args));
           if (input.remember && value?.betId) fixture.bets[input.remember] = { betId: value.betId, locator: value.card.url.split("/c/")[1] };
           return { ok: true, value: convexToJson(value ?? null) };
         } catch (error) {
@@ -226,9 +254,15 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         return { ...state, bets: state.bets.map((bet) => ({ ...bet, key: keys[bet.id] ?? null })), picks: state.picks.map((pick) => ({ ...pick, bet: keys[pick.betId] ?? pick.betId })), ledger: state.ledger.map((row) => ({ ...row, bet: keys[row.betId] ?? row.betId })), provider: { starts: provider.stats.starts, checks: provider.stats.checks, invalidCodes: provider.stats.invalidCodes } };
       },
       async calls() { return calls.slice(); },
+      // The next `count` calls the app makes to one public function fail the way an overloaded server fails: an error with no code.
+      async failNext(input) {
+        assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
+        assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
+        faults.set(input.path, Number(input.count));
+      },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
-        assert.ok(["retype", "relaunch", "latency"].includes(input.kind), "Unknown note kind");
+        assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");
         notes.push({ at: Date.now(), test: String(input.test).slice(0, 200), kind: input.kind, detail: redact(String(input.detail).slice(0, 300)) });
       },
       // The click-through scenario: points on both boards, Cora's turn in G1, an open bet to pick in G2, a hidden bet
@@ -253,6 +287,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         const expected = Buffer.from("Bearer " + controlToken);
         if (request.method !== "POST" || request.url !== "/control" || request.socket.remoteAddress !== "127.0.0.1" || presented.length !== expected.length || !timingSafeEqual(presented, expected)) return reply(403, { ok: false, error: "refused" });
         const input = jsonToConvex(JSON.parse((await body(request)).toString("utf8")));
+        if (typeof input.test === "string") currentTest = input.test.slice(0, 200);
         const operation = operations[input.op];
         if (!operation || (input.op !== "reset" && !fixture)) return reply(400, { ok: false, error: "unknown operation or no fixture" });
         reply(200, { ok: true, result: convexToJson((await operation(input)) ?? null) });
@@ -263,7 +298,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
     track(control);
     await listen(gateway, ports.api);
     await listen(control, ports.control);
-    return Object.freeze({ origin, apiOrigin, cardOrigin, controlOrigin, controlToken, operations, redact, close, notes: () => notes.slice(), backendLog: () => redact(backendLog), providerStats: () => provider.stats, pid: backend.pid });
+    return Object.freeze({ origin, apiOrigin, cardOrigin, controlOrigin, controlToken, operations, redact, close, notes: () => notes.slice(), failures: () => failures.slice(), backendLog: () => redact(backendLog), providerStats: () => provider.stats, pid: backend.pid });
   } catch (error) {
     const retained = await close().catch(() => ({ backendLog: redact(backendLog) }));
     const failure = new Error("The local backend failed to start: " + redact(error?.message ?? error));

@@ -11,14 +11,24 @@ final class SignInJourneyTests: JourneyCase {
         code.tap()
         try enter("111111", into: code, called: "auth.code")
         try tap("auth.verify", in: host)
+        // The error is the last row of the form and can be below the fold once the keyboard is away.
+        if !element("auth.error", in: host).waitForExistence(timeout: 10 * Self.pace) { host.swipeUp() }
         _ = try required("auth.error", in: host, "NATIVE-UI-CODE-02")
         XCTAssertFalse(element("auth.returnToMessages", in: host).exists, "[NATIVE-UI-CODE-02] a wrong code does not sign in")
         XCTAssertEqual(try appSessions(.finn).count, 0, "[NATIVE-UI-CODE-03] no session after a wrong code")
         XCTAssertEqual(try appCalls("v0Auth:verifyCode"), 0, "[NATIVE-UI-CODE-03]")
 
         // The person can correct the code without starting over.
+        if !element("auth.code", in: host).exists { host.swipeDown() }
         let again = try required("auth.code", in: host, "NATIVE-UI-CODE-04")
-        again.tap()
+        try tap(again, scrolling: host)
+        // After the scroll the field can sit under the navigation bar, where a tap does not reach it.
+        let keyboard = host.keyboards.firstMatch
+        if !keyboard.waitForExistence(timeout: 5 * Self.pace) {
+            host.swipeDown()
+            try tap(again, scrolling: host)
+        }
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10 * Self.pace), "[NATIVE-UI-CODE-04] the code field takes focus again")
         clear(again)
         try enter("000000", into: again, called: "auth.code")
         try tap("auth.verify", in: host)

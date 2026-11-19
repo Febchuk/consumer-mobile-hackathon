@@ -318,6 +318,75 @@ final class APITransportTests: XCTestCase {
         }
     }
 
+    private func serverError(_ kind: String = "query", _ path: String = "v0Bets:get") -> NativeRPCTransportStub.Step {
+        .init(kind: kind, path: path) { _ in try .json(["status": "error", "errorMessage": "PRIVATE_SERVER_DETAIL"], status: 560) }
+    }
+
+    private func success(_ kind: String = "query", _ path: String = "v0Bets:get") -> NativeRPCTransportStub.Step {
+        .init(kind: kind, path: path) { _ in try .json(["status": "success", "value": ["ok": true, "count": 1]]) }
+    }
+
+    func testOneFailedReadIsRetriedQuietlyAndSucceeds() async throws {
+        let fixture = NativeUnitFixture()
+        let lane = try Lane(fixture: fixture, steps: [attestation(fixture), serverError(), attestation(fixture), success()])
+        defer { lane.close() }
+        let result: Value? = try await API.resilient("query", "v0Bets:get", [:], configuration: lane.configuration, session: lane.session, pauses: [1_000, 1_000])
+        XCTAssertEqual(result, Value(ok: true, count: 1), "[NATIVE-RPC-RETRY-01] a read that failed once succeeds without the person doing anything")
+        assertConsumed(lane, count: 4)
+    }
+
+    func testAReadThatKeepsFailingStopsAfterItsBoundedRetries() async throws {
+        let fixture = NativeUnitFixture()
+        let lane = try Lane(fixture: fixture, steps: [attestation(fixture), serverError(), attestation(fixture), serverError(), attestation(fixture), serverError()])
+        defer { lane.close() }
+        do {
+            let _: Value? = try await API.resilient("query", "v0Bets:get", [:], configuration: lane.configuration, session: lane.session, pauses: [1_000, 1_000])
+            XCTFail("[NATIVE-RPC-RETRY-02] expected the failure to surface")
+        } catch let failure as APIError {
+            XCTAssertEqual(failure.code, "UNKNOWN", "[NATIVE-RPC-RETRY-02]")
+            XCTAssertFalse(failure.localizedDescription.contains("PRIVATE_SERVER_DETAIL"), "[NATIVE-RPC-RETRY-02] no server detail")
+        }
+        assertConsumed(lane, count: 6)
+    }
+
+    func testARefusalIsNeverRetried() async throws {
+        for code in ["AUTH_REQUIRED", "FORBIDDEN", "NOT_AVAILABLE", "INVALID_INPUT", "RATE_LIMITED", "CONFLICT"] {
+            let lane = try lane(reply: .json(["status": "error", "errorMessage": "PRIVATE_SERVER_DETAIL", "errorData": ["code": code]], status: 560))
+            defer { lane.close() }
+            do {
+                let _: Value? = try await API.resilient("query", "v0Bets:get", [:], configuration: lane.configuration, session: lane.session, pauses: [1_000, 1_000])
+                XCTFail("[NATIVE-RPC-RETRY-03] expected a refusal")
+            } catch let failure as APIError { XCTAssertEqual(failure.code, code, "[NATIVE-RPC-RETRY-03]") }
+            assertConsumed(lane)
+        }
+    }
+
+    func testAChangeIsRepeatedOnlyWhenTheServerSaysItFailedAndTheCallIsDeduplicated() async throws {
+        // With a request identifier, a server-reported failure is repeated once and succeeds.
+        var fixture = NativeUnitFixture()
+        var lane = try Lane(fixture: fixture, steps: [attestation(fixture), serverError("mutation", "v0Bets:pick"), attestation(fixture), success("mutation", "v0Bets:pick")])
+        let repeated: Value? = try await API.resilient("mutation", "v0Bets:pick", ["requestId": "SYNTHETIC_REQUEST"], configuration: lane.configuration, session: lane.session, pauses: [1_000, 1_000])
+        XCTAssertEqual(repeated, Value(ok: true, count: 1), "[NATIVE-RPC-RETRY-04]")
+        assertConsumed(lane, count: 4)
+        let bodies = lane.stub.requests.filter { $0.url.path.hasSuffix("/api/mutation") }.map { $0.envelope as NSDictionary }
+        XCTAssertEqual(bodies.count, 2, "[NATIVE-RPC-RETRY-04]")
+        XCTAssertEqual(bodies.first, bodies.last, "[NATIVE-RPC-RETRY-04] the repeat carries the same request identifier and arguments")
+        lane.close()
+
+        // Without one, or when the reply was lost in transit, the change is not repeated.
+        for (args, reply) in [([:] as [String: Any], try NativeRPCTransportStub.Reply.json(["status": "error", "errorMessage": "PRIVATE_SERVER_DETAIL"], status: 560)),
+                              (["requestId": "SYNTHETIC_REQUEST"] as [String: Any], NativeRPCTransportStub.Reply(data: Data("<html></html>".utf8), status: 502, contentType: "text/html"))] {
+            fixture = NativeUnitFixture()
+            lane = try Lane(fixture: fixture, steps: [attestation(fixture), .init(kind: "mutation", path: "v0Bets:pick") { _ in reply }])
+            do {
+                let _: Value? = try await API.resilient("mutation", "v0Bets:pick", args, configuration: lane.configuration, session: lane.session, pauses: [1_000, 1_000])
+                XCTFail("[NATIVE-RPC-RETRY-05] expected a failure")
+            } catch is APIError {}
+            assertConsumed(lane)
+            lane.close()
+        }
+    }
+
     func testRedirectStatusIsRejectedWithoutFollowingLocation() async throws {
         var reply = NativeRPCTransportStub.Reply(data: Data(), status: 302)
         reply.headers["Location"] = "https://redirect.invalid/api/query"
