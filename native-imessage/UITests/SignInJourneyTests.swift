@@ -57,15 +57,24 @@ final class SignInJourneyTests: JourneyCase {
         try signIn(.oli)
         XCTAssertTrue(try appSessions(.finn).allSatisfy { $0["revoked"] as? Bool == true }, "[NATIVE-UI-SWITCH-02] Finn's sign-in is revoked")
 
-        // Messages comes back as it was left, with Finn's bet open, and must not still show it to Oli.
+        // Messages is brought back without a relaunch, in the same conversation Finn linked. Messages closes an extension when it
+        // leaves the foreground, so Oli opens Called It again the way a person would.
         XCTAssertTrue([.runningBackground, .runningBackgroundSuspended].contains(messages.state), "[NATIVE-UI-SWITCH-06] Messages is still running from Finn's visit, state \(messages.state.rawValue)")
         messages.activate()
         XCTAssertTrue(messages.wait(for: .runningForeground, timeout: 60 * Self.pace), "[NATIVE-UI-SWITCH-06] Messages returns to the foreground without a relaunch")
-        assertGone(text(run.secretQuestion, in: messages), "NATIVE-UI-SWITCH-06")
-        assertGone(element("bet.question", in: messages), "NATIVE-UI-SWITCH-06")
+        // A system onboarding sheet can cover Messages when it returns; a person would dismiss it.
+        let sheet = messages.buttons.matching(NSPredicate(format: "label IN %@", ["OK", "Continue"])).firstMatch
+        while sheet.waitForExistence(timeout: 4 * Self.pace) { sheet.tap() }
+        assertLabel(try required("ConversationTitle", in: messages), Self.conversations[0], "NATIVE-UI-SWITCH-06")
+        if !element("navigation.settings", in: messages).exists {
+            try tap(labelled("add", in: messages))
+            try tap(labelled("Called It", .cell, in: messages))
+        }
+        // The absence checks only count while the extension itself is on screen.
+        _ = try required("navigation.settings", in: messages, timeout: 30, "NATIVE-UI-SWITCH-06")
+        XCTAssertFalse(element("bet.question", in: messages).exists, "[NATIVE-UI-SWITCH-06] Finn's open bet is not shown to Oli")
+        XCTAssertFalse(element("navigation.board", in: messages).exists, "[NATIVE-UI-SWITCH-06] Finn's link to the group does not carry over to Oli")
         assertNoPrivateText(in: messages, "NATIVE-UI-SWITCH-06")
-
-        try openExtension()
         try tap(labelled("Link this conversation", in: messages))
         _ = try required("group.link." + groupID("G2"), in: messages, "NATIVE-UI-SWITCH-03")
         XCTAssertFalse(element("group.link." + (try groupID("G1")), in: messages).exists, "[NATIVE-UI-SWITCH-04] the previous person's group is not offered")
