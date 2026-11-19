@@ -300,6 +300,18 @@ async function main() {
   let cases = parseTestCases(testLog).map((test) => test.result === "failed" ? { ...test, failures: failureMessages(backend.redact(testLog), test.id), resultBundle: bundle } : test);
   const firstFailures = cases.filter((test) => test.result === "failed");
   let testRetries = []; const notRetried = [];
+  // xcodebuild prints one of these lines only when the whole session ran to its end; a session that was killed or crashed
+  // prints neither, and no retry can turn such a run into a pass.
+  const sessionCompleted = status !== null && /\*\* TEST EXECUTE (SUCCEEDED|FAILED) \*\*/.test(testLog);
+  const summarise = () => {
+    const failed = cases.filter((test) => test.result === "failed").length;
+    evidence.tests = { selection, exitStatus: status, sessionCompleted, passed: cases.filter((test) => test.result === "passed").length, failed, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle, retryFailedOnce, testRetries, testRetryCounts: testRetryCounts(testRetries), notRetried };
+    // A run whose only failures were tests that then passed on their one retry is a pass with retries, never a clean pass.
+    const recovered = sessionCompleted && testRetries.length > 0 && testRetries.length === firstFailures.length;
+    evidence.status = cases.length === 0 ? "blocked" : failed === 0 && (status === 0 || recovered) ? "passed" : "failed";
+  };
+  // The first attempt's results are on record before any retry starts, so a retry that cannot run loses nothing.
+  summarise();
   if (retryFailedOnce && firstFailures.length) {
     // Each failed test gets one more attempt, by itself, in a new xcodebuild session: the test's own set-up ends both apps and
     // resets the backend, so nothing of the first attempt is left. The first attempt's log and result bundle are kept.
@@ -307,27 +319,27 @@ async function main() {
     for (const [index, test] of firstFailures.entries()) {
       if (activationEnds - Date.now() < 8 * 60_000) { notRetried.push({ test: test.id, reason: "the QA activation was about to expire" }); continue; }
       say("retrying " + test.id + " once in a fresh launch");
-      await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment });
       const retryBundle = resolve(output, "native-ui-retry-" + (index + 1) + ".xcresult");
+      try { await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment }); }
+      catch (error) { secondAttempts.set(test.id, { result: "failed", seconds: null, failures: ["the second attempt could not start: " + String(error?.message ?? error).slice(0, 200)], resultBundle: null }); continue; }
       const again = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", retryBundle, "-only-testing:CalledItUITests/" + test.id], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
       child = again;
       let attemptLog = "";
       const onData = (data) => { const text = data.toString(); attemptLog += text; for (const line of text.split("\n")) if (/Test Case .*(passed|failed|skipped)|error:|\*\* TEST/.test(line)) console.log(backend.redact(line)); };
       again.stdout.on("data", onData); again.stderr.on("data", onData);
-      await new Promise((accept) => again.once("exit", accept));
+      const retryStatus = await new Promise((accept) => again.once("exit", accept));
       retryLog += attemptLog;
       const result = parseTestCases(attemptLog).find((item) => item.id === test.id);
-      secondAttempts.set(test.id, result ? { ...result, failures: failureMessages(backend.redact(attemptLog), test.id), resultBundle: retryBundle } : { result: "failed", seconds: null, failures: ["the second attempt produced no result"], resultBundle: retryBundle });
+      // A printed pass counts only when the retry's own session also ended cleanly.
+      if (result?.result === "passed" && retryStatus !== 0) secondAttempts.set(test.id, { result: "failed", seconds: result.seconds, failures: ["the second attempt's session ended with status " + retryStatus + " after the test reported a pass"], resultBundle: retryBundle });
+      else secondAttempts.set(test.id, result ? { ...result, failures: failureMessages(backend.redact(attemptLog), test.id), resultBundle: retryBundle } : { result: "failed", seconds: null, failures: ["the second attempt produced no result"], resultBundle: retryBundle });
     }
     log("test-retry.log", backend.redact(retryLog));
     const settled = applyTestRetries(cases, secondAttempts);
     cases = settled.cases; testRetries = settled.retries;
     for (const retry of testRetries) runnerRetries.push({ at: Date.now(), test: "-[" + retry.test.replace("/", " ") + "]", kind: "test-retry", detail: (retry.passedOnRetry ? "failed once, then passed in a fresh launch" : "failed twice") + "; first failure: " + (retry.firstAttempt.failures[0] ?? "no message captured") });
   }
-  const failed = cases.filter((test) => test.result === "failed").length;
-  evidence.tests = { selection, exitStatus: status, passed: cases.filter((test) => test.result === "passed").length, failed, blocked: cases.filter((test) => test.result === "skipped").length, cases, resultBundle: bundle, retryFailedOnce, testRetries, testRetryCounts: testRetryCounts(testRetries), notRetried };
-  // A run whose only failures were tests that then passed on their one retry is a pass with retries, never a clean pass.
-  evidence.status = cases.length === 0 ? "blocked" : failed === 0 && (status === 0 || (testRetries.length > 0 && testRetries.length === firstFailures.length)) ? "passed" : "failed";
+  summarise();
   if (appEgress.size) {
     evidence.status = "failed";
     console.error("[native-sim] the app contacted an address that is not loopback: " + [...appEgress].join(", "));
