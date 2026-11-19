@@ -177,7 +177,7 @@ class JourneyCase: XCTestCase {
 
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
         let surface: XCUIElement = container ?? messages
-        let app = (container as? XCUIApplication) ?? messages
+        let app: XCUIApplication = (container as? XCUIApplication) ?? messages
         let keyboard = app.keyboards.firstMatch
         // The app puts a Done button on top of its keyboards. It is the sure sign that a keyboard is up, also where the
         // keyboard itself is not reported to the test, and the sure way to put it away, also for a multi-line field.
