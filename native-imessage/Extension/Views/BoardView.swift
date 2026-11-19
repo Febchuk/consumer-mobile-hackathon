@@ -106,6 +106,7 @@ struct BoardView: View {
             recap = latest
             error = nil
         } catch {
+            if error is CancellationError { return }
             board = nil
             history = []
             recap = nil
