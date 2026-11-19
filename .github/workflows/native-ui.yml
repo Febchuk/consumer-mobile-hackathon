@@ -8,6 +8,7 @@ name: Native UI
 # tapped. It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled
 # and manually dispatched runs only from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -29,13 +30,14 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }}
+    name: ${{ matrix.shard }} (round ${{ matrix.round }})
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the run starts.
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
+        round: [1, 2, 3, 4, 5]
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
         shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
@@ -149,7 +151,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.shard }}
+          name: native-ui-evidence-r${{ matrix.round }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -160,7 +162,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.shard }}
+          name: native-ui-xcresult-r${{ matrix.round }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -226,7 +228,11 @@ jobs:
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
-          PREFIX="native-ui-evidence-" node "$RUNNER_TEMP/combine.cjs"
+          status=0
+          for round in r1 r2 r3 r4 r5; do
+            PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
+          done
+          exit "$status"
       - name: Keep the combined result
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
