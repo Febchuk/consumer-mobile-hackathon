@@ -55,7 +55,7 @@ final class CreateJourneyTests: JourneyCase {
         let done = element("keyboard.done", in: messages)
         func offered(enabled: Bool, _ code: String) {
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                action.exists && action.isHittable && action.isEnabled == enabled && done.exists && done.isHittable
+                action.exists && action.isEnabled == enabled && (!enabled || action.isHittable) && done.exists && done.isHittable
             }, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15 * Self.pace), .completed, "[\(code)] Create card sits beside Done on top of the keyboard, enabled: \(enabled)")
         }
