@@ -30,14 +30,14 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }} (diagnostics ${{ matrix.diagnostics }})
+    name: ${{ matrix.shard }} (round ${{ matrix.round }})
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the run starts.
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
-        diagnostics: [keep, "off"]
+        round: [1, 2]
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
         shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
@@ -111,15 +111,13 @@ jobs:
           ) &
           sampler=$!
           status=0
-          lanePath="$PATH"
-          if [ "${{ matrix.diagnostics }}" = off ]; then
-            # The lane calls xcodebuild by name. This wrapper adds one argument to its test run so Xcode does not
-            # collect system diagnostics into the result bundle; everything else passes through unchanged.
-            mkdir -p "$RUNNER_TEMP/xcodebuild-wrapper"
-            printf '%s\n' '#!/bin/bash' 'for argument in "$@"; do' '  if [ "$argument" = test-without-building ]; then exec /usr/bin/xcodebuild "$@" -collect-test-diagnostics never; fi' 'done' 'exec /usr/bin/xcodebuild "$@"' > "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
-            chmod +x "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
-            lanePath="$RUNNER_TEMP/xcodebuild-wrapper:$PATH"
-          fi
+          # The lane calls xcodebuild by name. This wrapper adds one argument to its test run so Xcode does not collect
+          # system diagnostics into the result bundle (150 to 200 MB a shard with them, 10 to 35 MB without). Failure
+          # screenshots, recordings of failed tests and the test log stay. Everything else passes through unchanged.
+          mkdir -p "$RUNNER_TEMP/xcodebuild-wrapper"
+          printf '%s\n' '#!/bin/bash' 'for argument in "$@"; do' '  if [ "$argument" = test-without-building ]; then exec /usr/bin/xcodebuild "$@" -collect-test-diagnostics never; fi' 'done' 'exec /usr/bin/xcodebuild "$@"' > "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+          chmod +x "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+          lanePath="$RUNNER_TEMP/xcodebuild-wrapper:$PATH"
           only=()
           for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
@@ -153,7 +151,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.diagnostics }}-${{ matrix.shard }}
+          name: native-ui-evidence-r${{ matrix.round }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -164,7 +162,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.diagnostics }}-${{ matrix.shard }}
+          name: native-ui-xcresult-r${{ matrix.round }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -200,7 +198,7 @@ jobs:
               simulator: e.simulator ? "iOS " + e.simulator.runtimeVersion + " (" + e.simulator.runtimeBuild + ")" : "none",
               minutes: Math.round((Date.parse(e.finishedAt) - Date.parse(e.startedAt)) / 6000) / 10,
               testMinutes: Math.round(cases.reduce((sum, test) => sum + test.seconds, 0) / 6) / 10,
-              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], appCallFailures: e.appCallFailures ?? [], latency: e.latencyBudgets?.measurements ?? [],
+              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], appCallFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome !== "injected"), injectedFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome === "injected").length, latency: e.latencyBudgets?.measurements ?? [],
               classes: [...new Set(cases.map((test) => test.id.split("/")[0]))], failures: cases.filter((test) => test.result === "failed").map((test) => test.id),
             };
           });
@@ -214,7 +212,7 @@ jobs:
           const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
           const lines = [
             "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
-            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + ") and " + total("appCallFailures") + " failed app calls across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
+            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + ") and " + total("appCallFailures") + " failed app calls (not counting " + rows.reduce((sum, row) => sum + (row.injectedFailures ?? 0), 0) + " the tests injected) across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
             "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
             ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
             ...(missing.length ? ["Journey classes in the repository that no shard ran: " + missing.join(", ") + ". Add them to the matrix.", ""] : []),
@@ -231,8 +229,8 @@ jobs:
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
           status=0
-          for diagnostics in keep off; do
-            PREFIX="native-ui-evidence-$diagnostics-" node "$RUNNER_TEMP/combine.cjs" || status=1
+          for round in r1 r2; do
+            PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
           done
           exit "$status"
       - name: Keep the combined result
