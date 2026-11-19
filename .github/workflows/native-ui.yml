@@ -9,6 +9,7 @@ name: Native UI
 # and after native changes land on the integration branch. GitHub starts scheduled and manually dispatched runs only
 # from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -30,7 +31,7 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }}
+    name: ${{ matrix.shard }} (round ${{ matrix.round }})
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the lane issues it, about nine minutes into the
     # job, and the lane itself stops retrying failed tests eight minutes before that. This limit only catches a hang.
@@ -38,19 +39,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
-          - shard: pick
-            classes: PickJourneyTests
-          - shard: reveal-membership
-            classes: RevealJourneyTests MembershipJourneyTests
-          - shard: controls-resilience
-            classes: ControlsJourneyTests ResilienceJourneyTests
-          - shard: privacy-create
-            classes: SubjectPrivacyJourneyTests CreateJourneyTests
-          - shard: start-board-signin
-            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
+          - { round: forced, shard: pick, classes: PickJourneyTests, force: once }
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -118,6 +108,21 @@ jobs:
           printf '%s\n' '#!/bin/bash' 'for argument in "$@"; do' '  if [ "$argument" = test-without-building ]; then exec /usr/bin/xcodebuild "$@" -collect-test-diagnostics never; fi' 'done' 'exec /usr/bin/xcodebuild "$@"' > "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
           chmod +x "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
           lanePath="$RUNNER_TEMP/xcodebuild-wrapper:$PATH"
+          if [ "${{ matrix.force }}" = once ]; then
+            # Throwaway check of the retry's completion logic: end the host app once, early in the first test, so that
+            # exactly one test fails its first attempt for a reason a fresh launch does not share.
+            (
+              while :; do
+                udid="$(xcrun simctl list devices booted | grep 'CalledIt-QA' | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -n 1)"
+                if [ -n "$udid" ] && xcrun simctl spawn "$udid" launchctl list 2>/dev/null | grep -q 'com.mikunad.calledit.qa.host'; then
+                  sleep 12
+                  xcrun simctl terminate "$udid" com.mikunad.calledit.qa.host && echo "forced: ended the host app once at $(date -u +%H:%M:%S)"
+                  break
+                fi
+                sleep 3
+              done
+            ) &
+          fi
           only=()
           for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
@@ -153,7 +158,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.shard }}
+          name: native-ui-evidence-r${{ matrix.round }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -216,7 +221,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-failure-attachments-${{ matrix.shard }}
+          name: native-ui-failure-attachments-r${{ matrix.round }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-failure-attachments
           if-no-files-found: ignore
           retention-days: 14
@@ -224,7 +229,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.shard }}
+          name: native-ui-xcresult-r${{ matrix.round }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/*.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -296,7 +301,7 @@ jobs:
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
-          PREFIX="native-ui-evidence-" node "$RUNNER_TEMP/combine.cjs"
+          SHARDS=pick PREFIX="native-ui-evidence-rforced-" node "$RUNNER_TEMP/combine.cjs"
       - name: Keep the combined result
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
