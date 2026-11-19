@@ -39,12 +39,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        round: [1, 2, 3, 4, 5]
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
-          - { round: 1, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
-          - { round: 2, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
-          - { round: 3, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
-          - { round: 4, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
-          - { round: 5, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
+          - shard: pick
+            classes: PickJourneyTests
+          - shard: reveal-membership
+            classes: RevealJourneyTests MembershipJourneyTests
+          - shard: controls-resilience
+            classes: ControlsJourneyTests ResilienceJourneyTests
+          - shard: privacy-create
+            classes: SubjectPrivacyJourneyTests CreateJourneyTests
+          - shard: start-board-signin
+            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -307,7 +314,7 @@ jobs:
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
           status=0
           for round in r1 r2 r3 r4 r5; do
-            SHARDS=controls-resilience PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
+            PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
           done
           exit "$status"
       - name: Keep the combined result
