@@ -106,10 +106,10 @@ struct BoardView: View {
             recap = latest
             error = nil
         } catch {
-            if error is CancellationError { return }
             board = nil
             history = []
             recap = nil
+            if error is CancellationError { return }
             self.error = error.localizedDescription
             model.handle(error, loading: true)
         }

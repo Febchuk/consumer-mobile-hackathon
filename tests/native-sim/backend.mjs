@@ -262,7 +262,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
       },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
-        assert.ok(["retype", "relaunch", "retap", "latency"].includes(input.kind), "Unknown note kind");
+        assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");
         notes.push({ at: Date.now(), test: String(input.test).slice(0, 200), kind: input.kind, detail: redact(String(input.detail).slice(0, 300)) });
       },
       // The click-through scenario: points on both boards, Cora's turn in G1, an open bet to pick in G2, a hidden bet

@@ -237,8 +237,8 @@ struct BetView: View {
             }
             error = nil
         } catch {
-            if error is CancellationError { return }
             card = nil
+            if error is CancellationError { return }
             self.error = error.localizedDescription
             model.handle(error, loading: true)
         }

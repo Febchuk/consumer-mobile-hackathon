@@ -330,11 +330,19 @@ class JourneyCase: XCTestCase {
         while firstRun.waitForExistence(timeout: field.exists ? 0 : 4 * Self.pace) { firstRun.tap() }
         if !field.exists || element("ConversationTitle", in: messages).label != title {
             let back = element("BackButton", in: messages)
-            // Messages can open on an empty "New Message" draft or inside the other conversation; both lead back to the list.
+            // Messages can open on an empty "New Message" draft. The conversation list and its cells still exist underneath it
+            // but cannot be tapped, so the draft is looked for first and by itself, whether or not the cell exists. It is
+            // cancelled at most twice, and each cancel is written to the run's evidence.
+            let heading = element("ConversationTitle", in: messages)
             let cancel = messages.buttons["Cancel"]
-            if !cell.waitForExistence(timeout: 3 * Self.pace) {
-                if element("ConversationTitle", in: messages).label == "New Message", cancel.exists { cancel.tap() } else if back.exists { back.tap() }
+            let draft = { heading.exists && heading.label == "New Message" && cancel.exists }
+            for _ in 0..<2 where draft() {
+                try recordRetry("draft-cancel", "Messages opened on an empty New Message draft, which was cancelled")
+                cancel.tap()
+                _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !draft() }, object: nil)], timeout: 10 * Self.pace)
             }
+            // Inside the other conversation, the back button leads to the list.
+            if !cell.waitForExistence(timeout: 3 * Self.pace), back.exists { back.tap() }
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == YES AND hittable == YES"), object: cell)
             guard XCTWaiter.wait(for: [ready], timeout: 15 * Self.pace) == .completed else {
                 XCTFail("[NATIVE-UI-MESSAGES] synthetic conversation \(title) is missing or cannot be tapped", file: file, line: line)

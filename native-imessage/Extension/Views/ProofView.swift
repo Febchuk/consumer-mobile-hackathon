@@ -61,8 +61,9 @@ struct ProofView: View {
             guard model.token == token, model.isActive else { return }
             references = result ?? []
         } catch {
+            references = []; clear()
             if error is CancellationError { return }
-            references = []; clear(); self.error = error.localizedDescription; model.handle(error, loading: true)
+            self.error = error.localizedDescription; model.handle(error, loading: true)
         }
     }
 

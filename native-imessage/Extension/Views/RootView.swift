@@ -138,8 +138,8 @@ struct RecentBets: View {
             bets = (result ?? []).filter { $0.groupId == groupID }.reversed()
             error = nil
         } catch {
-            if error is CancellationError { return }
             bets = []
+            if error is CancellationError { return }
             self.error = error.localizedDescription
             model.handle(error, loading: true)
         }

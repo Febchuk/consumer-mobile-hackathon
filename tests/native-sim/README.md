@@ -47,3 +47,4 @@ A QA activation lasts at most one hour and the whole suite takes longer. A run w
 - Under load the local backend can exceed its one-second function limit. A fixture call that times out changed nothing, so the harness repeats it up to twice and records each repeat as a `fixture-retry`. Like every retry, it turns a pass into `passed-with-retries`.
 - Before the build and again before the tests start, the runner waits until xcodebuild offers the run's simulator as a destination. A test start that still cannot find it is repeated once and recorded as a `destination` retry.
 - A second tap on a conversation Messages ignored is recorded as a `retap` retry.
+- Cancelling an empty "New Message" draft that Messages opened on is recorded as a `draft-cancel` retry.
