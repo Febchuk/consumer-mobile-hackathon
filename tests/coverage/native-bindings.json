@@ -109,5 +109,49 @@
   ],
   "J9.4.no-last-room.U": [
     "NATIVE-UI.StartJourneyTests.testAnUnknownConversationAsksForAnExplicitLink"
+  ],
+  "J2.2.verified-otp.U": [
+    "NATIVE-UI.SignInJourneyTests.testAWrongCodeIsRefusedAndTheRightCodeSignsInOnce"
+  ],
+  "J2.2.one-sign-in.U": [
+    "NATIVE-UI.SignInJourneyTests.testAWrongCodeIsRefusedAndTheRightCodeSignsInOnce"
+  ],
+  "J2.2.shared-session.U": [
+    "NATIVE-UI.SignInJourneyTests.testAWrongCodeIsRefusedAndTheRightCodeSignsInOnce"
+  ],
+  "J2.3.clear-stale-data.U": [
+    "NATIVE-UI.SignInJourneyTests.testSwitchingAccountsShowsOnlyTheNewPersonsGroups"
+  ],
+  "J2.3.outsider-denied.U": [
+    "NATIVE-UI.SignInJourneyTests.testSwitchingAccountsShowsOnlyTheNewPersonsGroups",
+    "NATIVE-UI.SignInJourneyTests.testASignedOutExtensionShowsNothingPrivate"
+  ],
+  "J6.1.three-to-five.U": [
+    "NATIVE-UI.CreateJourneyTests.testSafeSuggestionsAppearAndOneCanBeUsed"
+  ],
+  "J6.1.over-under.U": [
+    "NATIVE-UI.CreateJourneyTests.testAnOverUnderBetIsCreatedWithItsLine"
+  ],
+  "J6.1.this-that.U": [
+    "NATIVE-UI.CreateJourneyTests.testAThisThatBetIsCreatedWithItsTwoChoices"
+  ],
+  "J6.2.under-three-seconds.U": [
+    "NATIVE-UI.CreateJourneyTests.testSafeSuggestionsAppearAndOneCanBeUsed"
+  ],
+  "J6.3.blocked-topic.U": [
+    "NATIVE-UI.CreateJourneyTests.testAQuestionOnATopicTheSubjectBlockedIsRefused"
+  ],
+  "J6.3.manual-edit-filter.U": [
+    "NATIVE-UI.CreateJourneyTests.testAQuestionOnATopicTheSubjectBlockedIsRefused"
+  ],
+  "J9.1.account-consent.U": [
+    "NATIVE-UI.MembershipJourneyTests.testAMemberInvitesByPhoneAndNobodyIsAddedUntilTheyAccept",
+    "NATIVE-UI.MembershipJourneyTests.testAnInvitedPersonJoinsByAcceptingAndSeesNoEarlierBets"
+  ],
+  "J9.1.no-prejoin-history.U": [
+    "NATIVE-UI.MembershipJourneyTests.testAnInvitedPersonJoinsByAcceptingAndSeesNoEarlierBets"
+  ],
+  "J9.4.account-scoped.U": [
+    "NATIVE-UI.SignInJourneyTests.testSwitchingAccountsShowsOnlyTheNewPersonsGroups"
   ]
 }

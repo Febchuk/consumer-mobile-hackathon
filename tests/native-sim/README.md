@@ -35,3 +35,7 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 ## Coverage bindings
 
 `tests/coverage/native-bindings.json` binds native-layer (`.U`) assertions from `inventory.json` to `NATIVE-UI.<Class>.<test>`. These are proven only by a passing run of this command; they live outside `bindings.json` because that file is checked to hold backend (`.B`) evidence only, so the backend evidence report still shows them blocked.
+
+## Full runs are split into parts
+
+A QA activation lasts at most one hour and the whole suite takes longer. A run without `--only` therefore runs the journey classes in parts. Each part is a complete run with its own simulator, backend and activation, and writes its own evidence under `part-<n>/` in the output directory. The top-level `evidence.json` lists the planned parts, each part's status, commit, simulator, test cases, latency measurements and retries, and the totals. The combined status is never better than the worst part, and a part that did not run or wrote no evidence makes the run `blocked`. Every `JourneyCase` class in `native-imessage/UITests` lands in exactly one part; a class with more than 16 tests stops the run before anything starts.

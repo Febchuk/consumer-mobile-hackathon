@@ -53,7 +53,7 @@ if (!options("--only").length && !flag("--demo") && !flag("--backend-only")) {
   const sources = resolve(native, "UITests");
   const classes = readdirSync(sources).filter((name) => name.endsWith(".swift")).flatMap((name) => {
     const text = readFileSync(resolve(sources, name), "utf8");
-    return [...text.matchAll(/^final class (\w+): JourneyCase/gm)].map((match) => ({ name: match[1], tests: (text.match(/^    func test\w+\(\)/gm) ?? []).length }));
+    return [...text.matchAll(/^final class (\w+): JourneyCase/gm)].map((match) => ({ name: match[1], tests: (text.match(/^ {4}func test\w+\(\)/gm) ?? []).length }));
   }).sort((a, b) => a.name.localeCompare(b.name));
   const parts = planParts(classes);
   const combinedOutput = resolve(option("--output") ?? resolve(realpathSync(homedir()) + "/.capy/work", "native-sim-" + randomUUID().slice(0, 8).toUpperCase()));
