@@ -39,7 +39,14 @@ struct RootView: View {
                 // Done button on top of it.
                 .safeAreaInset(edge: .bottom, spacing: 0) { if model.keyboardVisible { KeyboardDoneBar() } }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in model.keyboardVisible = true }
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in model.keyboardShown += 1 }
+                // When the keyboard has come up, and whenever the person moves to another field while it is up, the field
+                // with the keyboard is scrolled clear of the keyboard and the Done bar.
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                    model.revealFocusedField()
+                    model.keyboardShown += 1
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { _ in if model.keyboardVisible { model.revealFocusedField() } }
+                .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification)) { _ in if model.keyboardVisible { model.revealFocusedField() } }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in model.keyboardVisible = false }
                 .background(Theme.page.ignoresSafeArea())
                 .id(model.session?.accountID)
@@ -74,6 +81,13 @@ struct KeyboardDoneBar: View {
 
     var body: some View {
         HStack {
+            if let action = model.keyboardAction {
+                Button(action.title) { action.run() }
+                    .font(.body.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .disabled(!action.enabled)
+                    .accessibilityIdentifier("keyboard.action")
+            }
             Spacer()
             Button("Done") { model.dismissKeyboard() }
                 .font(.body.weight(.semibold))

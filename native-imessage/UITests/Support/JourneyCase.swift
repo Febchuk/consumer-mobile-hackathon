@@ -196,11 +196,12 @@ class JourneyCase: XCTestCase {
                 return now == last
             }
         }
-        // A control that can be tapped where it is gets tapped where it is. Only one under or behind the keyboard needs the
-        // keyboard gone first, and a field that can be touched keeps it.
+        // A control that can be tapped where it is gets tapped where it is. One under or behind the keyboard or its Done bar
+        // needs the keyboard gone first. That holds for a field too: XCTest reports a covered field as tappable, and a tap
+        // at its centre would land on the bar or the keyboard.
         if keyboardUp() {
             let top = done.exists ? done.frame.minY : keyboard.frame.minY
-            if !target.isHittable || (!typing && target.frame.maxY > top) {
+            if !target.isHittable || target.frame.maxY > top {
                 if done.exists, done.isHittable { done.tap() }
                 if !holds(10 * Self.pace, { !keyboardUp() }) {
                     // Without a Done button, the way a person puts the keyboard away: drag the content down into it.
@@ -430,6 +431,9 @@ class JourneyCase: XCTestCase {
     func type(_ value: String, into id: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let field = try required(id, in: messages, file: file, line: line)
         try tap(field, scrolling: messages, file: file, line: line)
+        // Typing into a field that has not taken the keyboard yet fails outright, so wait for the focus the tap asked for.
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-TYPE] \(id) did not take the keyboard after it was tapped", file: file, line: line)
         try enter(value, into: field, called: id, file: file, line: line)
     }
 
