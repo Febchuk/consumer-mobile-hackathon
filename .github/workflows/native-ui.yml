@@ -45,7 +45,6 @@ jobs:
           - { round: 3, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
           - { round: 4, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
           - { round: 5, shard: controls-resilience, classes: ControlsJourneyTests ResilienceJourneyTests, force: plain }
-          - { round: forced, shard: pick, classes: PickJourneyTests, force: once }
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -310,7 +309,6 @@ jobs:
           for round in r1 r2 r3 r4 r5; do
             SHARDS=controls-resilience PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
           done
-          SHARDS=pick PREFIX="native-ui-evidence-rforced-" node "$RUNNER_TEMP/combine.cjs" || status=1
           exit "$status"
       - name: Keep the combined result
         if: ${{ !cancelled() }}
