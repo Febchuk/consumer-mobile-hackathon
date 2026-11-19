@@ -28,12 +28,14 @@ final class ControlsJourneyTests: JourneyCase {
         XCTAssertEqual(try control.rows("accountRows").first { $0["actor"] as? String == "sage" }?["noBets"] as? Bool, true, "[NATIVE-UI-NOBETS-03] saved on the server")
         XCTAssertEqual(try bet("bet-a")["state"] as? String, "voided", "[NATIVE-UI-NOBETS-04] the open bet about Sage is cancelled")
 
+        // Cora holds today's turn about Sage, so nothing but the no-bets setting stands in the way of this bet.
+        try control.seedTurn(group: "G1", creator: "cora", subject: "sage")
         let reveal = Date().timeIntervalSince1970 * 1000 + 3 * 3_600_000
         let refused = try control.act("cora", "mutation", "v0Bets:create", [
             "groupId": "@G1", "subjectId": "@sage", "question": "A new bet about Sage", "contextLine": "", "format": "yes_no", "options": ["Yes", "No"],
             "cutoffAt": reveal, "revealAt": reveal, "source": "manual", "requestId": "after-no-bets",
         ])
-        XCTAssertNotNil(refused, "[NATIVE-UI-NOBETS-05] the server refuses a new bet about Sage")
+        XCTAssertEqual(refused, "NOT_AVAILABLE", "[NATIVE-UI-NOBETS-05] the server refuses a new bet about Sage because of the setting")
         XCTAssertEqual(try control.rows("bets").count, 1, "[NATIVE-UI-NOBETS-05]")
     }
 
@@ -73,7 +75,9 @@ final class ControlsJourneyTests: JourneyCase {
         XCTAssertEqual(removed.first?["displayName"] as? String, "Deleted account", "[NATIVE-UI-DELETE-03] the name is removed")
         let sessions = try control.rows("sessions").filter { !["cora", "finn", "sage"].contains($0["actor"] as? String ?? "") }
         XCTAssertTrue(sessions.allSatisfy { $0["revoked"] as? Bool == true }, "[NATIVE-UI-DELETE-04] every sign-in of the deleted account is revoked")
-        XCTAssertFalse(try control.rows("memberships").contains { $0["actor"] as? String == "oli" && $0["left"] as? Bool != true }, "[NATIVE-UI-DELETE-04] no active membership remains")
+        // Without a phone number the fixture reports the deleted account's rows as "other".
+        let remaining = try control.rows("memberships").filter { !["cora", "finn", "sage"].contains($0["actor"] as? String ?? "") }
+        XCTAssertTrue(remaining.allSatisfy { $0["left"] as? Bool == true }, "[NATIVE-UI-DELETE-04] no active membership remains")
         XCTAssertEqual(try appCalls("v0Controls:deleteAccount"), 1, "[NATIVE-UI-DELETE-05]")
     }
 
