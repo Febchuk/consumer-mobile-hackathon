@@ -165,7 +165,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         outcome = "gateway_error";
         if (!response.headersSent) reply(502, { status: "error", errorMessage: "Gateway failure", errorData: { code: "PROVIDER_UNAVAILABLE" } });
       } finally {
-        if (path !== "v0Runtime:attestation") calls.push({ at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started), ...(conversation ? { conversation } : {}) });
+        if (path !== "v0Runtime:attestation") calls.push({ at: Date.now(), kind: match?.[1] ?? "invalid", path, outcome, ms: Math.round(performance.now() - started), caller: String(request.headers["user-agent"] ?? "unknown").split("/")[0].slice(0, 40), ...(conversation ? { conversation } : {}) });
       }
     });
     track(gateway);

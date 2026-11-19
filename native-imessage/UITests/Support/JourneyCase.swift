@@ -49,7 +49,9 @@ class JourneyCase: XCTestCase {
         picture.name = "journey-failure"
         picture.lifetime = .keepAlways
         add(picture)
-        let calls = (try? control.calls().map { "\($0["path"] ?? "?")=\($0["outcome"] ?? "?")" }) ?? []
+        let logged = (try? control.calls()) ?? []
+        let first = logged.first?["at"] as? Double ?? 0
+        let calls = logged.map { "\($0["path"] ?? "?")=\($0["outcome"] ?? "?")@\(Int((($0["at"] as? Double ?? first) - first) / 1000))s/\($0["caller"] ?? "?")" }
         print("JOURNEY-DIAGNOSTIC calls: " + calls.joined(separator: " "))
         if messages.state == .runningForeground, let content = try? visibleContent(of: messages) { print("JOURNEY-DIAGNOSTIC screen:\n" + content + "\nJOURNEY-DIAGNOSTIC end") }
     }
@@ -105,7 +107,8 @@ class JourneyCase: XCTestCase {
 
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
         let keyboard = messages.keyboards.firstMatch
-        if !target.isHittable, keyboard.exists {
+        let typing = [.textField, .secureTextField, .textView].contains(target.elementType)
+        if keyboard.exists, !typing, !target.isHittable || target.frame.maxY > keyboard.frame.minY {
             // The way a person puts the keyboard away here: drag the content down into it.
             let surface: XCUIElement = container ?? messages
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
