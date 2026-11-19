@@ -56,6 +56,15 @@ final class SignInJourneyTests: JourneyCase {
         // Finn signs out in the host app and Oli, who is not in G1, signs in on the same phone.
         try signIn(.oli)
         XCTAssertTrue(try appSessions(.finn).allSatisfy { $0["revoked"] as? Bool == true }, "[NATIVE-UI-SWITCH-02] Finn's sign-in is revoked")
+
+        // Messages comes back as it was left, with Finn's bet open, and must not still show it to Oli.
+        XCTAssertTrue([.runningBackground, .runningBackgroundSuspended].contains(messages.state), "[NATIVE-UI-SWITCH-06] Messages is still running from Finn's visit, state \(messages.state.rawValue)")
+        messages.activate()
+        XCTAssertTrue(messages.wait(for: .runningForeground, timeout: 60 * Self.pace), "[NATIVE-UI-SWITCH-06] Messages returns to the foreground without a relaunch")
+        assertGone(text(run.secretQuestion, in: messages), "NATIVE-UI-SWITCH-06")
+        assertGone(element("bet.question", in: messages), "NATIVE-UI-SWITCH-06")
+        assertNoPrivateText(in: messages, "NATIVE-UI-SWITCH-06")
+
         try openExtension()
         try tap(labelled("Link this conversation", in: messages))
         _ = try required("group.link." + groupID("G2"), in: messages, "NATIVE-UI-SWITCH-03")

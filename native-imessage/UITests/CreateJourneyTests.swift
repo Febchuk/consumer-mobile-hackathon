@@ -17,8 +17,10 @@ final class CreateJourneyTests: JourneyCase {
     func testSafeSuggestionsAppearAndOneCanBeUsed() throws {
         try control.seedTurn(group: "G1", creator: "cora", subject: "sage")
         try start(as: .cora)
-        try tap("turn.create", in: messages)
+        let create = try required("turn.create", in: messages)
+        // The clock starts before the tap that opens the screen, so loading that begins with it is counted.
         let opened = ProcessInfo.processInfo.systemUptime
+        try tap(create, scrolling: messages)
         let ideas = messages.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "compose.suggestion."))
         XCTAssertTrue(ideas.firstMatch.waitForExistence(timeout: 20 * Self.pace), "[NATIVE-UI-IDEAS-01] suggestions appear without asking")
         try budget("NATIVE-UI-IDEAS-02", "safe suggestions shown after the new bet screen opens", seconds: ProcessInfo.processInfo.systemUptime - opened, limit: 3)
