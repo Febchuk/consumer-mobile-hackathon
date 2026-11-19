@@ -1,12 +1,11 @@
 name: Native UI
 
 # The native UI lane (tests/native-sim) on a hosted macOS runner. It is deliberately outside CI's required jobs: measured
-# on macos-26 it takes 33 to 43 minutes and passed the full set in 2 of 8 runs, because the 3-CPU runner is overloaded
+# on macos-26 it takes 33 to 43 minutes and passed the full set in 2 of 9 runs, because the 3-CPU runner is overloaded
 # (load averages above 300) while the simulator, Messages, the extension, the test runner and the backend share it.
 # It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled and
 # manually dispatched runs only from the workflow file on the default branch.
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -101,7 +100,7 @@ jobs:
           {
             echo "### Native UI lane"
             echo
-            echo "This job is not a required check. On hosted runners (3 CPUs, 7 GB) the full set passed in 2 of 8 measured runs; the failures were timeouts and typing cut short under load, not product assertions. Read the table before reading the colour."
+            echo "This job is not a required check. On hosted runners (3 CPUs, 7 GB) the full set passed in 2 of 9 measured runs; the failures were timeouts and typing cut short under load, not product assertions. Read the table before reading the colour."
             echo
             jq -r '"- Status: \(.status) on \(.sourceRevision)",
               "- Tests: \(.tests.passed // 0) passed, \(.tests.failed // 0) failed, \(.tests.blocked // 0) blocked",
