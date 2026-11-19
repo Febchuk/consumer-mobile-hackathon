@@ -1,0 +1,135 @@
+name: Native UI
+
+# The native UI lane (tests/native-sim) on a hosted macOS runner. It is deliberately outside CI's required jobs: measured
+# on macos-26 it takes 33 to 43 minutes and passed the full set in 2 of 9 runs, because the 3-CPU runner is overloaded
+# (load averages above 300) while the simulator, Messages, the extension, the test runner and the backend share it.
+# It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled and
+# manually dispatched runs only from the workflow file on the default branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 10 * * *"
+  push:
+    branches:
+      - capy/v0-backend-integration
+    paths:
+      - native-imessage/**
+      - tests/native-sim/**
+      - tests/qa-runtime/binary-pins.json
+      - .github/workflows/native-ui.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-ui:
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      XCODEGEN_VERSION: 2.47.0
+      XCODEGEN_SHA256: 6ef12a3ef5327c2c713397f46d9160550f8b1cdc5c925cd884d65c77c9f696cd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Report the runner and toolchain
+        run: |
+          {
+            echo "### Runner"
+            echo
+            echo "- Image: $ImageOS $ImageVersion, $(uname -m), $(sysctl -n hw.ncpu) CPUs, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"
+            echo "- macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion))"
+            echo "- Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "- Node: $(node --version)"
+            echo "- Passwordless sudo: $(sudo -n true 2>/dev/null && echo yes || echo no)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          xcrun simctl list runtimes
+      - name: Install the checksum-pinned XcodeGen
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Require the pinned XcodeGen to be the one the lane will find
+        run: |
+          # The lane puts /opt/homebrew/bin first on its own PATH, so a Homebrew copy on the image would win.
+          found="$(PATH="/opt/homebrew/bin:$PATH" command -v xcodegen)"
+          version="$(PATH="/opt/homebrew/bin:$PATH" xcodegen --version)"
+          echo "$found: $version"
+          test "$version" = "Version: $XCODEGEN_VERSION"
+      - name: Cache the checksum-pinned Convex backend binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/calledit/convex-local-backend
+          key: convex-local-backend-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/qa-runtime/binary-pins.json') }}
+      - name: Quiet the runner so the simulator gets the CPU
+        run: |
+          # Host Spotlight indexing competes with the simulator on a three-core runner.
+          sudo mdutil -a -i off || true
+          # With a hardware keyboard attached the simulator drops typed characters under load.
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+      - name: Run the native UI lane on a new simulator against the loopback backend
+        run: |
+          (
+            while true; do
+              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
+              sleep 30
+            done
+          ) &
+          sampler=$!
+          status=0
+          env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
+            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" || status=$?
+          kill "$sampler" || true
+          exit "$status"
+      - name: Report the lane's result
+        if: ${{ !cancelled() }}
+        run: |
+          evidence="$RUNNER_TEMP/native-ui-evidence/evidence.json"
+          binary="$(find "$HOME/.cache/calledit/convex-local-backend" -type f -name convex-local-backend | head -n 1)"
+          {
+            echo "### Native UI lane"
+            echo
+            echo "This job is not a required check. On hosted runners (3 CPUs, 7 GB) the full set passed in 2 of 9 measured runs; the failures were timeouts and typing cut short under load, not product assertions. Read the table before reading the colour."
+            echo
+            jq -r '"- Status: \(.status) on \(.sourceRevision)",
+              "- Tests: \(.tests.passed // 0) passed, \(.tests.failed // 0) failed, \(.tests.blocked // 0) blocked",
+              "- Simulator: \(.simulator.deviceType // "none" | split(".") | last), iOS \(.simulator.runtimeVersion // "?") (\(.simulator.runtimeBuild // "?")), created for this run, Apple account \(.simulator.appleAccount // "?")",
+              "- Outbound network: \(.networkIsolation), denied \(.safety.outboundNetwork.enforced // false); app connections outside loopback: \(.safety.outboundNetwork.appContactedNonLoopback // [] | length)",
+              "- Backend: \(.backend.release // "?"), executable SHA-256 \(.backend.executableSHA256 // "?")",
+              "- Not run: \([.notRun[]?.class] | join(", "))"' "$evidence"
+            if [ -n "$binary" ]; then echo "- Backend binary on this runner: $(file -b "$binary"), SHA-256 $(shasum -a 256 "$binary" | cut -d ' ' -f 1)"; fi
+            echo
+            echo '| Test | Result | Seconds |'
+            echo '|---|---|---|'
+            jq -r '.tests.cases[]? | "| \(.id) | \(.result) | \(.seconds) |"' "$evidence"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the lane's evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-evidence
+          path: |
+            ${{ runner.temp }}/runner-load.log
+            ${{ runner.temp }}/native-ui-evidence
+            !${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Keep the result bundle
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-xcresult
+          path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          if-no-files-found: warn
+          retention-days: 14
