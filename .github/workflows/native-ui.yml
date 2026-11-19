@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        round: [1, 2]
+        round: [1, 2, 3, 4, 5]
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
         shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
         include:
@@ -229,7 +229,7 @@ jobs:
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
           status=0
-          for round in r1 r2; do
+          for round in r1 r2 r3 r4 r5; do
             PREFIX="native-ui-evidence-$round-" node "$RUNNER_TEMP/combine.cjs" || status=1
           done
           exit "$status"
