@@ -85,13 +85,24 @@ final class ControlsJourneyTests: JourneyCase {
         try start(as: .cora)
         try openSettings()
         try type("Synthetic safety report", into: "settings.reportReason")
-        try tap("settings.report", in: messages)
+        // With the keyboard still up, the person can see and tap Submit report, and has a button that puts the keyboard away.
+        let done = try required("keyboard.done", in: messages, "NATIVE-UI-REPORT-00")
+        let submit = try required("settings.report", in: messages, "NATIVE-UI-REPORT-00")
+        let reachable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            done.exists && done.isHittable && submit.isHittable && submit.isEnabled && submit.frame.maxY <= done.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reachable], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-REPORT-00] Submit report can be tapped above the keyboard while the keyboard is up")
+        XCTAssertEqual(done.label, "Done", "[NATIVE-UI-REPORT-00] the keyboard's dismissal has a readable name")
+        submit.tap()
         eventually("NATIVE-UI-REPORT-01") { try self.control.rows("reports").count == 1 }
         let report = try control.rows("reports").first
         XCTAssertEqual(report?["reporter"] as? String, "cora", "[NATIVE-UI-REPORT-01]")
         XCTAssertEqual(report?["group"] as? String, "G1", "[NATIVE-UI-REPORT-01]")
         XCTAssertEqual(report?["reason"] as? String, "Synthetic safety report", "[NATIVE-UI-REPORT-01]")
 
+        // Done puts the keyboard away, which leaves the block picker free.
+        done.tap()
+        assertGone(done, "NATIVE-UI-REPORT-02")
         try chooseMenu("settings.blockUser", "QA Finn")
         try tap(labelled("Block selected user", in: messages))
         eventually("NATIVE-UI-BLOCK-01") { try self.control.rows("blocks").count == 1 }

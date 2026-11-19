@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var confirmDelete = false
     @State private var confirmLeave = false
     @State private var message: String?
+    private enum Field { case topics, reason }
+    @FocusState private var focus: Field?
 
     var body: some View {
         Text("Settings and safety").font(.largeTitle.bold())
@@ -26,9 +28,10 @@ struct SettingsView: View {
                             if value != self.settings?.noBets { Task { await save() } }
                         }
                 }
-                InsetRow { TextField("Blocked topics, separated by commas", text: $topics, axis: .vertical).accessibilityIdentifier("settings.topics") }
+                InsetRow { TextField("Blocked topics, separated by commas", text: $topics, axis: .vertical).focused($focus, equals: .topics).accessibilityIdentifier("settings.topics") }
                 InsetRow(last: true) { Button("Save blocked topics") { Task { await save() } }.disabled(busy) }
             }
+            .id("settings.topicsGroup")
             Footnote(text: "No bets about me also quietly cancels your nonfinal subject bets. You can veto an individual locked bet directly from its card.")
             SectionTitle(text: "Your information")
             CardBox {
@@ -43,9 +46,10 @@ struct SettingsView: View {
             if let group = model.linkedRoom {
                 SectionTitle(text: "Group safety")
                 InsetGroup {
-                    InsetRow { TextField("Report a safety issue", text: $reason, axis: .vertical).accessibilityIdentifier("settings.reportReason") }
+                    InsetRow { TextField("Report a safety issue", text: $reason, axis: .vertical).focused($focus, equals: .reason).accessibilityIdentifier("settings.reportReason") }
                     InsetRow(last: true) { Button("Submit report") { Task { await report(group.id) } }.disabled(reason.isEmpty || busy).accessibilityIdentifier("settings.report") }
                 }
+                .id("settings.reportGroup")
                 InsetGroup {
                     InsetRow {
                         Picker("Block a user", selection: $blockedAccount) {
@@ -79,6 +83,15 @@ struct SettingsView: View {
         if let message { Text(message).font(.footnote).accessibilityIdentifier("settings.result") }
         ErrorText(text: model.error)
             .task { await load() }
+            // The button that belongs to a multi-line field sits under it, where the keyboard would cover it. Once the
+            // keyboard is up, or the person moves to the other field, the field's whole group is scrolled above it.
+            .onChange(of: model.keyboardShown) { _, _ in reveal() }
+            .onChange(of: focus) { _, _ in if model.keyboardVisible { reveal() } }
+    }
+
+    private func reveal() {
+        if focus == .topics { model.revealRequest = "settings.topicsGroup" }
+        if focus == .reason { model.revealRequest = "settings.reportGroup" }
     }
 
     private var supportURL: URL? {

@@ -18,6 +18,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var linkedRoomId: String?
     @Published var error: String?
     @Published var notice: String?
+    /// True while the keyboard is up, so every screen can show a Done button on top of it.
+    @Published var keyboardVisible = false
+    /// Counts the times the keyboard has finished appearing; a field uses it to bring its own controls above the keyboard.
+    @Published var keyboardShown = 0
+    /// The group the scroll view is asked to bring above the keyboard.
+    @Published var revealRequest: String?
     /// True after a screen's load failed for a passing reason, so the person is offered "Try again".
     @Published private(set) var canRetryLoad = false
     /// Changes when the person asks to try again; the current screen is rebuilt and loads from the start.
@@ -76,6 +82,8 @@ final class AppModel: ObservableObject {
         screen = .home
         canRetryLoad = false
     }
+
+    func dismissKeyboard() { controller?.view.endEditing(true) }
 
     func retryLoad() async {
         canRetryLoad = false

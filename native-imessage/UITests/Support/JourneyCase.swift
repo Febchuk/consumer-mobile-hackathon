@@ -176,41 +176,56 @@ class JourneyCase: XCTestCase {
     }
 
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
-        let keyboard = ((container as? XCUIApplication) ?? messages).keyboards.firstMatch
+        let surface: XCUIElement = container ?? messages
+        let app = (container as? XCUIApplication) ?? messages
+        let keyboard = app.keyboards.firstMatch
+        // The app puts a Done button on top of its keyboards. It is the sure sign that a keyboard is up, also where the
+        // keyboard itself is not reported to the test, and the sure way to put it away, also for a multi-line field.
+        let done = app.buttons.matching(NSPredicate(format: "identifier IN %@", ["keyboard.done", "auth.keyboardDone"])).firstMatch
         let typing = [.textField, .secureTextField, .textView].contains(target.elementType)
-        // A field that can be touched keeps the keyboard; anything else under or behind it needs the keyboard gone first.
-        if keyboard.exists, !target.isHittable || (!typing && target.frame.maxY > keyboard.frame.minY) {
-            // The way a person puts the keyboard away here: drag the content down into it.
-            let surface: XCUIElement = container ?? messages
-            let gone = { XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !keyboard.exists }, object: nil)], timeout: 10 * Self.pace) == .completed }
-            // Where the screen gives the keyboard a Done button, that is the sure way; otherwise drag the content down into it.
-            let done = surface.buttons["auth.keyboardDone"]
-            if done.exists, done.isHittable { done.tap() }
-            if !done.exists || !gone() {
-                surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
-                _ = gone()
-            }
+        let keyboardUp = { keyboard.exists || done.exists }
+        func holds(_ limit: TimeInterval, _ condition: @escaping () -> Bool) -> Bool {
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in condition() }, object: nil)], timeout: limit) == .completed
         }
-        if !target.isHittable {
-            // Scroll toward the target, a screen at a time, on a long page.
-            let surface: XCUIElement = container ?? messages
-            for _ in 0..<6 where !target.isHittable {
-                if target.frame.midY > surface.frame.midY { surface.swipeUp() } else { surface.swipeDown() }
-            }
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in target.isHittable }, object: nil)], timeout: 15 * Self.pace)
-            // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
+        // A tap that lands while the page is still moving only stops the scroll, so this waits until the target stays put.
+        func settle(_ limit: TimeInterval) {
             var last = CGRect.null
-            let atRest = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            _ = holds(limit) {
                 let now = target.frame
                 defer { last = now }
                 return now == last
-            }, object: nil)
-            _ = XCTWaiter.wait(for: [atRest], timeout: 10 * Self.pace)
+            }
+        }
+        // A control that can be tapped where it is gets tapped where it is. Only one under or behind the keyboard needs the
+        // keyboard gone first, and a field that can be touched keeps it.
+        if keyboardUp() {
+            let top = done.exists ? done.frame.minY : keyboard.frame.minY
+            if !target.isHittable || (!typing && target.frame.maxY > top) {
+                if done.exists, done.isHittable { done.tap() }
+                if !holds(10 * Self.pace, { !keyboardUp() }) {
+                    // Without a Done button, the way a person puts the keyboard away: drag the content down into it.
+                    surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+                    _ = holds(10 * Self.pace) { !keyboardUp() }
+                }
+                settle(5 * Self.pace)
+            }
+        }
+        if !target.isHittable {
+            // Scroll toward the target one swipe at a time, and look again only once the page has come to rest. A control
+            // that is already on screen is not scrolled away: it first gets a moment to become tappable.
+            for _ in 0..<6 where !target.isHittable {
+                let frame = target.frame
+                if !frame.isEmpty, surface.frame.contains(CGPoint(x: frame.midX, y: frame.midY)), holds(3 * Self.pace, { target.isHittable }) { break }
+                if frame.midY > surface.frame.midY { surface.swipeUp() } else { surface.swipeDown() }
+                settle(5 * Self.pace)
+            }
+            _ = holds(15 * Self.pace) { target.isHittable }
+            settle(10 * Self.pace)
         }
         if !target.isEnabled || !target.isHittable {
             // On a slow machine a control can exist before it can be used.
             // A block predicate is asked directly; a format predicate makes XCTest capture a full element description on every poll.
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in target.isHittable && target.isEnabled }, object: nil)], timeout: 30 * Self.pace)
+            _ = holds(30 * Self.pace) { target.isHittable && target.isEnabled }
         }
         guard target.isEnabled, target.isHittable else {
             XCTFail("[NATIVE-UI-ACTION] \(target) must be enabled and on screen", file: file, line: line)
@@ -218,7 +233,6 @@ class JourneyCase: XCTestCase {
         }
         target.tap()
     }
-
     func tap(_ id: String, in container: XCUIElement, timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) throws {
         try tap(required(id, in: container, timeout: timeout, file: file, line: line), scrolling: container, file: file, line: line)
     }
