@@ -27,14 +27,14 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }} (${{ matrix.device }})
+    name: ${{ matrix.shard }} (${{ matrix.tune }})
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the run starts.
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
-        device: [iPhone-17, iPhone-SE-3rd-generation]
+        tune: [plain, priority]
         shard: [pick, reveal, controls, privacy, start-board]
         include:
           - shard: pick
@@ -100,7 +100,7 @@ jobs:
         run: |
           (
             while true; do
-              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
+              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,nice,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
               sleep 30
             done
           ) &
@@ -111,7 +111,20 @@ jobs:
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
           env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
             node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
-            --wait-scale 2 --device-type "com.apple.CoreSimulator.SimDeviceType.${{ matrix.device }}" "${only[@]}" || status=$?
+            --wait-scale 2 "${only[@]}" &
+          lane=$!
+          if [ "${{ matrix.tune }}" = priority ]; then
+            # The backend and the lane's own servers inherit this priority, so the backend's one-second function limit
+            # is not spent waiting for a CPU. The simulator is started by CoreSimulator and keeps its own priority.
+            sudo renice -n -10 -p "$lane"
+            (
+              while kill -0 "$lane" 2>/dev/null; do
+                for pid in $(pgrep -x diagnosticd); do sudo renice -n 19 -p "$pid" > /dev/null 2>&1 || true; done
+                sleep 10
+              done
+            ) &
+          fi
+          wait "$lane" || status=$?
           kill "$sampler" || true
           exit "$status"
       - name: Report the lane's result
@@ -138,7 +151,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.device }}-${{ matrix.shard }}
+          name: native-ui-evidence-${{ matrix.tune }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -149,7 +162,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.device }}-${{ matrix.shard }}
+          name: native-ui-xcresult-${{ matrix.tune }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -212,8 +225,8 @@ jobs:
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
           status=0
-          for device in iPhone-17 iPhone-SE-3rd-generation; do
-            PREFIX="native-ui-evidence-$device-" node "$RUNNER_TEMP/combine.cjs" || status=1
+          for tune in plain priority; do
+            PREFIX="native-ui-evidence-$tune-" node "$RUNNER_TEMP/combine.cjs" || status=1
           done
           exit "$status"
       - name: Keep the combined result
