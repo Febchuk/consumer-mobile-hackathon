@@ -22,6 +22,13 @@ final class AppModel: ObservableObject {
     @Published var keyboardVisible = false
     /// Counts the times the keyboard has finished appearing; a field uses it to bring its own controls above the keyboard.
     @Published var keyboardShown = 0
+    /// A screen's main action, offered beside Done on top of the keyboard while one of that screen's fields has it.
+    struct KeyboardAction {
+        let title: String
+        let enabled: Bool
+        let run: () -> Void
+    }
+    @Published var keyboardAction: KeyboardAction?
     /// The group the scroll view is asked to bring above the keyboard.
     @Published var revealRequest: String?
     /// True after a screen's load failed for a passing reason, so the person is offered "Try again".

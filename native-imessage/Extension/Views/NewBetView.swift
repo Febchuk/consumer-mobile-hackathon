@@ -19,6 +19,8 @@ struct NewBetView: View {
     @State private var error: String?
     @State private var requestID = UUID().uuidString
     @State private var lastPayload: Data?
+    private enum Field { case question, context }
+    @FocusState private var focus: Field?
 
     var body: some View {
         if let group = model.linkedRoom {
@@ -39,7 +41,7 @@ struct NewBetView: View {
                     }
                     .accessibilityIdentifier("compose.format")
                 }
-                InsetRow { TextField("Your question", text: $question, axis: .vertical).accessibilityIdentifier("compose.question") }
+                InsetRow { TextField("Your question", text: $question, axis: .vertical).focused($focus, equals: .question).accessibilityIdentifier("compose.question") }
                 if format == "over_under" {
                     InsetRow { TextField("Numeric line", text: $line).keyboardType(.decimalPad).accessibilityIdentifier("compose.line") }
                 }
@@ -57,6 +59,7 @@ struct NewBetView: View {
             InsetGroup {
                 InsetRow(last: true) {
                     TextField("Optional context you type", text: $context, axis: .vertical)
+                        .focused($focus, equals: .context)
                         .accessibilityIdentifier("compose.context")
                 }
             }
@@ -91,6 +94,11 @@ struct NewBetView: View {
                     ideas = []
                     if !subjectID.isEmpty { await suggestions(group.id) }
                 }
+                // Create card is far below the multi-line fields, where the keyboard covers it. While one of them has the
+                // keyboard, the same action is offered beside Done on top of the keyboard.
+                .onChange(of: focus) { _, _ in offerCreate(group.id) }
+                .onChange(of: canCreate) { _, _ in offerCreate(group.id) }
+                .onDisappear { model.keyboardAction = nil }
         }
     }
 
@@ -101,6 +109,16 @@ struct NewBetView: View {
         default: return ["Yes", "No"]
         }
     }
+    private var canCreate: Bool { valid && model.me?.policy.approved == true && !busy }
+
+    private func offerCreate(_ groupID: String) {
+        guard focus != nil else { model.keyboardAction = nil; return }
+        model.keyboardAction = AppModel.KeyboardAction(title: "Create card", enabled: canCreate) {
+            model.dismissKeyboard()
+            Task { await create(groupID) }
+        }
+    }
+
     private var valid: Bool {
         !subjectID.isEmpty && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             reveal.timeIntervalSince1970.isFinite && options.count == 2 && !options[0].isEmpty && !options[1].isEmpty &&

@@ -74,6 +74,13 @@ struct KeyboardDoneBar: View {
 
     var body: some View {
         HStack {
+            if let action = model.keyboardAction {
+                Button(action.title) { action.run() }
+                    .font(.body.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .disabled(!action.enabled)
+                    .accessibilityIdentifier("keyboard.action")
+            }
             Spacer()
             Button("Done") { model.dismissKeyboard() }
                 .font(.body.weight(.semibold))

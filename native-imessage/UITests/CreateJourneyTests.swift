@@ -49,6 +49,31 @@ final class CreateJourneyTests: JourneyCase {
         XCTAssertEqual(bets.first?["subject"] as? String, "sage", "[NATIVE-UI-IDEAS-09]")
     }
 
+    func testCreateIsReachableAboveTheKeyboardFromTheQuestionAndContextFields() throws {
+        try openNewBet()
+        let action = element("keyboard.action", in: messages)
+        let done = element("keyboard.done", in: messages)
+        func offered(enabled: Bool, _ code: String) {
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                action.exists && action.isHittable && action.isEnabled == enabled && done.exists && done.isHittable
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15 * Self.pace), .completed, "[\(code)] Create card sits beside Done on top of the keyboard, enabled: \(enabled)")
+        }
+        // In the context field, with no question yet, the action is there and cannot be used.
+        try type("Synthetic context", into: "compose.context")
+        offered(enabled: false, "NATIVE-UI-KEYBOARD-01")
+        XCTAssertEqual(action.label, "Create card", "[NATIVE-UI-KEYBOARD-01] the action has a readable name")
+        // In the question field, once the bet is complete, it can be tapped without putting the keyboard away.
+        try type("Will the fixture finish on time", into: "compose.question")
+        offered(enabled: true, "NATIVE-UI-KEYBOARD-02")
+        action.tap()
+        requireDraftCard("NATIVE-UI-KEYBOARD-03")
+        let bets = try control.rows("bets")
+        XCTAssertEqual(bets.count, 1, "[NATIVE-UI-KEYBOARD-03] exactly one bet is created")
+        XCTAssertEqual(bets.first?["question"] as? String, "Will the fixture finish on time", "[NATIVE-UI-KEYBOARD-03]")
+        XCTAssertFalse(done.exists, "[NATIVE-UI-KEYBOARD-04] the keyboard is put away when the card is created")
+    }
+
     func testAnOverUnderBetIsCreatedWithItsLine() throws {
         try openNewBet()
         try chooseMenu("compose.format", "Over / Under")
