@@ -21,7 +21,14 @@ final class SignInJourneyTests: JourneyCase {
         // The person can correct the code without starting over.
         if !element("auth.code", in: host).exists { host.swipeDown() }
         let again = try required("auth.code", in: host, "NATIVE-UI-CODE-04")
-        again.tap()
+        try tap(again, scrolling: host)
+        // After the scroll the field can sit under the navigation bar, where a tap does not reach it.
+        let keyboard = host.keyboards.firstMatch
+        if !keyboard.waitForExistence(timeout: 5 * Self.pace) {
+            host.swipeDown()
+            try tap(again, scrolling: host)
+        }
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10 * Self.pace), "[NATIVE-UI-CODE-04] the code field takes focus again")
         clear(again)
         try enter("000000", into: again, called: "auth.code")
         try tap("auth.verify", in: host)
