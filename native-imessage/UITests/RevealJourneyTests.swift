@@ -39,17 +39,19 @@ final class RevealJourneyTests: JourneyCase {
         XCTAssertEqual(try appCalls("v0Bets:answer"), 1, "[NATIVE-UI-ANSWER-08]")
     }
 
-    /// Named native bug: under the ink cover the question is already in the accessibility tree, so assistive technology can
-    /// read it before the subject chooses to reveal it (InkPanel.swift marks it hidden, which has no effect here). The
-    /// server has already revealed the bet at this point, so this is not a pre-reveal leak.
     func testCoveredQuestionIsNotExposedToAccessibility() throws {
         try seedPickedBet()
         try control.shiftBet("bet-a", to: "revealed")
         try start(as: .sage)
         let screen = try openBet("bet-a")
         _ = try required("bet.revealWithoutRubbing", in: screen)
-        XCTExpectFailure("The covered question is exposed to accessibility before the subject reveals it", strict: true)
         XCTAssertFalse(text(run.secretQuestion, in: screen).exists, "[NATIVE-UI-REVEAL-08] the question is covered until the subject reveals it")
+        try assertNoPrivateContent(in: messages, "NATIVE-UI-REVEAL-08")
+        // Two accessible ways in that need no rub: the cover is announced as a button (its activate action cannot be
+        // driven from a UI test, which only sends touches), and a plain button below it does the same.
+        _ = try labelled("Covered by invisible ink", in: screen)
+        try tap("bet.revealWithoutRubbing", in: screen)
+        assertText(run.secretQuestion, in: screen, "NATIVE-UI-REVEAL-09")
     }
 
     func testFriendChallengesOnceDuringTheHour() throws {

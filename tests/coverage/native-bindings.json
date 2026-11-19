@@ -42,5 +42,72 @@
   ],
   "J5.3.timeout-policy.U": [
     "NATIVE-UI.RevealJourneyTests.testUnansweredBetBecomesUnavailable"
+  ],
+  "J1.1.single-room.U": [
+    "NATIVE-UI.StartJourneyTests.testTheCreatorMakesExactlyOneBetAboutTheAssignedFriend"
+  ],
+  "J1.1.neutral-card.U": [
+    "NATIVE-UI.StartJourneyTests.testTheCreatorMakesExactlyOneBetAboutTheAssignedFriend"
+  ],
+  "J1.2.unknown-chat.U": [
+    "NATIVE-UI.StartJourneyTests.testAnUnknownConversationAsksForAnExplicitLink"
+  ],
+  "J7.1.no-cash.U": [
+    "NATIVE-UI.BoardJourneyTests.testEachGroupHasItsOwnBoard"
+  ],
+  "J7.2.group-board.U": [
+    "NATIVE-UI.BoardJourneyTests.testEachGroupHasItsOwnBoard"
+  ],
+  "J7.4.setter-consent.U": [
+    "NATIVE-UI.BoardJourneyTests.testAMemberProposesASharedGoalForThisGroupOnly",
+    "NATIVE-UI.BoardJourneyTests.testAnotherMemberConfirmsTheProposedGoal"
+  ],
+  "J7.4.no-individual-reward.U": [
+    "NATIVE-UI.BoardJourneyTests.testAMemberProposesASharedGoalForThisGroupOnly"
+  ],
+  "J8.1.existing-bet-policy.U": [
+    "NATIVE-UI.ControlsJourneyTests.testNoBetsAboutMeCancelsOpenBetsAndRefusesNewOnes"
+  ],
+  "J8.1.veto.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectVetoesInOneTapAndThePickIsVoided"
+  ],
+  "J8.1.report-block.U": [
+    "NATIVE-UI.ControlsJourneyTests.testAReportAndABlockAreRecorded"
+  ],
+  "J8.2.void-open-picks.U": [
+    "NATIVE-UI.ControlsJourneyTests.testLeavingOneGroupVoidsOpenPicksAndKeepsTheOther"
+  ],
+  "J8.2.isolate-g2.U": [
+    "NATIVE-UI.ControlsJourneyTests.testLeavingOneGroupVoidsOpenPicksAndKeepsTheOther"
+  ],
+  "J8.3.confirmed-initiation.U": [
+    "NATIVE-UI.ControlsJourneyTests.testDeletingTheAccountRevokesEverySignIn"
+  ],
+  "J8.3.revoke-sessions.U": [
+    "NATIVE-UI.ControlsJourneyTests.testDeletingTheAccountRevokesEverySignIn"
+  ],
+  "J8.3.honest-transcript-limit.U": [
+    "NATIVE-UI.ControlsJourneyTests.testDeletingTheAccountRevokesEverySignIn"
+  ],
+  "J8.4.no-bets.U": [
+    "NATIVE-UI.ControlsJourneyTests.testEveryControlIsOneTapFromHome"
+  ],
+  "J8.4.topics.U": [
+    "NATIVE-UI.ControlsJourneyTests.testEveryControlIsOneTapFromHome"
+  ],
+  "J8.4.veto.U": [
+    "NATIVE-UI.SubjectPrivacyJourneyTests.testSubjectVetoesInOneTapAndThePickIsVoided"
+  ],
+  "J8.4.leave.U": [
+    "NATIVE-UI.ControlsJourneyTests.testEveryControlIsOneTapFromHome"
+  ],
+  "J8.4.delete.U": [
+    "NATIVE-UI.ControlsJourneyTests.testEveryControlIsOneTapFromHome"
+  ],
+  "J8.5.no-chat-reading.U": [
+    "NATIVE-UI.ControlsJourneyTests.testEveryControlIsOneTapFromHome"
+  ],
+  "J9.4.no-last-room.U": [
+    "NATIVE-UI.StartJourneyTests.testAnUnknownConversationAsksForAnExplicitLink"
   ]
 }

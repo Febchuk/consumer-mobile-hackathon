@@ -45,7 +45,13 @@ class JourneyCase: XCTestCase {
     /// On failure, keep what was on screen and what the app asked the backend, so a red test can be read from the log.
     override func tearDownWithError() throws {
         guard (testRun?.failureCount ?? 0) > 0, let control, let messages else { return }
-        let calls = (try? control.calls().map { "\($0["path"] ?? "?")=\($0["outcome"] ?? "?")" }) ?? []
+        let picture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        picture.name = "journey-failure"
+        picture.lifetime = .keepAlways
+        add(picture)
+        let logged = (try? control.calls()) ?? []
+        let first = logged.first?["at"] as? Double ?? 0
+        let calls = logged.map { "\($0["path"] ?? "?")=\($0["outcome"] ?? "?")@\(Int((($0["at"] as? Double ?? first) - first) / 1000))s/\($0["caller"] ?? "?")" }
         print("JOURNEY-DIAGNOSTIC calls: " + calls.joined(separator: " "))
         if messages.state == .runningForeground, let content = try? visibleContent(of: messages) { print("JOURNEY-DIAGNOSTIC screen:\n" + content + "\nJOURNEY-DIAGNOSTIC end") }
     }
@@ -100,9 +106,25 @@ class JourneyCase: XCTestCase {
     }
 
     func tap(_ target: XCUIElement, scrolling container: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) throws {
+        let keyboard = messages.keyboards.firstMatch
+        let typing = [.textField, .secureTextField, .textView].contains(target.elementType)
+        if keyboard.exists, !typing, !target.isHittable || target.frame.maxY > keyboard.frame.minY {
+            // The way a person puts the keyboard away here: drag the content down into it.
+            let surface: XCUIElement = container ?? messages
+            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 0.1, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: keyboard)], timeout: 5)
+        }
         if !target.isHittable {
             (container ?? messages).swipeUp()
             _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == YES"), object: target)], timeout: 5)
+            // A tap that lands while the list is still coasting only stops the scroll, so wait until the target is at rest.
+            var last = CGRect.null
+            let atRest = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let now = target.frame
+                defer { last = now }
+                return now == last
+            }, object: nil)
+            _ = XCTWaiter.wait(for: [atRest], timeout: 6)
         }
         guard target.isEnabled, target.isHittable else {
             XCTFail("[NATIVE-UI-ACTION] \(target) must be enabled and on screen", file: file, line: line)
@@ -146,11 +168,20 @@ class JourneyCase: XCTestCase {
         return lines.joined(separator: "\n")
     }
 
-    func assertNoPrivateContent(in app: XCUIApplication, extra: [String] = [], _ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
+    func assertNoPrivateContent(in app: XCUIApplication, extra: [String] = [], anchor: String = "navigation.settings", _ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let content = try visibleContent(of: app)
-        XCTAssertTrue(content.contains("navigation.settings"), "[\(code)] the extension must be on screen for this check to mean anything", file: file, line: line)
+        XCTAssertTrue(content.contains(anchor), "[\(code)] the extension must be on screen for this check to mean anything", file: file, line: line)
         for sentinel in run.privateSentinels + extra {
             XCTAssertFalse(content.contains(sentinel), "[\(code)] private content \(sentinel.prefix(18))… reached the screen", file: file, line: line)
+        }
+    }
+
+    /// The same check by direct query, for screens where a whole-app snapshot does not include the extension
+    /// (seen after a system dialog and in the compact view). The caller proves the screen is showing first.
+    func assertNoPrivateText(in app: XCUIApplication, extra: [String] = [], _ code: String, file: StaticString = #filePath, line: UInt = #line) {
+        for sentinel in run.privateSentinels + extra {
+            let found = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", sentinel, sentinel)).count
+            XCTAssertEqual(found, 0, "[\(code)] private content \(sentinel.prefix(18))… reached the screen", file: file, line: line)
         }
     }
 
@@ -251,6 +282,30 @@ class JourneyCase: XCTestCase {
         try tap(option, file: file, line: line)
         let chosen = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == YES"), object: option)], timeout: 5) == .completed
         XCTAssertTrue(chosen, "[NATIVE-UI-CHOICE] option \(index) did not become the chosen side", file: file, line: line)
+    }
+
+    /// Types into a text field of the extension after bringing it on screen.
+    func type(_ value: String, into id: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        let field = try required(id, in: messages, file: file, line: line)
+        try tap(field, scrolling: messages, file: file, line: line)
+        field.typeText(value)
+    }
+
+    /// Opens a menu picker and chooses one entry by its visible name.
+    func chooseMenu(_ id: String, _ entry: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        try tap(id, in: messages, file: file, line: line)
+        try tap(labelled(entry, in: messages, file: file, line: line), file: file, line: line)
+    }
+
+    /// Waits until the server shows what the tap should have caused.
+    func eventually(_ code: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line, _ condition: @escaping () throws -> Bool) {
+        let reached = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (try? condition()) ?? false }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reached], timeout: timeout), .completed, "[\(code)] the server never showed the expected state", file: file, line: line)
+    }
+
+    /// Conversation links made by the app, leaving out the harness's own control sessions.
+    func appLinks() throws -> [[String: Any]] {
+        try control.rows("links").filter { $0["control"] as? Bool != true }
     }
 
     func goHome(file: StaticString = #filePath, line: UInt = #line) throws {
