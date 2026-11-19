@@ -1,11 +1,11 @@
 name: Native UI
 
-# The native UI lane (tests/native-sim) on a hosted macOS runner. It is deliberately outside CI's required jobs: measured
-# on macos-26 it takes 33 to 43 minutes and passed the full set in 2 of 9 runs, because the 3-CPU runner is overloaded
-# (load averages above 300) while the simulator, Messages, the extension, the test runner and the backend share it.
-# It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled and
-# manually dispatched runs only from the workflow file on the default branch.
+# The native UI lane (tests/native-sim) on hosted macOS runners, split by test class so every shard finishes well inside
+# the QA build's 60-minute activation. Each shard has its own runner, simulator and loopback backend. It is not a
+# required check. It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts
+# scheduled and manually dispatched runs only from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -26,9 +26,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  native-ui:
+  shard:
+    name: ${{ matrix.shard }} (scale ${{ matrix.scale }})
     runs-on: macos-26
-    timeout-minutes: 75
+    # The QA build stops accepting its launch manifest 60 minutes after the run starts.
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        scale: [2, 3]
+        shard: [pick, reveal, controls, privacy, start-board]
+        include:
+          - shard: pick
+            classes: PickJourneyTests
+          - shard: reveal
+            classes: RevealJourneyTests
+          - shard: controls
+            classes: ControlsJourneyTests
+          - shard: privacy
+            classes: SubjectPrivacyJourneyTests
+          - shard: start-board
+            classes: StartJourneyTests BoardJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -88,8 +106,12 @@ jobs:
           ) &
           sampler=$!
           status=0
+          only=()
+          for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
+          # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
           env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
-            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" || status=$?
+            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
+            --wait-scale "${{ matrix.scale }}" "${only[@]}" || status=$?
           kill "$sampler" || true
           exit "$status"
       - name: Report the lane's result
@@ -98,16 +120,14 @@ jobs:
           evidence="$RUNNER_TEMP/native-ui-evidence/evidence.json"
           binary="$(find "$HOME/.cache/calledit/convex-local-backend" -type f -name convex-local-backend | head -n 1)"
           {
-            echo "### Native UI lane"
-            echo
-            echo "This job is not a required check. On hosted runners (3 CPUs, 7 GB) the full set passed in 2 of 9 measured runs; the failures were timeouts and typing cut short under load, not product assertions. Read the table before reading the colour."
+            echo "### Native UI shard ${{ matrix.shard }}"
             echo
             jq -r '"- Status: \(.status) on \(.sourceRevision)",
-              "- Tests: \(.tests.passed // 0) passed, \(.tests.failed // 0) failed, \(.tests.blocked // 0) blocked",
+              "- Tests: \(.tests.passed // 0) passed, \(.tests.failed // 0) failed, \(.tests.blocked // 0) blocked; \(.retries | length) recorded retries; wait scale \(.waitScale); latency budgets \(.latencyBudgets.mode)",
               "- Simulator: \(.simulator.deviceType // "none" | split(".") | last), iOS \(.simulator.runtimeVersion // "?") (\(.simulator.runtimeBuild // "?")), created for this run, Apple account \(.simulator.appleAccount // "?")",
               "- Outbound network: \(.networkIsolation), denied \(.safety.outboundNetwork.enforced // false); app connections outside loopback: \(.safety.outboundNetwork.appContactedNonLoopback // [] | length)",
               "- Backend: \(.backend.release // "?"), executable SHA-256 \(.backend.executableSHA256 // "?")",
-              "- Not run: \([.notRun[]?.class] | join(", "))"' "$evidence"
+              "- Selection: \(.tests.selection // [] | join(" "))"' "$evidence"
             if [ -n "$binary" ]; then echo "- Backend binary on this runner: $(file -b "$binary"), SHA-256 $(shasum -a 256 "$binary" | cut -d ' ' -f 1)"; fi
             echo
             echo '| Test | Result | Seconds |'
@@ -118,7 +138,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence
+          name: native-ui-evidence-s${{ matrix.scale }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -129,7 +149,78 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult
+          name: native-ui-xcresult-s${{ matrix.scale }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: summary
+    needs: shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SHARDS: pick reveal controls privacy start-board
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-ui-evidence-*
+          path: ${{ runner.temp }}/evidence
+      - name: Combine the shards into one result
+        run: |
+          cat > "$RUNNER_TEMP/combine.cjs" <<'SCRIPT'
+          const fs = require("fs"), path = require("path");
+          const root = process.env.EVIDENCE_ROOT, prefix = process.env.PREFIX;
+          const rows = process.env.SHARDS.split(" ").map((shard) => {
+            const file = path.join(root, prefix + shard, "native-ui-evidence", "evidence.json");
+            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [] };
+            const e = JSON.parse(fs.readFileSync(file, "utf8"));
+            const cases = e.tests?.cases ?? [];
+            return {
+              shard, status: ["passed", "passed-with-retries"].includes(e.status) ? e.status : "failed", note: e.error ? String(e.error).split("\n")[0] : "",
+              sourceRevision: e.sourceRevision, waitScale: e.waitScale, latencyMode: e.latencyBudgets?.mode, networkIsolation: e.networkIsolation,
+              appOutsideLoopback: e.safety?.outboundNetwork?.appContactedNonLoopback ?? [],
+              simulator: e.simulator ? "iOS " + e.simulator.runtimeVersion + " (" + e.simulator.runtimeBuild + ")" : "none",
+              minutes: Math.round((Date.parse(e.finishedAt) - Date.parse(e.startedAt)) / 6000) / 10,
+              testMinutes: Math.round(cases.reduce((sum, test) => sum + test.seconds, 0) / 6) / 10,
+              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], latency: e.latencyBudgets?.measurements ?? [],
+              classes: [...new Set(cases.map((test) => test.id.split("/")[0]))], failures: cases.filter((test) => test.result === "failed").map((test) => test.id),
+            };
+          });
+          const expected = process.env.EXPECTED_CLASSES.split(" ").filter(Boolean);
+          const ran = new Set(rows.flatMap((row) => row.classes));
+          const missing = expected.filter((name) => !ran.has(name));
+          const overall = rows.some((row) => row.status === "failed") || missing.length ? "failed" : rows.some((row) => row.status === "passed-with-retries") ? "passed-with-retries" : "passed";
+          const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
+          const lines = [
+            "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
+            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
+            "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
+            ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
+            ...(missing.length ? ["Journey classes in the repository that no shard ran: " + missing.join(", ") + ". Add them to the matrix.", ""] : []),
+            ...rows.flatMap((row) => row.failures.map((id) => "- Failed: " + id)),
+            ...rows.flatMap((row) => row.retries.map((note) => "- Retry in " + row.shard + ": " + JSON.stringify(note))),
+            ...rows.flatMap((row) => row.appOutsideLoopback?.length ? ["- App connection outside loopback in " + row.shard + ": " + row.appOutsideLoopback.join(", ")] : []), "",
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          console.log(lines.join("\n"));
+          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, shards: rows }, null, 2) + "\n");
+          process.exitCode = overall === "failed" ? 1 : 0;
+          SCRIPT
+          EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
+          export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
+          status=0
+          for scale in 2 3; do
+            PREFIX="native-ui-evidence-s$scale-" node "$RUNNER_TEMP/combine.cjs" || status=1
+          done
+          exit "$status"
+      - name: Keep the combined result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-summary
+          path: ${{ runner.temp }}/evidence/native-ui-summary*.json
           if-no-files-found: warn
           retention-days: 14
