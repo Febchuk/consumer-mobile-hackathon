@@ -1,0 +1,237 @@
+name: Native UI
+
+# The native UI lane (tests/native-sim) on hosted macOS runners, split by test class so every shard finishes well inside
+# the QA build's 60-minute activation (measured: 24 to 35 minutes a shard). Each shard has its own runner, simulator and
+# loopback backend, and the summary job combines their evidence into one result. It is not a required check: in five
+# measured full runs of the 41 tests, two passed (both with recorded retries) and three failed, 21 of 25 shards passing.
+# Five of the six failed tests were Messages left on an empty New Message draft, so the conversation could not be
+# tapped. It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts scheduled
+# and manually dispatched runs only from the workflow file on the default branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 10 * * *"
+  push:
+    branches:
+      - capy/v0-backend-integration
+    paths:
+      - native-imessage/**
+      - tests/native-sim/**
+      - tests/qa-runtime/binary-pins.json
+      - .github/workflows/native-ui.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    name: ${{ matrix.shard }}
+    runs-on: macos-26
+    # The QA build stops accepting its launch manifest 60 minutes after the run starts.
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
+        include:
+          - shard: pick
+            classes: PickJourneyTests
+          - shard: reveal-membership
+            classes: RevealJourneyTests MembershipJourneyTests
+          - shard: controls-resilience
+            classes: ControlsJourneyTests ResilienceJourneyTests
+          - shard: privacy-create
+            classes: SubjectPrivacyJourneyTests CreateJourneyTests
+          - shard: start-board-signin
+            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      XCODEGEN_VERSION: 2.47.0
+      XCODEGEN_SHA256: 6ef12a3ef5327c2c713397f46d9160550f8b1cdc5c925cd884d65c77c9f696cd
+      WAIT_SCALE: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Report the runner and toolchain
+        run: |
+          {
+            echo "### Runner"
+            echo
+            echo "- Image: $ImageOS $ImageVersion, $(uname -m), $(sysctl -n hw.ncpu) CPUs, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"
+            echo "- macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion))"
+            echo "- Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "- Node: $(node --version)"
+            echo "- Passwordless sudo: $(sudo -n true 2>/dev/null && echo yes || echo no)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          xcrun simctl list runtimes
+      - name: Install the checksum-pinned XcodeGen
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Require the pinned XcodeGen to be the one the lane will find
+        run: |
+          # The lane puts /opt/homebrew/bin first on its own PATH, so a Homebrew copy on the image would win.
+          found="$(PATH="/opt/homebrew/bin:$PATH" command -v xcodegen)"
+          version="$(PATH="/opt/homebrew/bin:$PATH" xcodegen --version)"
+          echo "$found: $version"
+          test "$version" = "Version: $XCODEGEN_VERSION"
+      - name: Cache the checksum-pinned Convex backend binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/calledit/convex-local-backend
+          key: convex-local-backend-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/qa-runtime/binary-pins.json') }}
+      - name: Quiet the runner so the simulator gets the CPU
+        run: |
+          # Host Spotlight indexing competes with the simulator on a three-core runner.
+          sudo mdutil -a -i off || true
+          # With a hardware keyboard attached the simulator drops typed characters under load.
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+      - name: Run the native UI lane on a new simulator against the loopback backend
+        run: |
+          (
+            while true; do
+              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
+              sleep 30
+            done
+          ) &
+          sampler=$!
+          status=0
+          # The lane calls xcodebuild by name. This wrapper adds one argument to its test run so Xcode does not collect
+          # system diagnostics into the result bundle (150 to 200 MB a shard with them, 10 to 35 MB without). Failure
+          # screenshots, recordings of failed tests and the test log stay. Everything else passes through unchanged.
+          mkdir -p "$RUNNER_TEMP/xcodebuild-wrapper"
+          printf '%s\n' '#!/bin/bash' 'for argument in "$@"; do' '  if [ "$argument" = test-without-building ]; then exec /usr/bin/xcodebuild "$@" -collect-test-diagnostics never; fi' 'done' 'exec /usr/bin/xcodebuild "$@"' > "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+          chmod +x "$RUNNER_TEMP/xcodebuild-wrapper/xcodebuild"
+          lanePath="$RUNNER_TEMP/xcodebuild-wrapper:$PATH"
+          only=()
+          for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
+          # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
+          # Scale 3 did no better than 2 when measured (2 of 5 shards passed against 3 of 5).
+          env -i PATH="$lanePath" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
+            node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
+            --wait-scale "$WAIT_SCALE" "${only[@]}" || status=$?
+          kill "$sampler" || true
+          exit "$status"
+      - name: Report the lane's result
+        if: ${{ !cancelled() }}
+        run: |
+          evidence="$RUNNER_TEMP/native-ui-evidence/evidence.json"
+          binary="$(find "$HOME/.cache/calledit/convex-local-backend" -type f -name convex-local-backend | head -n 1)"
+          {
+            echo "### Native UI shard ${{ matrix.shard }}"
+            echo
+            jq -r '"- Status: \(.status) on \(.sourceRevision)",
+              "- Tests: \(.tests.passed // 0) passed, \(.tests.failed // 0) failed, \(.tests.blocked // 0) blocked; \(.retries | length) recorded retries; wait scale \(.waitScale); latency budgets \(.latencyBudgets.mode)",
+              "- Simulator: \(.simulator.deviceType // "none" | split(".") | last), iOS \(.simulator.runtimeVersion // "?") (\(.simulator.runtimeBuild // "?")), created for this run, Apple account \(.simulator.appleAccount // "?")",
+              "- Outbound network: \(.networkIsolation), denied \(.safety.outboundNetwork.enforced // false); app connections outside loopback: \(.safety.outboundNetwork.appContactedNonLoopback // [] | length)",
+              "- Backend: \(.backend.release // "?"), executable SHA-256 \(.backend.executableSHA256 // "?")",
+              "- Selection: \(.tests.selection // [] | join(" "))"' "$evidence"
+            if [ -n "$binary" ]; then echo "- Backend binary on this runner: $(file -b "$binary"), SHA-256 $(shasum -a 256 "$binary" | cut -d ' ' -f 1)"; fi
+            echo
+            echo '| Test | Result | Seconds |'
+            echo '|---|---|---|'
+            jq -r '.tests.cases[]? | "| \(.id) | \(.result) | \(.seconds) |"' "$evidence"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the lane's evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-evidence-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/runner-load.log
+            ${{ runner.temp }}/native-ui-evidence
+            !${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Keep the result bundle
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-xcresult-${{ matrix.shard }}
+          path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: summary
+    needs: shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-ui-evidence-*
+          path: ${{ runner.temp }}/evidence
+      - name: Combine the shards into one result
+        run: |
+          cat > "$RUNNER_TEMP/combine.cjs" <<'SCRIPT'
+          const fs = require("fs"), path = require("path");
+          const root = process.env.EVIDENCE_ROOT, prefix = process.env.PREFIX;
+          const rows = process.env.SHARDS.split(" ").map((shard) => {
+            const file = path.join(root, prefix + shard, "native-ui-evidence", "evidence.json");
+            if (!fs.existsSync(file)) return { shard, status: "failed", note: "no evidence: the shard did not finish", passed: 0, failed: 0, retries: [], classes: [], failures: [], latency: [], appCallFailures: [] };
+            const e = JSON.parse(fs.readFileSync(file, "utf8"));
+            const cases = e.tests?.cases ?? [];
+            return {
+              shard, status: ["passed", "passed-with-retries"].includes(e.status) ? e.status : "failed", note: e.error ? String(e.error).split("\n")[0] : "",
+              sourceRevision: e.sourceRevision, waitScale: e.waitScale, latencyMode: e.latencyBudgets?.mode, networkIsolation: e.networkIsolation,
+              appOutsideLoopback: e.safety?.outboundNetwork?.appContactedNonLoopback ?? [],
+              simulator: e.simulator ? "iOS " + e.simulator.runtimeVersion + " (" + e.simulator.runtimeBuild + ")" : "none",
+              minutes: Math.round((Date.parse(e.finishedAt) - Date.parse(e.startedAt)) / 6000) / 10,
+              testMinutes: Math.round(cases.reduce((sum, test) => sum + test.seconds, 0) / 6) / 10,
+              passed: e.tests?.passed ?? 0, failed: e.tests?.failed ?? 0, retries: e.retries ?? [], appCallFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome !== "injected"), injectedFailures: (e.appCallFailures ?? []).filter((failure) => failure.outcome === "injected").length, latency: e.latencyBudgets?.measurements ?? [],
+              classes: [...new Set(cases.map((test) => test.id.split("/")[0]))], failures: cases.filter((test) => test.result === "failed").map((test) => test.id),
+            };
+          });
+          const expected = process.env.EXPECTED_CLASSES.split(" ").filter(Boolean);
+          const ran = new Set(rows.flatMap((row) => row.classes));
+          const missing = expected.filter((name) => !ran.has(name));
+          const overall = rows.some((row) => row.status === "failed") || missing.length ? "failed" : rows.some((row) => row.status === "passed-with-retries") ? "passed-with-retries" : "passed";
+          const kinds = {};
+          for (const note of rows.flatMap((row) => row.retries)) kinds[note.kind] = (kinds[note.kind] ?? 0) + 1;
+          const byKind = Object.entries(kinds).map(([kind, count]) => count + " " + kind).join(", ") || "none";
+          const total = (key) => rows.reduce((sum, row) => sum + (typeof row[key] === "number" ? row[key] : row[key].length), 0);
+          const lines = [
+            "### Native UI" + (prefix.replace(/^native-ui-evidence-|-$/g, "") ? " (" + prefix.replace(/^native-ui-evidence-|-$/g, "") + ")" : "") + ": " + overall, "",
+            total("passed") + " passed, " + total("failed") + " failed, " + total("retries") + " recorded retries (" + byKind + ") and " + total("appCallFailures") + " failed app calls (not counting " + rows.reduce((sum, row) => sum + (row.injectedFailures ?? 0), 0) + " the tests injected) across " + rows.length + " shards. Not a required check. Latency budgets are measured only and outbound network is observed, not denied.", "",
+            "| Shard | Result | Passed | Failed | Retries | Lane minutes | Test minutes | Wait scale | Simulator |", "|---|---|---|---|---|---|---|---|---|",
+            ...rows.map((row) => "| " + [row.shard, row.status + (row.note ? " (" + row.note + ")" : ""), row.passed, row.failed, row.retries.length, row.minutes ?? "", row.testMinutes ?? "", row.waitScale ?? "", row.simulator ?? ""].join(" | ") + " |"), "",
+            ...(missing.length ? ["Journey classes in the repository that no shard ran: " + missing.join(", ") + ". Add them to the matrix.", ""] : []),
+            ...rows.flatMap((row) => row.failures.map((id) => "- Failed: " + id)),
+            ...rows.flatMap((row) => row.retries.map((note) => "- Retry in " + row.shard + ": " + JSON.stringify(note))),
+            ...rows.flatMap((row) => row.appCallFailures.map(({ at, ...failure }) => "- Failed app call in " + row.shard + ": " + JSON.stringify(failure))),
+            ...rows.flatMap((row) => row.appOutsideLoopback?.length ? ["- App connection outside loopback in " + row.shard + ": " + row.appOutsideLoopback.join(", ")] : []), "",
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          console.log(lines.join("\n"));
+          fs.writeFileSync(path.join(root, "native-ui-summary" + prefix.replace(/^native-ui-evidence/, "").replace(/-$/, "") + ".json"), JSON.stringify({ overall, missingClasses: missing, retriesByKind: kinds, shards: rows }, null, 2) + "\n");
+          process.exitCode = overall === "failed" ? 1 : 0;
+          SCRIPT
+          EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
+          export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
+          PREFIX="native-ui-evidence-" node "$RUNNER_TEMP/combine.cjs"
+      - name: Keep the combined result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-summary
+          path: ${{ runner.temp }}/evidence/native-ui-summary*.json
+          if-no-files-found: warn
+          retention-days: 14
