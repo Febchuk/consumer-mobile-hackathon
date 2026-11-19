@@ -1,11 +1,13 @@
 name: Native UI
 
 # The native UI lane (tests/native-sim) on hosted macOS runners, split by test class so every shard finishes well inside
-# the QA build's 60-minute activation. Each shard has its own runner, simulator and loopback backend. It is not a
-# required check. It runs when asked, nightly, and after native changes land on the integration branch. GitHub starts
-# scheduled and manually dispatched runs only from the workflow file on the default branch.
+# the QA build's 60-minute activation (measured: 19 to 34 minutes a shard). Each shard has its own runner, simulator and
+# loopback backend, and the summary job combines their evidence into one result. It is not a required check: in five
+# measured full runs no run had every shard pass (13 of 25 shards did), mostly because a backend call fails under load
+# on the 3-CPU runner and the screen then stays empty. It runs when asked, nightly, and after native changes land on
+# the integration branch. GitHub starts scheduled and manually dispatched runs only from the workflow file on the
+# default branch.
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -27,14 +29,13 @@ concurrency:
 
 jobs:
   shard:
-    name: ${{ matrix.shard }} (${{ matrix.tune }})
+    name: ${{ matrix.shard }}
     runs-on: macos-26
     # The QA build stops accepting its launch manifest 60 minutes after the run starts.
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
-        tune: [plain, priority]
         shard: [pick, reveal, controls, privacy, start-board]
         include:
           - shard: pick
@@ -51,6 +52,7 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
       XCODEGEN_SHA256: 6ef12a3ef5327c2c713397f46d9160550f8b1cdc5c925cd884d65c77c9f696cd
+      WAIT_SCALE: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -100,7 +102,7 @@ jobs:
         run: |
           (
             while true; do
-              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,nice,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
+              { date -u +%H:%M:%S; uptime; memory_pressure | tail -n 1; sysctl -n vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -n 9; echo; } >> "$RUNNER_TEMP/runner-load.log" 2>&1
               sleep 30
             done
           ) &
@@ -109,22 +111,10 @@ jobs:
           only=()
           for class in ${{ matrix.classes }}; do only+=(--only "$class"); done
           # Hosted runners are not reference hardware: waits are stretched and latency budgets are measured, not enforced.
+          # Scale 3 did no better than 2 when measured (2 of 5 shards passed against 3 of 5).
           env -i PATH="$PATH" HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" \
             node tests/native-sim/run.mjs --output "$RUNNER_TEMP/native-ui-evidence" \
-            --wait-scale 2 "${only[@]}" &
-          lane=$!
-          if [ "${{ matrix.tune }}" = priority ]; then
-            # The backend and the lane's own servers inherit this priority, so the backend's one-second function limit
-            # is not spent waiting for a CPU. The simulator is started by CoreSimulator and keeps its own priority.
-            sudo renice -n -10 -p "$lane"
-            (
-              while kill -0 "$lane" 2>/dev/null; do
-                for pid in $(pgrep -x diagnosticd); do sudo renice -n 19 -p "$pid" > /dev/null 2>&1 || true; done
-                sleep 10
-              done
-            ) &
-          fi
-          wait "$lane" || status=$?
+            --wait-scale "$WAIT_SCALE" "${only[@]}" || status=$?
           kill "$sampler" || true
           exit "$status"
       - name: Report the lane's result
@@ -151,7 +141,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-evidence-${{ matrix.tune }}-${{ matrix.shard }}
+          name: native-ui-evidence-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/runner-load.log
             ${{ runner.temp }}/native-ui-evidence
@@ -162,7 +152,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-ui-xcresult-${{ matrix.tune }}-${{ matrix.shard }}
+          name: native-ui-xcresult-${{ matrix.shard }}
           path: ${{ runner.temp }}/native-ui-evidence/native-ui.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -224,11 +214,7 @@ jobs:
           SCRIPT
           EXPECTED_CLASSES="$(grep -h -o 'class [A-Za-z0-9_]*: JourneyCase' native-imessage/UITests/*.swift | cut -d ' ' -f 2 | tr -d ':' | tr '\n' ' ')"
           export EXPECTED_CLASSES EVIDENCE_ROOT="$RUNNER_TEMP/evidence"
-          status=0
-          for tune in plain priority; do
-            PREFIX="native-ui-evidence-$tune-" node "$RUNNER_TEMP/combine.cjs" || status=1
-          done
-          exit "$status"
+          PREFIX="native-ui-evidence-" node "$RUNNER_TEMP/combine.cjs"
       - name: Keep the combined result
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
