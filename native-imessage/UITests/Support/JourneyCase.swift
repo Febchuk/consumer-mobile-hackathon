@@ -87,6 +87,20 @@ class JourneyCase: XCTestCase {
     /// keystrokes. A short or wrong value is cleared and typed again, at most three more times, each one recorded.
     /// The detail names character counts only, never the text.
     func enter(_ value: String, into field: XCUIElement, called name: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        // Typing into a field that has not taken the keyboard fails outright. A tap that did not give the field the keyboard
+        // is repeated, at most twice, each one recorded; a field that still has not taken it fails here by name.
+        let focused = { (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }
+        func takesFocus() -> Bool {
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in focused() }, object: nil)], timeout: 5 * Self.pace) == .completed
+        }
+        for again in 0...2 where !takesFocus() {
+            guard again < 2 else {
+                XCTFail("[NATIVE-UI-TYPE] \(name) did not take the keyboard after it was tapped three times", file: file, line: line)
+                throw Blocked()
+            }
+            try recordRetry("retap", "\(name) had not taken the keyboard \(Int(5 * Self.pace)) s after tap \(again + 1)")
+            if field.isHittable { field.tap() }
+        }
         for attempt in 1...4 {
             // A slow machine can show the right text late; that is a wait, not a retry.
             if attempt > 1, field.value as? String == value { return }
@@ -213,10 +227,13 @@ class JourneyCase: XCTestCase {
         }
         if !target.isHittable {
             // Scroll toward the target one swipe at a time, and look again only once the page has come to rest. A control
-            // that is already on screen is not scrolled away: it first gets a moment to become tappable.
+            // that is already on screen is not scrolled away: it first gets a moment to become tappable. "On screen" is
+            // the part of the surface the screen shows; a scrolling surface's own frame is its whole content, so a control
+            // far below the bottom edge lies inside it.
             for _ in 0..<6 where !target.isHittable {
                 let frame = target.frame
-                if !frame.isEmpty, surface.frame.contains(CGPoint(x: frame.midX, y: frame.midY)), holds(3 * Self.pace, { target.isHittable }) { break }
+                let shown = surface.frame.intersection(app.frame)
+                if !frame.isEmpty, shown.contains(CGPoint(x: frame.midX, y: frame.midY)), holds(3 * Self.pace, { target.isHittable }) { break }
                 if frame.midY > surface.frame.midY { surface.swipeUp() } else { surface.swipeDown() }
                 settle(5 * Self.pace)
             }
@@ -431,9 +448,6 @@ class JourneyCase: XCTestCase {
     func type(_ value: String, into id: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let field = try required(id, in: messages, file: file, line: line)
         try tap(field, scrolling: messages, file: file, line: line)
-        // Typing into a field that has not taken the keyboard yet fails outright, so wait for the focus the tap asked for.
-        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-TYPE] \(id) did not take the keyboard after it was tapped", file: file, line: line)
         try enter(value, into: field, called: id, file: file, line: line)
     }
 
