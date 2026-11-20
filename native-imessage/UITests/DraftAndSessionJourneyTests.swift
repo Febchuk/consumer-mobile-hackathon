@@ -212,7 +212,7 @@ final class DraftAndSessionJourneyTests: JourneyCase {
             XCTAssertFalse(locator.contains(known), "[NATIVE-UI-LOCATOR-01] the locator carries no bet, group or account identifier")
         }
         let origin = run.manifest.cardOrigin.hasSuffix("/") ? String(run.manifest.cardOrigin.dropLast()) : run.manifest.cardOrigin
-        guard let link = URL(string: origin + "/c/" + locator), let enriched = URL(string: origin + "/c/" + locator + "?bet=" + id) else {
+        guard let cardLink = URL(string: origin + "/c/" + locator), let enriched = URL(string: origin + "/c/" + locator + "?bet=" + id) else {
             XCTFail("[NATIVE-UI-LOCATOR-01] the card link could not be built"); throw Blocked()
         }
 
@@ -223,7 +223,7 @@ final class DraftAndSessionJourneyTests: JourneyCase {
         XCTAssertFalse(element("auth.pendingCard", in: host).exists, "[NATIVE-UI-LOCATOR-02] a link with more than a locator is not kept")
 
         // The card's own link is kept as a waiting card. The host app shows nothing of the bet and asks the server nothing.
-        host.open(link)
+        host.open(cardLink)
         _ = try hostRow("auth.pendingCard", "NATIVE-UI-LOCATOR-03")
         print("JOURNEY-DISCOVERY host with a waiting card:\n" + (try visibleContent(of: host)) + "\nJOURNEY-DISCOVERY end")
         assertNoPrivateText(in: host, extra: [locator, id], "NATIVE-UI-LOCATOR-04")
