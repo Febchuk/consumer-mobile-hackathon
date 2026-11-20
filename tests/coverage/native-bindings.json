@@ -347,5 +347,32 @@
   "J3.1.noon-pass.U": [
     "NATIVE-UI.TurnRulesJourneyTests.testAnUnusedTurnPassesOnceAtNoonAndTheFirstCreatorIsNoLongerOfferedIt",
     "NATIVE-UI.TurnRulesJourneyTests.testTheMemberTheTurnPassedToAtNoonMakesTheDaysOneBet"
+  ],
+  "J7.3.recipient-preferences.U": [
+    "NATIVE-UI.NotificationJourneyTests.testThePreferenceSwitchSavesToTheServerAndIsShownAgainAfterARelaunch"
+  ],
+  "N3.recap-preference.U": [
+    "NATIVE-UI.NotificationJourneyTests.testThePreferenceSwitchSavesToTheServerAndIsShownAgainAfterARelaunch"
+  ],
+  "N2.eligible-locator.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "N2.stale-event-denied.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "N2.neutral-payload.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "SEC3.neutral-push.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "J3.1.neutral-push.U": [
+    "NATIVE-UI.NotificationJourneyTests.testATurnArrivingInTheBackgroundIsNeutralAndOpensTheCreatorTurn"
+  ],
+  "J7.3.aggregate.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARecapArrivalShowsTheWeeksPointsFromTheLedger"
+  ],
+  "N3.logout-switch.U": [
+    "NATIVE-UI.NotificationJourneyTests.testSigningOutClosesAnOpenedNotificationAndALateArrivalShowsTheNextPersonNothing"
   ]
 }
