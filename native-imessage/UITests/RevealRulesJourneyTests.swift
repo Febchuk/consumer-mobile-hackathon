@@ -70,8 +70,8 @@ final class RevealRulesJourneyTests: JourneyCase {
     }
 
     /// Puts the extension back on screen in the conversation Messages is already showing, without relaunching Messages.
-    /// Messages can close an extension when it leaves the foreground or takes a draft; a person opens it again from the
-    /// app drawer, as the shared helper does.
+    /// The simulator's Messages closes an extension when it leaves the foreground; a person opens it again from the app
+    /// drawer, as the shared helper does. It comes back compact.
     private func showExtensionAgain(_ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
         // A system onboarding sheet can cover Messages when it returns; a person would dismiss it.
         let sheet = messages.buttons.matching(NSPredicate(format: "label IN %@", ["OK", "Continue"])).firstMatch
@@ -84,12 +84,11 @@ final class RevealRulesJourneyTests: JourneyCase {
         _ = try required("navigation.settings", in: messages, timeout: 30, code, file: file, line: line)
     }
 
-    /// From whatever the extension is showing, compact or expanded, to the linked group's home: Settings is offered
-    /// everywhere and always opens expanded, and Home leads back from it.
+    /// From the compact extension to the linked group's home. "Open group" is offered only once the app has read the
+    /// account and this conversation's link from the server again.
     private func openGroupHome(_ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
-        try tap("navigation.settings", in: messages, file: file, line: line)
-        _ = try required("settings.noBets", in: messages, timeout: 15, code, file: file, line: line)
-        try goHome(file: file, line: line)
+        try tap(labelled("Open group", in: messages, timeout: 30, file: file, line: line), file: file, line: line)
+        _ = try required("navigation.board", in: messages, timeout: 15, code, file: file, line: line)
     }
 
     // MARK: J5.1 resume refresh
@@ -110,12 +109,13 @@ final class RevealRulesJourneyTests: JourneyCase {
         XCTAssertEqual(try state(of: "bet-a"), "revealed", "[NATIVE-UI-RESUME-02] fixture: the product's sweep revealed the bet")
         let reads = try extensionCalls("v0Bets:")
 
-        // Messages comes back without a relaunch, so the conversation and its link are the ones Finn left.
+        // Messages comes back without a relaunch, so the conversation and its link are the ones Finn left. The simulator's
+        // Messages has closed the extension meanwhile, so what is proven is that reopening it reads the server again and
+        // keeps the link; a view that survives in place cannot be produced here.
         XCTAssertTrue([.runningBackground, .runningBackgroundSuspended].contains(messages.state), "[NATIVE-UI-RESUME-03] Messages is still running, state \(messages.state.rawValue)")
         messages.activate()
         XCTAssertTrue(messages.wait(for: .runningForeground, timeout: 60 * Self.pace), "[NATIVE-UI-RESUME-03] Messages returns to the foreground without a relaunch")
         try showExtensionAgain("NATIVE-UI-RESUME-03")
-        print("J5-EXPLORE resume: bet.screen=\(element("bet.screen", in: messages).exists) board=\(element("navigation.board", in: messages).exists) openGroup=\(labelled("Open group", in: messages, timeout: 0, quiet: true)) home=\(labelled("Home", in: messages, timeout: 0, quiet: true)) link=\(labelled("Link this conversation", in: messages, timeout: 0, quiet: true))")
         XCTAssertFalse(element("bet.confirmPick", in: messages).exists, "[NATIVE-UI-RESUME-04] no pick control from before the reveal is shown on return")
         XCTAssertFalse(element("bet.option.0", in: messages).exists, "[NATIVE-UI-RESUME-04]")
 
@@ -288,7 +288,7 @@ final class RevealRulesJourneyTests: JourneyCase {
 
     // MARK: J5.5 cancel truth
 
-    func testPreparingAResultCardThatIsNotSentClaimsNoDelivery() throws {
+    func testAResultCardThatIsPreparedAndRemovedClaimsNoDelivery() throws {
         try seedRevealedBet()
         try answer("bet-a", option: 0)
         try control.shiftBet("bet-a", to: "challengeOver")
@@ -311,9 +311,13 @@ final class RevealRulesJourneyTests: JourneyCase {
         try tap(prepare, scrolling: messages)
         let draft = messages.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Secret bet on QA Sage")).firstMatch
         XCTAssertTrue(draft.waitForExistence(timeout: 20 * Self.pace), "[NATIVE-UI-CANCEL-02] the draft card is in the message field")
-        print("J5-EXPLORE draft:\n" + messages.debugDescription + "\nJ5-EXPLORE end")
+        _ = try required("sendButton", in: messages, "NATIVE-UI-CANCEL-02")
 
-        // The draft is never sent. The app recorded nothing, and says exactly what it said before.
+        // The person changes their mind and takes the card out of the message field. Nothing was sent.
+        try tap(labelled("Remove app from message", in: messages), scrolling: messages)
+        assertGone(draft, "NATIVE-UI-CANCEL-03")
+
+        // The app recorded nothing, and says exactly what it said before.
         try showExtensionAgain("NATIVE-UI-CANCEL-04")
         try openGroupHome("NATIVE-UI-CANCEL-04")
         let reopened = try openBet("bet-a")
