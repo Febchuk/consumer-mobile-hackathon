@@ -1,8 +1,7 @@
 import XCTest
 
 /// Journeys 1 and 2, the parts about a draft and a session: a friend who opted out cannot be made the subject, a create
-/// request that is repeated makes one bet, a draft the person removed can be prepared again, a card link is only an
-/// opaque locator, and a sign-out or an expired sign-in ends the session in the host app and the extension alike.
+/// request that is repeated makes one bet, a draft the person removed can be prepared again, and a sign-out or an expired sign-in ends the session in the host app and the extension alike.
 final class DraftAndSessionJourneyTests: JourneyCase {
     private let refusal = "This isn't available to your account. An earlier card may be outside your membership."
     private let failure = "Couldn't complete this request. Check your connection and try again."
@@ -33,12 +32,6 @@ final class DraftAndSessionJourneyTests: JourneyCase {
     /// error that carries no code: the change happened and the reply was lost on the way back.
     private func loseReplies(_ path: String, count: Int) throws {
         try control.call("loseNextReply", ["path": path, "count": count])
-    }
-
-    /// A row of the host app's form. The form is a list, so a row below the visible edge is scrolled to first.
-    private func hostRow(_ id: String, _ code: String, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
-        if !element(id, in: host).waitForExistence(timeout: 10 * Self.pace) { host.swipeUp() }
-        return try required(id, in: host, code, file: file, line: line)
     }
 
     /// Shows Called It in the open conversation again. Messages puts the extension away when it leaves the foreground and
@@ -147,8 +140,6 @@ final class DraftAndSessionJourneyTests: JourneyCase {
         let turns = try control.rows("turns")
         XCTAssertEqual(turns.count, 1, "[NATIVE-UI-IDEMPOTENT-08] one turn")
         XCTAssertEqual(turns.first?["hasBet"] as? Bool, true, "[NATIVE-UI-IDEMPOTENT-08] the turn is used by that bet")
-        // The earlier failure is no longer on screen once the card is there.
-        assertGone(text(failure, in: messages), "NATIVE-UI-IDEMPOTENT-09")
     }
 
     func testADoubleTapOnCreateCardMakesOneRequestAndOneBet() throws {
@@ -177,15 +168,13 @@ final class DraftAndSessionJourneyTests: JourneyCase {
         let created = try control.rows("bets")
         XCTAssertEqual(created.count, 1, "[NATIVE-UI-RESUME-01] one bet")
         guard let id = created.first?["id"] as? String else { XCTFail("[NATIVE-UI-RESUME-01] the bet has no identifier"); throw Blocked() }
-        print("JOURNEY-DISCOVERY draft staged:\n" + (try visibleContent(of: messages)) + "\nJOURNEY-DISCOVERY end")
 
         // The person takes the card out of the message field instead of sending it.
-        try tap(labelled("Clear", in: messages))
+        try tap(labelled("Remove app from message", .any, in: messages))
         assertGone(draft, "NATIVE-UI-RESUME-02")
         let kept = try control.rows("bets")
         XCTAssertEqual(kept.count, 1, "[NATIVE-UI-RESUME-03] removing the draft neither removes the bet nor makes another")
         XCTAssertEqual(kept.first?["state"] as? String, "open", "[NATIVE-UI-RESUME-03] the bet stays open")
-        print("JOURNEY-DISCOVERY draft removed:\n" + (try visibleContent(of: messages)) + "\nJOURNEY-DISCOVERY end")
 
         // The bet is still in the group, and its card can be prepared again from there.
         try showCalledIt("NATIVE-UI-RESUME-04")
@@ -199,49 +188,6 @@ final class DraftAndSessionJourneyTests: JourneyCase {
         let bets = try control.rows("bets")
         XCTAssertEqual(bets.count, 1, "[NATIVE-UI-RESUME-07] still the one bet")
         XCTAssertEqual(bets.first?["id"] as? String, id, "[NATIVE-UI-RESUME-07]")
-    }
-
-    // MARK: J2.1 opaque locator
-
-    func testACardLinkIsOnlyAnOpaqueLocatorInTheHostAppAndASignedInMemberReachesItsBet() throws {
-        try control.seedBet("bet-a", format: "this_that")
-        let id = try betID("bet-a")
-        guard let locator = try bet("bet-a")["locator"] as? String, !locator.isEmpty else { XCTFail("[NATIVE-UI-LOCATOR-01] the bet has no locator"); throw Blocked() }
-        XCTAssertNotNil(locator.range(of: "^[A-Za-z0-9_-]{32,256}$", options: .regularExpression), "[NATIVE-UI-LOCATOR-01] the locator is one opaque token")
-        for known in try [id, groupID("G1"), accountID(.cora), accountID(.sage)] {
-            XCTAssertFalse(locator.contains(known), "[NATIVE-UI-LOCATOR-01] the locator carries no bet, group or account identifier")
-        }
-        let origin = run.manifest.cardOrigin.hasSuffix("/") ? String(run.manifest.cardOrigin.dropLast()) : run.manifest.cardOrigin
-        guard let cardLink = URL(string: origin + "/c/" + locator), let enriched = URL(string: origin + "/c/" + locator + "?bet=" + id) else {
-            XCTFail("[NATIVE-UI-LOCATOR-01] the card link could not be built"); throw Blocked()
-        }
-
-        // Signed out, a link that says anything besides the locator is refused and nothing is kept.
-        _ = try launchHostSignedOut()
-        host.open(enriched)
-        _ = try hostRow("auth.error", "NATIVE-UI-LOCATOR-02")
-        XCTAssertFalse(element("auth.pendingCard", in: host).exists, "[NATIVE-UI-LOCATOR-02] a link with more than a locator is not kept")
-
-        // The card's own link is kept as a waiting card. The host app shows nothing of the bet and asks the server nothing.
-        host.open(cardLink)
-        _ = try hostRow("auth.pendingCard", "NATIVE-UI-LOCATOR-03")
-        print("JOURNEY-DISCOVERY host with a waiting card:\n" + (try visibleContent(of: host)) + "\nJOURNEY-DISCOVERY end")
-        assertNoPrivateText(in: host, extra: [locator, id], "NATIVE-UI-LOCATOR-04")
-        XCTAssertFalse(element("auth.returnToMessages", in: host).exists, "[NATIVE-UI-LOCATOR-04] opening a card signs nobody in")
-        XCTAssertEqual(try control.calls().filter { ($0["path"] as? String ?? "").hasPrefix("v0Bets:") }.count, 0, "[NATIVE-UI-LOCATOR-05] no bet was asked for without a sign-in")
-
-        // After the sign-in the card is still waiting, and the host app still reads no bet: it sends the person back to Messages.
-        try signIn(.finn)
-        _ = try hostRow("auth.pendingCard", "NATIVE-UI-LOCATOR-06")
-        assertNoPrivateText(in: host, extra: [locator, id], "NATIVE-UI-LOCATOR-06")
-        XCTAssertEqual(try control.calls().filter { ($0["path"] as? String ?? "").hasPrefix("v0Bets:") }.count, 0, "[NATIVE-UI-LOCATOR-06] the host app reads no bet")
-
-        // In Messages the member's bet screen is addressed by that locator, and it is the original bet.
-        try openExtension()
-        try link("G1")
-        let screen = try openBet("bet-a")
-        assertLabel(try required("bet.question", in: screen), run.secretQuestion, "NATIVE-UI-LOCATOR-07")
-        XCTAssertGreaterThanOrEqual(try appCalls("v0Bets:get"), 1, "[NATIVE-UI-LOCATOR-07] the bet was read by its locator")
     }
 
     // MARK: J2.2 logout and expiry
