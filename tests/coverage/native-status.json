@@ -58,7 +58,8 @@
     "J1.1.consenting-subject.U": "Thin against backend B1.create.subject-withdrawn.no-bets and B1.create.app-named-subject: a friend who opts out while the form is open cannot be made the subject and is no longer offered; choosing another subject than the app named is refused.",
     "J1.3.idempotent-create.U": "A create applied three times with its reply lost, then retried by hand, makes one bet under one request id; a double tap sends one request. Backend side is B1.create.idempotent.",
     "J1.3.cancel-resume.U": "A staged card removed with Messages' own control leaves one open bet, and the card can be prepared again from it with no second create. No backend test is bound to this line.",
-    "J2.2.logout-expiry.U": "Signing out in either app signs the other out, and a sign-in expired on the server ends the session in both. Backend side is SEC2.revoke-one-device and SEC2.session-expired. Expiry by the device clock is not exercised."
+    "J2.2.logout-expiry.U": "Signing out in either app signs the other out, and a sign-in expired on the server ends the session in both. Backend side is SEC2.revoke-one-device and SEC2.session-expired. Expiry by the device clock is not exercised.",
+    "J3.1.noon-pass.U": "The product turns job passes an unused turn once after noon group time, the first creator is no longer offered it, and the member it passed to makes the one bet of the day. Noon is reached by moving the fixture group zone and the turn timestamps, not the clock, so the exact 12:00 boundary stays with backend B2.turn.noon-pass."
   },
   "blocked": {
     "J1.2.same-room.U": "Real delivery between phones: the simulator's Messages has no account, so a card is inserted as a draft and never delivered or received.",

@@ -339,5 +339,9 @@
     "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheHostAppSignsTheExtensionOut",
     "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheExtensionSignsTheHostAppOut",
     "NATIVE-UI.DraftAndSessionJourneyTests.testAnExpiredSignInEndsTheSessionInTheExtensionAndTheHostApp"
+  ],
+  "J3.1.noon-pass.U": [
+    "NATIVE-UI.TurnRulesJourneyTests.testAnUnusedTurnPassesOnceAtNoonAndTheFirstCreatorIsNoLongerOfferedIt",
+    "NATIVE-UI.TurnRulesJourneyTests.testTheMemberTheTurnPassedToAtNoonMakesTheDaysOneBet"
   ]
 }
