@@ -128,6 +128,22 @@ export const shiftBet = internalMutation({
   },
 });
 
+// The same for sign-in codes: every code still waiting is moved past its ten-minute life, so a test can enter an expired one.
+export const expireCodes = internalMutation({
+  args: { runID: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const now = Date.now();
+    let expired = 0;
+    for (const attempt of await ctx.db.query("v0OtpAttempts").collect()) {
+      if (attempt.consumedAt !== undefined || attempt.expiresAt <= now) continue;
+      await ctx.db.patch(attempt._id, { createdAt: now - 11 * minute, expiresAt: now - minute });
+      expired++;
+    }
+    return { expired };
+  },
+});
+
 export const inspect = internalQuery({
   args: { runID: v.string() },
   handler: async (ctx, args) => {
@@ -155,6 +171,7 @@ export const inspect = internalQuery({
       blocks: (await all("v0Blocks")).map((row: any) => ({ actor: actor(row.accountId), blocked: actor(row.blockedId) })),
       reports: (await all("v0Reports")).map((row: any) => ({ reporter: actor(row.reporterId), group: group(row.groupId), reason: row.reason })),
       recaps: (await all("v0Recaps")).length,
+      codes: (await all("v0OtpAttempts")).map((row: any) => ({ attempts: row.attempts, consumed: row.consumedAt !== undefined, expired: row.expiresAt <= Date.now() })),
     };
   },
 });

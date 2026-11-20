@@ -230,6 +230,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         await internal("mutation", "qaNative:shiftBet", { runID, to: input.to, ...(target ? { betId: target.betId } : { betId: resolveArgs(input.betId, fixture) }) });
         return await internal("mutation", "v0Jobs:sweep", {});
       },
+      // Moves every sign-in code still waiting past its expiry, as shiftBet moves a bet: the server clock cannot move.
+      async expireCodes() { return await internal("mutation", "qaNative:expireCodes", { runID }); },
       async runJob(input) {
         assert.ok(["sweep", "turns", "recaps"].includes(input.job), "Unknown job");
         return await internal("mutation", "v0Jobs:" + input.job, {});
