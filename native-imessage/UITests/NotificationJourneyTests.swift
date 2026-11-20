@@ -53,6 +53,13 @@ final class NotificationJourneyTests: JourneyCase {
     private func setAlerts(_ on: Bool, for actor: Actor, _ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let toggle = try bring(element("notifications.enable", in: host), "the notifications switch", code, file: file, line: line)
         holds(code, "the switch is \(on ? "off" : "on") and can be used before it is flipped", file: file, line: line) { toggle.isEnabled && toggle.value as? String == (on ? "0" : "1") }
+        // A tap that lands while the form is still moving from a scroll only stops the scroll, so the row has to stay put first.
+        var last = CGRect.null
+        holds(code, "the switch has come to rest on screen", file: file, line: line) {
+            let now = toggle.frame
+            defer { last = now }
+            return now == last && toggle.isHittable
+        }
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
         if on {
             let allow = springboard.buttons["Allow"]
