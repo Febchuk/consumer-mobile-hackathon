@@ -224,6 +224,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture.bets[input.key] = seeded;
         return seeded;
       },
+      // Adds a fixture person to a fixture group as a member of long standing; the groups reset builds are not changed.
+      async seedMember(input) { return await internal("mutation", "qaNative:seedMember", { runID, group: input.group, actor: input.actor }); },
       // Moves one fixture bet through time, then lets the product's own sweep perform the transition.
       async shiftBet(input) {
         const target = input.key ? fixture.bets[input.key] : undefined;
