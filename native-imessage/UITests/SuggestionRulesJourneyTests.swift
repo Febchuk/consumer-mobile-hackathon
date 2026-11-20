@@ -62,6 +62,16 @@ final class SuggestionRulesJourneyTests: JourneyCase {
         XCTAssertTrue(draft.waitForExistence(timeout: 20 * Self.pace), "[\(code)] the draft card is in the message field", file: file, line: line)
     }
 
+    /// Drags the page down a third of the screen at a time until a field above the visible part can be touched, as a person
+    /// does after choosing an idea at the bottom of the screen. The shared tap helper only scrolls toward controls below.
+    private func scrollBackUp(to target: XCUIElement, _ code: String, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<8 where !target.isHittable {
+            messages.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).press(forDuration: 0.1, thenDragTo: messages.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+        }
+        let reached = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in target.isHittable }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reached], timeout: 10 * Self.pace), .completed, "[\(code)] the field is back on screen after scrolling up", file: file, line: line)
+    }
+
     /// The one bet the app created in this test; settled fixture bets are left out.
     private func createdBet(_ code: String, file: StaticString = #filePath, line: UInt = #line) throws -> [String: Any] {
         let open = try control.rows("bets").filter { $0["state"] as? String == "open" }
@@ -181,6 +191,7 @@ final class SuggestionRulesJourneyTests: JourneyCase {
         try assertHolds("compose.optionB", "A ball", "NATIVE-UI-RULES-EDIT-03")
 
         let question = try required("compose.question", in: messages, "NATIVE-UI-RULES-EDIT-04")
+        scrollBackUp(to: question, "NATIVE-UI-RULES-EDIT-04")
         try tap(question, scrolling: messages)
         let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (question.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 15 * Self.pace), .completed, "[NATIVE-UI-RULES-EDIT-04] the filled question takes the keyboard")
