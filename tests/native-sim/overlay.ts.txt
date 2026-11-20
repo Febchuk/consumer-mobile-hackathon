@@ -2,6 +2,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { hash, phoneHash } from "./v0Policy";
 import { approvedPolicy, localDateAt, localInstant } from "./v0GamePolicy";
+import { queueNotification } from "./v0Notifications";
 
 const runID = "__QA_RUN_ID__";
 const actors: Record<string, { phone: string; alias: string }> = __QA_ACTORS__;
@@ -212,6 +213,29 @@ export const expireSessions = internalMutation({
       expired++;
     }
     return { expired };
+  },
+});
+
+// The product closes a recap week at a fixed local weekday and hour, and the server clock cannot move there. This closes a
+// week now for one fixture group, as the recap job would have, and queues each member's notification through the
+// product's own queueNotification with the job's key, so its eligibility rules decide who gets a row. The points the
+// recap shows are still whatever the product's ledger holds.
+export const notifySeedRecap = internalMutation({
+  args: { runID: v.string(), group: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { groups } = await ids(ctx);
+    const group = groups[args.group] ? await ctx.db.get(groups[args.group]) : null;
+    if (!group) throw new Error("Unknown fixture group");
+    const now = Date.now();
+    const localDate = localDateAt(group.timezone, now)!;
+    await ctx.db.insert("v0Recaps", { groupId: group._id, startsAt: now - 7 * 24 * hour, endsAt: now, createdAt: now, localDate });
+    let queued = 0;
+    for (const member of await ctx.db.query("v0Memberships").withIndex("by_group", (q: any) => q.eq("groupId", group._id)).collect()) {
+      if (member.leftAt !== undefined) continue;
+      if (await queueNotification(ctx, { key: "recap:" + group._id + ":" + localDate + ":" + member.accountId, accountId: member.accountId, groupId: group._id, kind: "recap" })) queued++;
+    }
+    return { queued };
   },
 });
 

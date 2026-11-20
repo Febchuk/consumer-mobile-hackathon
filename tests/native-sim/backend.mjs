@@ -12,6 +12,7 @@ import { convexToJson, jsonToConvex } from "convex/values";
 import { fixtureProviderSettings } from "../qa-runtime/tls-provider.mjs";
 import { startFakeOtp } from "./fake-otp.mjs";
 import { assertLoopbackOrigin, ports, sourceCardOrigin } from "./guard.mjs";
+import { alertFromSource, hostBundle, payloadForRow, pushArguments } from "./notify.mjs";
 
 // The audit's four fixture people. The phone numbers are the reserved synthetic ones the fake code provider accepts.
 export const actors = Object.freeze({
@@ -38,7 +39,7 @@ async function body(request, limit = 1_048_576) {
  * Boots the pinned official Convex backend on loopback with the repository's real handlers, a per-run scratch copy of convex/
  * plus the test-only overlay, the fake phone-code provider, the app-facing gateway and the test-control server.
  */
-export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false, onClose = () => {} }) {
+export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false, onClose = () => {}, simulatorUDID }) {
   assert.equal(sha256(readFileSync(binary)), expectedBinarySHA256, "The backend executable does not match its pin");
   assert.ok(!existsSync(directory) && realpathSync(dirname(directory)) === dirname(directory), "A fresh canonical scratch directory is required");
   assert.ok(!resolve(directory).startsWith(resolve(root) + "/") && Buffer.byteLength(directory) + 45 < 104, "Use a short scratch directory outside the repository");
@@ -62,6 +63,9 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const faults = new Map();
   // Replies a test asked to lose: the next calls to a path reach the backend and take effect, and the app is told the server failed.
   const lostReplies = new Map();
+  // Notification payloads a test delivered under a name, so the same arrival can be handed to the simulator again.
+  const deliveries = new Map();
+  const pushAlert = alertFromSource(readFileSync(resolve(root, "convex/v0Apns.ts"), "utf8"));
   let currentTest = "";
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
@@ -225,6 +229,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         calls.length = 0;
         faults.clear();
         lostReplies.clear();
+        deliveries.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
@@ -293,6 +298,32 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(tokens[input.actor], "Unknown actor");
         return await internal("mutation", "qaNative:expireSessions", { runID, actor: input.actor });
       },
+      // Hands the run's own simulator the notification the product's worker would send for one real outbox row: the worker's
+      // alert, the row's kind and its opaque identifiers. simctl push talks to no Apple service and no provider, so this
+      // shows what the app does with an arrival and never that the server or Apple delivered one. "replay" hands over a
+      // payload this test already delivered under a name, as a late or repeated arrival of the same event.
+      async notifyPush(input) {
+        let payload;
+        if (typeof input.replay === "string") {
+          payload = deliveries.get(input.replay);
+          assert.ok(payload, "Nothing was delivered under that name in this test");
+        } else {
+          const state = await internal("query", "qaNative:inspect", { runID });
+          const betId = input.bet ? fixture.bets[input.bet]?.betId : null;
+          assert.ok(!input.bet || betId, "Unknown fixture bet");
+          const rows = state.outbox.filter((row) => row.actor === input.actor && row.kind === input.kind && row.betId === betId && (!input.group || row.group === input.group));
+          assert.equal(rows.length, 1, "Expected exactly one outbox row for this notification, found " + rows.length);
+          payload = payloadForRow({ row: rows[0], groups: state.groups, bets: state.bets, alert: pushAlert });
+          if (typeof input.remember === "string") deliveries.set(input.remember, payload);
+        }
+        const file = resolve(directory, "push-" + randomBytes(8).toString("hex") + ".json");
+        writeFileSync(file, JSON.stringify(payload), { mode: 0o600 });
+        try { execFileSync("xcrun", pushArguments({ runSimulator: simulatorUDID, bundle: input.bundle ?? hostBundle, file }), { stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }); } finally { rmSync(file, { force: true }); }
+        return { title: payload.aps.alert.title, body: payload.aps.alert.body, kind: payload.kind, fields: Object.keys(payload).sort() };
+      },
+      // Closes a recap week now for one fixture group and queues its notifications through the product's own queue: see
+      // notifySeedRecap in the overlay.
+      async notifySeedRecap(input) { return await internal("mutation", "qaNative:notifySeedRecap", { runID, group: input.group }); },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
         assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");

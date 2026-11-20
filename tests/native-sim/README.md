@@ -54,6 +54,14 @@ A QA activation lasts at most one hour and the whole suite takes longer. A run w
 - A second or third tap on a text field that did not take the keyboard is recorded as a `retap` retry too.
 - Cancelling an empty "New Message" draft that Messages opened on is recorded as a `draft-cancel` retry.
 
+## Simulated notification arrival
+
+- `control.call("notifyPush", ["actor": …, "kind": …, "bet": … or "group": …])` hands the run's own simulator the notification the product's worker would send for one real outbox row: the alert text read from `convex/v0Apns.ts`, the row's kind and its opaque identifiers. It runs `xcrun simctl push`, which talks to no Apple service and no provider. The device is always the simulator the run created and the application always the QA host app; neither can be chosen by a caller (`notify.mjs`, tested in `notify.test.mjs`). `"remember"` keeps a delivered payload under a name and `"replay"` delivers it again as a late copy.
+- This proves what the app does when a notification arrives: what is shown, where a tap leads, and that the server is asked again at open. It never proves that the server or Apple delivered one.
+- The QA build asks iOS for the local alert permission, so a banner can be shown, and never registers with a provider: it gets no device token and stores none.
+- A host app that iOS starts from a notification gets no run manifest and refuses to configure, so an arrival while the app is not running cannot be opened on this lane.
+- `control.call("notifySeedRecap", ["group": …])` closes a recap week now for a fixture group and queues its notifications through the product's own queue; the weekly schedule itself is not exercised.
+
 ## One retry of a failed test, for slow shared runners only
 
 `--retry-failed-once` is off by default. With it, each test that failed is run once more, by itself, in a new xcodebuild session; the test's own set-up ends both apps and resets the backend, so nothing of the first attempt is left.
