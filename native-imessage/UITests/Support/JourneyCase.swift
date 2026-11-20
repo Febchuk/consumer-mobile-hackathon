@@ -137,13 +137,13 @@ class JourneyCase: XCTestCase {
             return now == field.placeholderValue ? "" : now
         }
         for round in 1...3 {
-            // Let late keystrokes land before counting what there is to delete.
-            var last: String?
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                let now = held()
-                defer { last = now }
-                return now == last
-            }, object: nil)], timeout: 5 * Self.pace)
+            // Let late keystrokes land before counting what there is to delete: the field has settled once its value stops
+            // changing for a moment. The wait is on the field itself, never a block that reads it: a read still under way
+            // when a waiter's time ends is reported by XCTest as a failure of the test ("Interrupted by waiter").
+            for _ in 0..<5 {
+                let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value != %@", field.value as? String ?? ""), object: field)
+                if XCTWaiter.wait(for: [changed], timeout: Self.pace) != .completed { break }
+            }
             let current = held()
             if current.isEmpty { return true }
             if round > 1, field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
