@@ -268,6 +268,7 @@ struct BetView: View {
             }
             guard model.token == token else { return }
             mutationIDs.removeValue(forKey: fingerprint)
+            model.error = nil
             await load()
         } catch {
             self.error = error.localizedDescription

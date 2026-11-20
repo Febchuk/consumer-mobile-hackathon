@@ -36,6 +36,8 @@ To click through the app by hand with seeded data, run `tests/native-sim/demo.sh
 
 `tests/coverage/native-bindings.json` binds native-layer (`.U`) assertions from `inventory.json` to `NATIVE-UI.<Class>.<test>`. These are proven only by a passing run of this command; they live outside `bindings.json` because that file is checked to hold backend (`.B`) evidence only, so the backend evidence report still shows them blocked.
 
+`tests/coverage/native-status.json` holds the rest of the native picture. `notes` says what each newer binding proves and where it is only a thin check of a contract a backend test proves (the backend test is named). `blocked` lists the native assertions a simulator cannot prove, each with its reason; none of them counts as passed. A native assertion in neither file has simply not been attempted. `npm run lint` checks that every id is a native assertion in the inventory, that none is both bound and blocked, and that every bound test exists.
+
 ## Full runs are split into parts
 
 A QA activation lasts at most one hour and the whole suite takes longer. A run without `--only` therefore runs the journey classes in parts. Each part is a complete run with its own simulator, backend and activation, and writes its own evidence under `part-<n>/` in the output directory. The top-level `evidence.json` lists the planned parts, each part's status, commit, simulator, test cases, latency measurements and retries, and the totals. The combined status is never better than the worst part, and a part that did not run or wrote no evidence makes the run `blocked`. Every `JourneyCase` class in `native-imessage/UITests` lands in exactly one part; a class with more than 16 tests stops the run before anything starts.
