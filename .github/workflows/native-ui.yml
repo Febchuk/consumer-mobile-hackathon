@@ -9,6 +9,7 @@ name: Native UI
 # and after native changes land on the integration branch. GitHub starts scheduled and manually dispatched runs only
 # from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -41,8 +42,10 @@ jobs:
       max-parallel: 5
       matrix:
         # Nine tests at most in each shard, so each stays under about 35 minutes.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session]
+        shard: [host-session, pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session]
         include:
+          - shard: host-session
+            classes: HostSessionJourneyTests
           - shard: pick
             classes: PickJourneyTests
           - shard: reveal-membership
@@ -252,7 +255,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules suggestion-rules scoring cascade security draft-session
+      SHARDS: host-session pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules suggestion-rules scoring cascade security draft-session
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
