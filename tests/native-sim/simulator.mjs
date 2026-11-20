@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
 const simctl = (args, options = {}) => execFileSync("xcrun", ["simctl", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000, ...options });
@@ -72,15 +72,9 @@ export function destroySimulator(udid) {
 /**
  * Lists established TCP connections from the simulator's own processes to anything that is not loopback. macOS gives an
  * unprivileged user no way to deny a simulator outbound traffic, so this observes it instead of preventing it.
- *
- * It does not block the caller. The lane's gateway and control server answer from the same process, and on a loaded
- * runner ps and lsof can each take many seconds: run synchronously they stop every app call and every fixture call for
- * that long.
  */
-export async function nonLoopbackConnections(udid) {
-  // The output is taken whatever the exit status: lsof exits 1 when it has nothing to list.
-  const output = (command, args) => new Promise((accept) => execFile(command, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (_error, stdout) => accept(stdout ?? "")));
-  const rows = (await output("ps", ["-axo", "pid=,ppid=,command="])).split("\n").map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)).filter(Boolean).map((match) => ({ pid: Number(match[1]), parent: Number(match[2]), command: match[3] }));
+export function nonLoopbackConnections(udid) {
+  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).split("\n").map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)).filter(Boolean).map((match) => ({ pid: Number(match[1]), parent: Number(match[2]), command: match[3] }));
   const owned = new Map();
   for (const row of rows) if (row.command.includes("launchd_sim") && row.command.includes(udid)) owned.set(row.pid, row);
   for (let grew = true; grew;) {
@@ -88,7 +82,7 @@ export async function nonLoopbackConnections(udid) {
     for (const row of rows) if (!owned.has(row.pid) && owned.has(row.parent)) { owned.set(row.pid, row); grew = true; }
   }
   if (!owned.size) return [];
-  const listing = await output("lsof", ["+c", "0", "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-a", "-p", [...owned.keys()].join(",")]);
+  const listing = spawnSync("lsof", ["+c", "0", "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-a", "-p", [...owned.keys()].join(",")], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).stdout ?? "";
   const found = [];
   for (const line of listing.split("\n").slice(1)) {
     const fields = line.trim().split(/\s+/);
