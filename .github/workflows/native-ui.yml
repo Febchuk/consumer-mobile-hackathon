@@ -244,7 +244,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin
+      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
