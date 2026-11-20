@@ -60,6 +60,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const failures = [];
   // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
   const faults = new Map();
+  const lostReplies = new Map();
   let currentTest = "";
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
@@ -158,6 +159,13 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         }
         const upstream = await localFetch(origin + "/api/" + match[1], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, args: input.args, format: "convex_encoded_json" }) });
         const envelope = await upstream.json();
+        // A reply the test asked to lose: the backend has run the call, and the app is told only that the server failed.
+        const lost = lostReplies.get(path) ?? 0;
+        if (lost > 0) {
+          lostReplies.set(path, lost - 1);
+          outcome = "injected"; status = 560; failure = "Reply dropped by the test after the backend ran the call";
+          return reply(560, { status: "error", errorMessage: "Injected failure" });
+        }
         if (envelope.status === "success") {
           outcome = "success";
           if (path === "v0Runtime:attestation") envelope.value = { ...envelope.value, testAdapters: true, qaRunID: runID, qaManifestSHA256: manifestSHA256 };
@@ -216,6 +224,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture = { ...seeded, bets: {} };
         calls.length = 0;
         faults.clear();
+        lostReplies.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
@@ -260,6 +269,15 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         faults.set(input.path, Number(input.count));
       },
+      // The replies to the app's next `count` calls to one public function are lost: the backend runs each call, and the app
+      // gets the same codeless server error as from failNext. For proving that a repeated request changes nothing.
+      async loseNextReply(input) {
+        assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
+        assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
+        lostReplies.set(input.path, Number(input.count));
+      },
+      // Moves a fixture group's pending invitations past their seven days, since the server clock cannot move.
+      async expireInvites(input) { return await internal("mutation", "qaNative:expireInvites", { runID, group: input.group }); },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
         assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");

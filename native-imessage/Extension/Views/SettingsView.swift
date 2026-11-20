@@ -129,7 +129,8 @@ struct SettingsView: View {
             settings = result
             noBets = result?.noBets ?? noBets
             message = "Privacy settings saved."
-        } catch { model.handle(error); noBets = settings?.noBets ?? false }
+            model.error = nil
+        } catch { message = nil; model.handle(error); noBets = settings?.noBets ?? false }
     }
 
     private func report(_ groupID: String) async {
@@ -164,7 +165,8 @@ struct SettingsView: View {
             let _: Ignored? = try await API.mutation(path, args)
             guard model.token == token else { return false }
             message = "Request saved."
+            model.error = nil
             return true
-        } catch { model.handle(error); return false }
+        } catch { message = nil; model.handle(error); return false }
     }
 }
