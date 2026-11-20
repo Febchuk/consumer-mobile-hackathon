@@ -148,7 +148,7 @@ class JourneyCase: XCTestCase {
             if current.isEmpty { return true }
             if round > 1, field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
-            let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '' OR value == %@", field.placeholderValue ?? ""), object: field)
+            let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == nil OR value == '' OR value == %@", field.placeholderValue ?? ""), object: field)
             if XCTWaiter.wait(for: [empty], timeout: 5 * Self.pace) == .completed { return true }
         }
         return held().isEmpty
