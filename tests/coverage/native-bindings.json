@@ -296,7 +296,8 @@
     "NATIVE-UI.SecurityJourneyTests.testTheSubjectIsShownOnlyLockedFieldsUntilTheServerReveals"
   ],
   "SEC1.revocation.U": [
-    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp"
+    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppWhenItComesBackToTheForeground"
   ],
   "SEC1.membership-interval.U": [
     "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
@@ -313,7 +314,9 @@
   ],
   "SEC2.session-revocation.U": [
     "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
-    "NATIVE-UI.SignInLimitsJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
+    "NATIVE-UI.SignInLimitsJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppWhenItComesBackToTheForeground",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppAtAColdLaunchAndTheExtensionKeepsNothing"
   ],
   "SEC2.no-username-admission.U": [
     "NATIVE-UI.SecurityJourneyTests.testPeopleOutsideTheGroupAreShownNothingOfItUnderAnyName"
@@ -323,7 +326,8 @@
   ],
   "SEC3.stale-cache-clear.U": [
     "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
-    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
+    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppAtAColdLaunchAndTheExtensionKeepsNothing"
   ],
   "J1.1.consenting-subject.U": [
     "NATIVE-UI.DraftAndSessionJourneyTests.testAFriendWhoOptedOutCannotBeMadeTheSubjectAndIsNoLongerOffered"

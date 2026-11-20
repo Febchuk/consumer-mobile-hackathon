@@ -41,7 +41,7 @@ jobs:
       max-parallel: 5
       matrix:
         # Nine tests at most in each shard, so each stays under about 35 minutes.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session, sign-in-limits]
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session, sign-in-limits, host-session]
         include:
           - shard: pick
             classes: PickJourneyTests
@@ -69,6 +69,8 @@ jobs:
             classes: DraftAndSessionJourneyTests
           - shard: sign-in-limits
             classes: SignInLimitsJourneyTests TurnRulesJourneyTests
+          - shard: host-session
+            classes: HostSessionJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -254,7 +256,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules suggestion-rules scoring cascade security draft-session sign-in-limits
+      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules suggestion-rules scoring cascade security draft-session sign-in-limits host-session
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
