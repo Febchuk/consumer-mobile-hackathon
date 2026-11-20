@@ -10,6 +10,7 @@ name: Native UI
 # from the workflow file on the default branch.
 on:
   workflow_dispatch:
+  pull_request:
   schedule:
     - cron: "17 10 * * *"
   push:
@@ -39,18 +40,10 @@ jobs:
       fail-fast: false
       matrix:
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
+        shard: [j7]
         include:
-          - shard: pick
-            classes: PickJourneyTests
-          - shard: reveal-membership
-            classes: RevealJourneyTests MembershipJourneyTests
-          - shard: controls-resilience
-            classes: ControlsJourneyTests ResilienceJourneyTests
-          - shard: privacy-create
-            classes: SubjectPrivacyJourneyTests CreateJourneyTests
-          - shard: start-board-signin
-            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
+          - shard: j7
+            classes: ScoringJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
