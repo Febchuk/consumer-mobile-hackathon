@@ -324,5 +324,20 @@
   "SEC3.stale-cache-clear.U": [
     "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
     "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
+  ],
+  "J1.1.consenting-subject.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testAFriendWhoOptedOutCannotBeMadeTheSubjectAndIsNoLongerOffered"
+  ],
+  "J1.3.idempotent-create.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testACreateWhoseReplyIsLostIsSentAgainAsTheSameRequestAndMakesOneBet",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testADoubleTapOnCreateCardMakesOneRequestAndOneBet"
+  ],
+  "J1.3.cancel-resume.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testADraftThePersonRemovedCanBePreparedAgainFromTheSameBet"
+  ],
+  "J2.2.logout-expiry.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheHostAppSignsTheExtensionOut",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheExtensionSignsTheHostAppOut",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testAnExpiredSignInEndsTheSessionInTheExtensionAndTheHostApp"
   ]
 }

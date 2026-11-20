@@ -54,7 +54,11 @@
     "SEC2.session-revocation.U": "Thin against backend SEC2.revoke-one-device and revoke-all-devices: a revoked sign-in and an ordinary sign-out both end the session and its conversation link. Proven extension-first only.",
     "SEC2.no-username-admission.U": "Taking a member's display name admits nobody: the group is still not offered and the board does not merge the accounts.",
     "SEC3.locked-fields.U": "Thin against backend V0.subject.*: nothing but locked metadata on screen or in the accessibility tree before the reveal. The MSMessage payload is SEC3.shared-payload-scan, which stays blocked.",
-    "SEC3.stale-cache-clear.U": "A question already on screen is removed when the sign-in is revoked or the membership ends. The app-switcher snapshot cannot be inspected from a UI test."
+    "SEC3.stale-cache-clear.U": "A question already on screen is removed when the sign-in is revoked or the membership ends. The app-switcher snapshot cannot be inspected from a UI test.",
+    "J1.1.consenting-subject.U": "Thin against backend B1.create.subject-withdrawn.no-bets and B1.create.app-named-subject: a friend who opts out while the form is open cannot be made the subject and is no longer offered; choosing another subject than the app named is refused.",
+    "J1.3.idempotent-create.U": "A create applied three times with its reply lost, then retried by hand, makes one bet under one request id; a double tap sends one request. Backend side is B1.create.idempotent.",
+    "J1.3.cancel-resume.U": "A staged card removed with Messages' own control leaves one open bet, and the card can be prepared again from it with no second create. No backend test is bound to this line.",
+    "J2.2.logout-expiry.U": "Signing out in either app signs the other out, and a sign-in expired on the server ends the session in both. Backend side is SEC2.revoke-one-device and SEC2.session-expired. Expiry by the device clock is not exercised."
   },
   "blocked": {
     "J1.2.same-room.U": "Real delivery between phones: the simulator's Messages has no account, so a card is inserted as a draft and never delivered or received.",
@@ -123,6 +127,7 @@
     "J6.3.unsettleable.U": "Hosted AI suggestions are off in V0 (docs/v0-rules.md, section 7), so no provider idea exists to be unsettleable, the server has no settleability rule beyond two distinct non-empty choices, and no backend test is bound to this line either.",
     "J7.1.host-extension-equal.U": "The host app has no board, history or score screen in V0; its only view with points is the recap opened from a notification, which needs push. ScoringJourneyTests proves the extension's three score surfaces agree with the stored balance and that the signed-in host shows no points, which is not this line.",
     "SEC2.secret-free-logs.U": "A UI test cannot read the app's or the backend's logs. Backend SEC2.secret-free-logs.runtime and .source are the evidence.",
-    "SEC3.authenticated-media.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears."
+    "SEC3.authenticated-media.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
+    "J2.1.opaque-locator.U": "The host app accepts a card only as a universal link on the card origin, which a loopback origin cannot have (opening the loopback card URL did nothing on the hosted simulator), and the other route, tapping a card in the transcript, needs a sent message, which simulator Messages never produces."
   }
 }
