@@ -232,5 +232,27 @@
   ],
   "J6.3.group-history.U": [
     "NATIVE-UI.SuggestionRulesJourneyTests.testAPastBetIsOfferedOnlyForItsOwnSubjectAndGroup"
+  ],
+  "J7.1.approved-oracle.U": [
+    "NATIVE-UI.ScoringJourneyTests.testApprovedPointsAndStreaksReachEveryScreen"
+  ],
+  "J7.1.rounding-ties.U": [
+    "NATIVE-UI.ScoringJourneyTests.testApprovedPointsAndStreaksReachEveryScreen",
+    "NATIVE-UI.ScoringJourneyTests.testTiedMembersShareARankAndAreListedByName"
+  ],
+  "J7.1.void-missed.U": [
+    "NATIVE-UI.ScoringJourneyTests.testVoidedAndMissedBetsLeaveTheStreakAlone"
+  ],
+  "J7.1.exactly-once.U": [
+    "NATIVE-UI.ScoringJourneyTests.testAFinalResultIsCreditedExactlyOnce"
+  ],
+  "J7.2.group-history.U": [
+    "NATIVE-UI.ScoringJourneyTests.testEachGroupKeepsItsOwnHistoryAndPoints"
+  ],
+  "J7.2.no-global-wallet.U": [
+    "NATIVE-UI.ScoringJourneyTests.testEachGroupKeepsItsOwnHistoryAndPoints"
+  ],
+  "J7.4.group-progress.U": [
+    "NATIVE-UI.ScoringJourneyTests.testGroupPointsMoveTheSharedGoal"
   ]
 }

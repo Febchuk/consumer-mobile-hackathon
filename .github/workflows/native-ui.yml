@@ -41,7 +41,7 @@ jobs:
       max-parallel: 5
       matrix:
         # Nine tests at most in each shard, so each stays under about 35 minutes.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules]
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring]
         include:
           - shard: pick
             classes: PickJourneyTests
@@ -59,6 +59,8 @@ jobs:
             classes: RevealRulesJourneyTests
           - shard: suggestion-rules
             classes: SuggestionRulesJourneyTests
+          - shard: scoring
+            classes: ScoringJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
