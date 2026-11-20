@@ -224,6 +224,12 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture.bets[input.key] = seeded;
         return seeded;
       },
+      // A settled past bet stored directly, for the suggestion tests: see seedHistoryBet in the overlay.
+      async seedHistoryBet(input) {
+        const seeded = await internal("mutation", "qaNative:seedHistoryBet", { runID, key: input.key, group: input.group, creator: input.creator, subject: input.subject, question: input.question, ...(input.format ? { format: input.format } : {}), ...(input.options ? { options: input.options } : {}), ...(typeof input.contextLine === "string" ? { contextLine: input.contextLine } : {}) });
+        fixture.bets[input.key] = seeded;
+        return seeded;
+      },
       // Moves one fixture bet through time, then lets the product's own sweep perform the transition.
       async shiftBet(input) {
         const target = input.key ? fixture.bets[input.key] : undefined;
