@@ -13,7 +13,19 @@
     "J5.2.exactly-once-finalize.U": "Thin against backend B4.finalize.exactly-once and B3.ledger.exactly-once: repeated sweeps leave one result, and the board shows the same points.",
     "J5.3.late-answer-race.U": "Thin against backend B4.timeout.worker-first: the open answer screen becomes unavailable at the deadline and a late answer is refused. Only the worker-first order is shown.",
     "J5.3.single-terminal-state.U": "Thin against backend B4.finalize.void-is-terminal and B4.timeout.no-answer: after the void, a late answer and more sweeps, the bet stays voided and unscored on screen and on the server.",
-    "J5.5.cancel-truth.U": "A prepared result card removed from the message field leaves the bet screen unchanged and nothing claims delivery. A sent card cannot be compared: the simulator sends nothing."
+    "J5.5.cancel-truth.U": "A prepared result card removed from the message field leaves the bet screen unchanged and nothing claims delivery. A sent card cannot be compared: the simulator sends nothing.",
+    "J6.1.subject-source.U": "Every idea carries the chosen subject and is labelled as template or group history; an unedited idea is stored with that source.",
+    "J6.1.editable.U": "A chosen idea fills the form, is edited, and is stored with the edited question and source manual.",
+    "J6.1.yes-no.U": "Thin against backend B1.create.format.yes_no.manual: the yes/no form asks for no line or choices and stores Yes / No.",
+    "J6.1.context-private.U": "Typed context is stored with the bet, absent from the Messages accessibility tree after the draft card is inserted, and absent from what other members' lists return.",
+    "J6.1.tap-count.U": "Group home to draft card in three taps, counted by the test. Send in Messages would be a fourth and cannot be done on a simulator.",
+    "J6.2.safe-timeout-fallback.U": "Thin for the provider part against backend J6.2.fallback.* and V0.suggestions.hosted-unavailable-fallback: a failed suggestion request leaves the screen usable and asking again brings safe templates. Hosted AI is off in V0, so a provider timeout cannot be driven from the screen.",
+    "J6.2.no-stale-subject.U": "Switching subject removes the previous subject's ideas each time.",
+    "J6.3.filter-categories.U": "Thin against backend J6.3.history-filter.*: settled bets in five refused categories are not offered while a safe one is.",
+    "J6.3.malformed-output.U": "Thin against backend J6.3.malformed-history.*: three malformed stored shapes are not offered.",
+    "J6.3.nonmember.U": "Thin against backend V0.suggestions.denied-role.outsider and cross-group-subject: the subject menu offers no outsider, and the real function refuses both directions.",
+    "J6.3.self-subject-denied.U": "Thin against backend V0.suggestions.denied-role.subject: nobody is offered themselves as subject or ideas about themselves.",
+    "J6.3.group-history.U": "A settled bet from another group the creator belongs to is never offered in this group."
   },
   "blocked": {
     "J1.2.same-room.U": "Real delivery between phones: the simulator's Messages has no account, so a card is inserted as a draft and never delivered or received.",
@@ -78,6 +90,7 @@
     "J5.4.upload-owner.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
     "J5.4.mime-size.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
     "J5.4.read-auth.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
-    "J5.4.delete-revoke.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears."
+    "J5.4.delete-revoke.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
+    "J6.3.unsettleable.U": "Hosted AI suggestions are off in V0 (docs/v0-rules.md, section 7), so no provider idea exists to be unsettleable, the server has no settleability rule beyond two distinct non-empty choices, and no backend test is bound to this line either."
   }
 }
