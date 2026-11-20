@@ -25,7 +25,14 @@
     "J6.3.malformed-output.U": "Thin against backend J6.3.malformed-history.*: three malformed stored shapes are not offered.",
     "J6.3.nonmember.U": "Thin against backend V0.suggestions.denied-role.outsider and cross-group-subject: the subject menu offers no outsider, and the real function refuses both directions.",
     "J6.3.self-subject-denied.U": "Thin against backend V0.suggestions.denied-role.subject: nobody is offered themselves as subject or ideas about themselves.",
-    "J6.3.group-history.U": "A settled bet from another group the creator belongs to is never offered in this group."
+    "J6.3.group-history.U": "A settled bet from another group the creator belongs to is never offered in this group.",
+    "J7.1.approved-oracle.U": "Thin against backend B3.oracle.*, B3.ledger.finalize and B3.ledger.streak-across-bets: three real settlements show the approved points and streaks on the home line, board and group list. Not the whole table or the x2 cap.",
+    "J7.1.rounding-ties.U": "38.5 shows as 39; members level on points share a rank and are listed by name.",
+    "J7.1.void-missed.U": "Thin against backend B3.ledger.void.* and B3.ledger.skipped: voided and missed bets between two correct picks leave the streak alone on screen. Veto and subject-left voids are not exercised here.",
+    "J7.1.exactly-once.U": "Thin against backend B3.ledger.exactly-once: after retries and repeated sweeps the board and history show the result once.",
+    "J7.2.group-history.U": "Each group's board history shows only its own settled bets.",
+    "J7.2.no-global-wallet.U": "Thin against backend V0.no-foreign-board and B3.ledger.per-group: one balance per group on screen and no combined total anywhere.",
+    "J7.4.group-progress.U": "Thin against backend B5.progress.group-points: points earned after the goal became active move it, earlier points do not, and it reads reached past its target."
   },
   "blocked": {
     "J1.2.same-room.U": "Real delivery between phones: the simulator's Messages has no account, so a card is inserted as a draft and never delivered or received.",
@@ -91,6 +98,7 @@
     "J5.4.mime-size.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
     "J5.4.read-auth.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
     "J5.4.delete-revoke.U": "Proof photos and voice notes are cut from V0 (docs/v0-rules.md, section 6) and ProofFeature.isEnabled is false, so there is no native surface. Tests assert only that no proof control, proof copy or v0Proof call appears.",
-    "J6.3.unsettleable.U": "Hosted AI suggestions are off in V0 (docs/v0-rules.md, section 7), so no provider idea exists to be unsettleable, the server has no settleability rule beyond two distinct non-empty choices, and no backend test is bound to this line either."
+    "J6.3.unsettleable.U": "Hosted AI suggestions are off in V0 (docs/v0-rules.md, section 7), so no provider idea exists to be unsettleable, the server has no settleability rule beyond two distinct non-empty choices, and no backend test is bound to this line either.",
+    "J7.1.host-extension-equal.U": "The host app has no board, history or score screen in V0; its only view with points is the recap opened from a notification, which needs push. ScoringJourneyTests proves the extension's three score surfaces agree with the stored balance and that the signed-in host shows no points, which is not this line."
   }
 }
