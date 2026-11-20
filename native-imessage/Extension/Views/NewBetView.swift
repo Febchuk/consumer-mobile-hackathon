@@ -153,6 +153,7 @@ struct NewBetView: View {
             guard model.token == token, subjectID == subject else { return }
             guard result?.readsChat == false, result?.processing == "templates_and_group_history" else { throw NativeError.invalidLink }
             ideas = (result?.suggestions ?? []).filter { $0.subjectId == subject && $0.subjectId != model.session?.accountID && $0.options.count == 2 }
+            if error != nil, model.error == error { model.error = nil }
             error = nil
         } catch {
             ideas = []

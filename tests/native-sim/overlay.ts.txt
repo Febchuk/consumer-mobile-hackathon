@@ -117,6 +117,22 @@ export const seedMember = internalMutation({
   },
 });
 
+// A settled past bet, stored directly the way a finished bet is stored. It does not go through the creation checks, so a
+// test can hold a past bet that today's checks would refuse, and see whether it is reused as a suggestion.
+export const seedHistoryBet = internalMutation({
+  args: { runID: v.string(), key: v.string(), group: v.string(), creator: v.string(), subject: v.string(), question: v.string(), format: v.optional(v.union(v.literal("yes_no"), v.literal("over_under"), v.literal("this_that"))), options: v.optional(v.array(v.string())), contextLine: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts, groups } = await ids(ctx);
+    const now = Date.now();
+    const format = args.format ?? "yes_no";
+    const options = args.options ?? (format === "yes_no" ? ["Yes", "No"] : format === "over_under" ? ["Over 2.5", "Under 2.5"] : ["This", "That"]);
+    const locator = await hash(runID + ":" + args.key);
+    const betId = await ctx.db.insert("v0Bets", { groupId: groups[args.group], creatorId: accounts[args.creator], subjectId: accounts[args.subject], createdAt: now - 3 * hour, cutoffAt: now - 2 * hour, revealAt: now - 2 * hour, question: args.question, contextLine: args.contextLine ?? "Friendly synthetic context.", format, options, ...(format === "over_under" ? { line: 2.5 } : {}), source: "manual", state: "finalized", answeredAt: now - 100 * minute, challengeDeadline: now - 40 * minute, provisionalOutcome: 0, outcome: 0, finalizedAt: now - 40 * minute, locator, policyVersion: approvedPolicy.version });
+    return { betId, locator };
+  },
+});
+
 // The controllable clock: the server clock cannot move, so a fixture bet is moved through time instead, by rewriting
 // its own timestamps. The product's own jobs then perform the transition.
 export const shiftBet = internalMutation({
@@ -163,6 +179,7 @@ export const inspect = internalQuery({
       links: (await all("v0ConversationLinks")).map((row: any) => ({ actor: actor(row.accountId), group: group(row.groupId), control: row.deviceId.startsWith("qa-control-") })),
       turns: (await all("v0Turns")).map((row: any) => ({ group: group(row.groupId), localDate: row.localDate, creator: actor(row.creatorId), subject: actor(row.subjectId), status: row.status, hasBet: row.betId !== undefined, passed: row.passedFromId !== undefined })),
       bets: (await all("v0Bets")).map((row: any) => ({ id: row._id, locator: row.locator, group: group(row.groupId), creator: actor(row.creatorId), subject: actor(row.subjectId), question: row.question, format: row.format, options: row.options, state: row.state, source: row.source, revealAt: row.revealAt, provisionalOutcome: row.provisionalOutcome ?? null, outcome: row.outcome ?? null })),
+      betContexts: (await all("v0Bets")).map((row: any) => ({ id: row._id, contextLine: row.contextLine })),
       picks: (await all("v0Picks")).map((row: any) => ({ betId: row.betId, actor: actor(row.accountId), option: row.option, confidence: row.confidence, voided: row.voidedAt !== undefined })),
       challenges: (await all("v0Challenges")).map((row: any) => ({ betId: row.betId, actor: actor(row.accountId) })),
       ledger: (await all("v0Ledger")).map((row: any) => ({ betId: row.betId, group: group(row.groupId), actor: actor(row.accountId), points: row.points, streakBefore: row.streakBefore, streakAfter: row.streakAfter })),
