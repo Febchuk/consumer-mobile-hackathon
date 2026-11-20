@@ -100,6 +100,23 @@ export const seedBet = internalMutation({
   },
 });
 
+// Adds a fixture person to a fixture group as a member of long standing, for a case that needs more than two pickers.
+// reset builds every group with three members; this leaves them as they are and adds one row.
+export const seedMember = internalMutation({
+  args: { runID: v.string(), group: v.string(), actor: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts, groups } = await ids(ctx);
+    const groupId = groups[args.group];
+    const accountId = accounts[args.actor];
+    if (!groupId || !accountId) throw new Error("Unknown fixture group or person");
+    const rows = await ctx.db.query("v0Memberships").withIndex("by_group_account", (q: any) => q.eq("groupId", groupId).eq("accountId", accountId)).collect();
+    if (rows.length > 0) throw new Error("Already a member of this fixture group");
+    const membershipId = await ctx.db.insert("v0Memberships", { groupId, accountId, alias: actors[args.actor].alias, joinedAt: Date.now() - 71 * hour, points: 0, streak: 0 });
+    return { membershipId };
+  },
+});
+
 // The controllable clock: the server clock cannot move, so a fixture bet is moved through time instead, by rewriting
 // its own timestamps. The product's own jobs then perform the transition.
 export const shiftBet = internalMutation({
