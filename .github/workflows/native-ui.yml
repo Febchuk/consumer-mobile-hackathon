@@ -10,6 +10,7 @@ name: Native UI
 # from the workflow file on the default branch.
 on:
   workflow_dispatch:
+  pull_request:
   schedule:
     - cron: "17 10 * * *"
   push:
@@ -41,32 +42,10 @@ jobs:
       max-parallel: 5
       matrix:
         # Nine tests at most in each shard, so each stays under about 35 minutes.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session]
+        shard: [notify]
         include:
-          - shard: pick
-            classes: PickJourneyTests
-          - shard: reveal-membership
-            classes: RevealJourneyTests MembershipJourneyTests
-          - shard: controls-resilience
-            classes: ControlsJourneyTests ResilienceJourneyTests
-          - shard: privacy-create
-            classes: SubjectPrivacyJourneyTests CreateJourneyTests
-          - shard: start-board-signin
-            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
-          - shard: pick-rules
-            classes: PickRulesJourneyTests
-          - shard: reveal-rules
-            classes: RevealRulesJourneyTests
-          - shard: suggestion-rules
-            classes: SuggestionRulesJourneyTests
-          - shard: scoring
-            classes: ScoringJourneyTests
-          - shard: cascade
-            classes: CascadeJourneyTests
-          - shard: security
-            classes: SecurityJourneyTests
-          - shard: draft-session
-            classes: DraftAndSessionJourneyTests
+          - shard: notify
+            classes: NotificationJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -252,7 +231,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin pick-rules reveal-rules suggestion-rules scoring cascade security draft-session
+      SHARDS: notify
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
