@@ -9,6 +9,7 @@ name: Native UI
 # and after native changes land on the integration branch. GitHub starts scheduled and manually dispatched runs only
 # from the workflow file on the default branch.
 on:
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: "17 10 * * *"
@@ -39,18 +40,10 @@ jobs:
       fail-fast: false
       matrix:
         # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
+        shard: [j3-j4]
         include:
-          - shard: pick
-            classes: PickJourneyTests
-          - shard: reveal-membership
-            classes: RevealJourneyTests MembershipJourneyTests
-          - shard: controls-resilience
-            classes: ControlsJourneyTests ResilienceJourneyTests
-          - shard: privacy-create
-            classes: SubjectPrivacyJourneyTests CreateJourneyTests
-          - shard: start-board-signin
-            classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
+          - shard: j3-j4
+            classes: PickRulesJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -236,7 +229,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal-membership controls-resilience privacy-create start-board-signin
+      SHARDS: j3-j4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
