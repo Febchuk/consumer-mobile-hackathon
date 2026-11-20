@@ -254,7 +254,7 @@ final class CascadeJourneyTests: JourneyCase {
         // After the confirmation dialog a whole-app snapshot leaves the extension out, so the sign-in screen proven above is
         // searched directly.
         assertNoPrivateText(in: messages, "NATIVE-UI-ERASE-02")
-        XCTAssertEqual(try outcomes("v0Controls:deleteAccount"), ["injected", "AUTH_REQUIRED"], "[NATIVE-UI-ERASE-03] the first request deleted the account, and its repeat was answered as signed out")
+        XCTAssertEqual(try outcomes("v0Controls:deleteAccount"), ["reply_lost", "AUTH_REQUIRED"], "[NATIVE-UI-ERASE-03] the first request deleted the account, and its repeat was answered as signed out")
 
         // What the deleted person made or took part in is gone; the others' bet and pick are untouched.
         let tables = ["accountRows", "bets", "picks", "memberships", "sessions", "links", "challenges", "ledger", "outbox", "invites", "turns"]
