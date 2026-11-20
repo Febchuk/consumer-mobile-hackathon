@@ -111,7 +111,6 @@
     "J4.1.neutral-voiceover.U": "VoiceOver and large-text passes: XCUITest cannot drive VoiceOver, and these are judged by a person on a device.",
     "J4.2.accessible-no-peek.U": "VoiceOver and large-text passes: XCUITest cannot drive VoiceOver, and these are judged by a person on a device.",
     "J8.4.large-text-voiceover.U": "VoiceOver and large-text passes: XCUITest cannot drive VoiceOver, and these are judged by a person on a device.",
-    "J3.1.noon-pass.U": "Device clock: a test cannot set the simulator's clock, which follows the Mac's, so wrong-clock, time-of-day and daylight-saving cases cannot be staged.",
     "J3.1.dst-retries.U": "Device clock: a test cannot set the simulator's clock, which follows the Mac's, so wrong-clock, time-of-day and daylight-saving cases cannot be staged.",
     "J3.4.client-clock-independent.U": "Device clock: a test cannot set the simulator's clock, which follows the Mac's, so wrong-clock, time-of-day and daylight-saving cases cannot be staged.",
     "J5.1.future-clock.U": "Device clock: a test cannot set the simulator's clock, which follows the Mac's, so wrong-clock, time-of-day and daylight-saving cases cannot be staged.",
