@@ -195,5 +195,42 @@
   ],
   "J5.5.cancel-truth.U": [
     "NATIVE-UI.RevealRulesJourneyTests.testAResultCardThatIsPreparedAndRemovedClaimsNoDelivery"
+  ],
+  "J6.1.subject-source.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAPastBetIsOfferedOnlyForItsOwnSubjectAndGroup",
+    "NATIVE-UI.SuggestionRulesJourneyTests.testATemplateIdeaBecomesADraftCardInThreeTaps"
+  ],
+  "J6.1.editable.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAChosenIdeaFillsTheFormAndCanBeEditedBeforeItIsCreated"
+  ],
+  "J6.1.yes-no.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAYesNoBetKeepsItsTypedContextOffTheCardAndAwayFromTheGroup"
+  ],
+  "J6.1.context-private.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAYesNoBetKeepsItsTypedContextOffTheCardAndAwayFromTheGroup"
+  ],
+  "J6.1.tap-count.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testATemplateIdeaBecomesADraftCardInThreeTaps"
+  ],
+  "J6.2.safe-timeout-fallback.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAFailedSuggestionRequestLeavesTheScreenUsableAndAskingAgainBringsSafeIdeas"
+  ],
+  "J6.2.no-stale-subject.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAPastBetIsOfferedOnlyForItsOwnSubjectAndGroup"
+  ],
+  "J6.3.filter-categories.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testUnsafeAndMalformedPastBetsAreNeverOfferedAsIdeas"
+  ],
+  "J6.3.malformed-output.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testUnsafeAndMalformedPastBetsAreNeverOfferedAsIdeas"
+  ],
+  "J6.3.nonmember.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testOnlyOtherMembersOfThisGroupCanBeChosenAndNobodyIsOfferedIdeasAboutThemselves"
+  ],
+  "J6.3.self-subject-denied.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testOnlyOtherMembersOfThisGroupCanBeChosenAndNobodyIsOfferedIdeasAboutThemselves"
+  ],
+  "J6.3.group-history.U": [
+    "NATIVE-UI.SuggestionRulesJourneyTests.testAPastBetIsOfferedOnlyForItsOwnSubjectAndGroup"
   ]
 }
