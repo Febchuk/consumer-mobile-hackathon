@@ -15,9 +15,11 @@ struct BoardView: View {
         Text("Group board").font(.largeTitle.bold())
         if let board {
             InsetGroup {
-                ForEach(Array(board.rows.enumerated()), id: \.element.id) { index, row in
+                ForEach(board.rows) { row in
                     InsetRow(last: row.id == board.rows.last?.id) {
-                        Text("\(index + 1)").font(.headline.monospacedDigit()).foregroundStyle(Theme.sub)
+                        let rank = 1 + board.rows.filter { $0.points > row.points }.count
+                        Text("\(rank)").font(.headline.monospacedDigit()).foregroundStyle(Theme.sub)
+                            .accessibilityLabel("Rank \(rank)")
                         Avatar(name: row.alias)
                         VStack(alignment: .leading) {
                             Text(row.alias).font(.headline)
@@ -31,12 +33,12 @@ struct BoardView: View {
                 }
             }
             Footnote(text: "Points and streaks belong only to this group. There are no individual cash rewards.")
-            Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero without reducing points. The server calculates the bonus after the remaining streak rules are confirmed.")
+            Footnote(text: "Correct calls earn 1–100 confidence points × the streak bonus. Wrong calls earn zero without reducing points.")
             SectionTitle(text: "Shared group goal")
             if let goal = board.goal {
                 CardBox {
                     Text(goal.label).font(.headline)
-                    Text("\(pts(goal.progressPoints)) / \(pts(goal.targetPoints)) points · \(goal.state)")
+                    Text("\(pts(goal.progressPoints)) / \(pts(goal.targetPoints)) points · \(goal.state == "confirmed" && goal.progressPoints >= goal.targetPoints ? "reached" : goal.state)")
                     if goal.targetPoints > 0 {
                         ProgressView(value: min(goal.targetPoints, max(0, goal.progressPoints)), total: goal.targetPoints)
                             .accessibilityLabel("Group goal progress")
@@ -85,6 +87,7 @@ struct BoardView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("board.history.\(bet.betId)")
                 }
             }
         } else if error == nil { ProgressView() }
