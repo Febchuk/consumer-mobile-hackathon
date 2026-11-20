@@ -84,7 +84,8 @@ class JourneyCase: XCTestCase {
     }
 
     /// Types into a focused field, then checks the field holds exactly that text; under load the simulator drops
-    /// keystrokes. A short or wrong value is cleared and typed again, at most three more times, each one recorded.
+    /// keystrokes. A short or wrong value is cleared, the field is checked to be empty, and the text is typed again, at
+    /// most three more times, each one recorded.
     /// The detail names character counts only, never the text.
     func enter(_ value: String, into field: XCUIElement, called name: String, file: StaticString = #filePath, line: UInt = #line) throws {
         // Typing into a field that has not taken the keyboard fails outright. A tap that did not give the field the keyboard
@@ -108,7 +109,11 @@ class JourneyCase: XCTestCase {
                 let held = field.value as? String ?? ""
                 let current = held == field.placeholderValue ? "" : held
                 try recordRetry("retype", "\(name) held \(current.count) of \(value.count) characters on attempt \(attempt - 1)")
-                if !current.isEmpty { field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)) }
+                // Typing again into a field that still holds something only adds to it.
+                guard emptied(field) else {
+                    XCTFail("[NATIVE-UI-TYPE] \(name) could not be emptied before typing again", file: file, line: line)
+                    throw Blocked()
+                }
             }
             field.typeText(value)
             let holds = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
@@ -120,14 +125,32 @@ class JourneyCase: XCTestCase {
 
     /// Empties a focused field, as a person would with the delete key, and requires it to be empty.
     func clear(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        let held = field.value as? String ?? ""
-        guard !held.isEmpty, held != field.placeholderValue else { return }
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: held.count))
-        let empty = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        XCTAssertTrue(emptied(field), "[NATIVE-UI-TYPE] the field could not be emptied", file: file, line: line)
+    }
+
+    /// Deletes what a focused field holds and reports whether it ended up empty. Keystrokes still arriving, or delete
+    /// keys the simulator dropped, can leave text behind, so it reads the field again and deletes what is left, at most
+    /// three times. From the second time it first puts the cursor at the end, since delete only removes what is before it.
+    private func emptied(_ field: XCUIElement) -> Bool {
+        func held() -> String {
             let now = field.value as? String ?? ""
-            return now.isEmpty || now == field.placeholderValue
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [empty], timeout: 10 * Self.pace), .completed, "[NATIVE-UI-TYPE] the field could not be emptied", file: file, line: line)
+            return now == field.placeholderValue ? "" : now
+        }
+        for round in 1...3 {
+            // Let late keystrokes land before counting what there is to delete.
+            var last: String?
+            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let now = held()
+                defer { last = now }
+                return now == last
+            }, object: nil)], timeout: 5 * Self.pace)
+            let current = held()
+            if current.isEmpty { return true }
+            if round > 1, field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+            if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in held().isEmpty }, object: nil)], timeout: 5 * Self.pace) == .completed { return true }
+        }
+        return held().isEmpty
     }
 
     /// The fixture rows of app sign-ins for one person, leaving out the harness's control sessions.
