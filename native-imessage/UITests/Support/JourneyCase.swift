@@ -110,7 +110,7 @@ class JourneyCase: XCTestCase {
                 let current = held == field.placeholderValue ? "" : held
                 try recordRetry("retype", "\(name) held \(current.count) of \(value.count) characters on attempt \(attempt - 1)")
                 // Typing again into a field that still holds something only adds to it.
-                guard emptied(field) else {
+                guard try emptied(field, called: name) else {
                     XCTFail("[NATIVE-UI-TYPE] \(name) could not be emptied before typing again", file: file, line: line)
                     throw Blocked()
                 }
@@ -124,14 +124,15 @@ class JourneyCase: XCTestCase {
     }
 
     /// Empties a focused field, as a person would with the delete key, and requires it to be empty.
-    func clear(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(emptied(field), "[NATIVE-UI-TYPE] the field could not be emptied", file: file, line: line)
+    func clear(_ field: XCUIElement, called name: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertTrue(try emptied(field, called: name), "[NATIVE-UI-TYPE] the field could not be emptied", file: file, line: line)
     }
 
     /// Deletes what a focused field holds and reports whether it ended up empty. Keystrokes still arriving, or delete
     /// keys the simulator dropped, can leave text behind, so it reads the field again and deletes what is left, at most
-    /// three times. From the second time it first puts the cursor at the end, since delete only removes what is before it.
-    private func emptied(_ field: XCUIElement) -> Bool {
+    /// three times. From the second time it first puts the cursor at the end, since delete only removes what is before it,
+    /// and that further round is recorded, so a field that needed it never reads as a clean pass.
+    private func emptied(_ field: XCUIElement, called name: String) throws -> Bool {
         func held() -> String {
             let now = field.value as? String ?? ""
             return now == field.placeholderValue ? "" : now
@@ -146,7 +147,10 @@ class JourneyCase: XCTestCase {
             }, object: nil)], timeout: 5 * Self.pace)
             let current = held()
             if current.isEmpty { return true }
-            if round > 1, field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
+            if round > 1 {
+                try recordRetry("retype", "\(name) still held \(current.count) characters after being cleared \(round - 1) time(s)")
+                if field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
+            }
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
             if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in held().isEmpty }, object: nil)], timeout: 5 * Self.pace) == .completed { return true }
         }
