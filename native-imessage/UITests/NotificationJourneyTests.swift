@@ -60,7 +60,16 @@ final class NotificationJourneyTests: JourneyCase {
             defer { last = now }
             return now == last && toggle.isHittable
         }
+        let saves = { try self.control.calls().filter { $0["path"] as? String == "v0Notifications:setPreferences" }.count }
+        let before = try saves()
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        // On a hosted runner the switch has ignored a tap after the app was relaunched: it did not move and the app asked
+        // the server for nothing. A person would tap again. One more tap is allowed, and written to the run's evidence.
+        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in toggle.value as? String == (on ? "1" : "0") || ((try? saves()) ?? before) > before }, object: nil)
+        if XCTWaiter.wait(for: [reacted], timeout: 10 * Self.pace) != .completed {
+            try recordRetry("retap", "the notifications switch did not react to a tap: it stayed \(on ? "off" : "on") and the app saved nothing")
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        }
         if on {
             let allow = springboard.buttons["Allow"]
             let status = element("notifications.status", in: host)
