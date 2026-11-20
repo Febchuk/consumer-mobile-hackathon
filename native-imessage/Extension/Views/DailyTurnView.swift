@@ -11,7 +11,7 @@ struct DailyTurnView: View {
             if let turn {
                 Text(turn.creatorId == model.session?.accountID ? "Your creator turn" : "Today's creator turn").font(.headline)
                 Text("\(turn.localDate) · \(turn.status)").font(.subheadline).foregroundStyle(Theme.sub)
-                if turn.creatorId == model.session?.accountID, turn.status == "assigned" {
+                if turn.creatorId == model.session?.accountID, turn.status == "assigned" || turn.status == "passed" {
                     Text("Make a bet about your assigned friend, or pass the turn. The server manages the rotation and deadlines.")
                         .font(.subheadline)
                     PrimaryButton(title: "Create today's bet") { model.compose(subjectID: turn.subjectId) }

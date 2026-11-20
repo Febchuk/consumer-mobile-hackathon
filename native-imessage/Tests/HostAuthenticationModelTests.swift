@@ -11,6 +11,8 @@ final class HostAuthenticationModelTests: XCTestCase {
         var requestedPhones: [String] = []
         var verifications: [(PhoneChallenge, String)] = []
         var revoked: [SharedSession] = []
+        var confirmFailure: Error?
+        var confirmed: [SharedSession] = []
 
         func requestCode(phone: String) async throws -> PhoneChallenge {
             requestedPhones.append(phone)
@@ -28,6 +30,11 @@ final class HostAuthenticationModelTests: XCTestCase {
         func revoke(session: SharedSession) async throws {
             revoked.append(session)
             if let revokeFailure { throw revokeFailure }
+        }
+
+        func confirm(session: SharedSession) async throws {
+            confirmed.append(session)
+            if let confirmFailure { throw confirmFailure }
         }
     }
 
@@ -278,6 +285,40 @@ final class HostAuthenticationModelTests: XCTestCase {
         XCTAssertEqual(context.model.code, "", "[NATIVE-HOST-REVOKE-09]")
         XCTAssertNotNil(context.persistence.privateState["other-account"], "[NATIVE-HOST-REVOKE-10]")
         XCTAssertFalse(context.model.busy, "[NATIVE-HOST-REVOKE-11]")
+    }
+
+    func testActivationAsksTheServerAndOnlyItsRefusalEndsAStoredSession() async throws {
+        for code in ["", "TRANSPORT", "UNKNOWN", "PROVIDER_UNAVAILABLE", "AUTH_REQUIRED"] {
+            let old = session()
+            let context = try Context(stored: old, pending: true)
+            XCTAssertTrue(context.service.confirmed.isEmpty, "[NATIVE-HOST-RECHECK-01] creating the model asks nothing")
+            if !code.isEmpty { context.service.confirmFailure = APIError(code: code) }
+            let check = context.model.activate()
+            XCTAssertNotNil(check, "[NATIVE-HOST-RECHECK-02] a stored session is checked")
+            XCTAssertTrue(context.model.busy, "[NATIVE-HOST-RECHECK-03] the check is under way before the screen can offer the session")
+            XCTAssertNil(context.model.activate(), "[NATIVE-HOST-RECHECK-04] one check at a time")
+            _ = await check?.value
+            XCTAssertEqual(context.service.confirmed, [old], "[NATIVE-HOST-RECHECK-05]")
+            if code == "AUTH_REQUIRED" {
+                XCTAssertNil(context.model.session, "[NATIVE-HOST-RECHECK-06]")
+                XCTAssertNil(context.persistence.stored, "[NATIVE-HOST-RECHECK-07]")
+                XCTAssertEqual(context.persistence.deleteCount, 1, "[NATIVE-HOST-RECHECK-08]")
+                XCTAssertEqual(context.persistence.cleared, [old.accountID], "[NATIVE-HOST-RECHECK-09]")
+                XCTAssertFalse(context.model.hasPendingCard, "[NATIVE-HOST-RECHECK-10]")
+            } else {
+                XCTAssertEqual(context.model.session, old, "[NATIVE-HOST-RECHECK-11] \(code) does not sign the person out")
+                XCTAssertEqual(context.persistence.stored, old, "[NATIVE-HOST-RECHECK-12]")
+                XCTAssertEqual(context.persistence.deleteCount, 0, "[NATIVE-HOST-RECHECK-13]")
+                XCTAssertTrue(context.persistence.cleared.isEmpty, "[NATIVE-HOST-RECHECK-14]")
+                XCTAssertTrue(context.model.hasPendingCard, "[NATIVE-HOST-RECHECK-15]")
+            }
+            XCTAssertNil(context.model.error, "[NATIVE-HOST-RECHECK-16]")
+            XCTAssertFalse(context.model.busy, "[NATIVE-HOST-RECHECK-17]")
+        }
+        let signedOut = try Context()
+        XCTAssertNil(signedOut.model.activate(), "[NATIVE-HOST-RECHECK-18] nothing to check without a stored session")
+        XCTAssertTrue(signedOut.service.confirmed.isEmpty, "[NATIVE-HOST-RECHECK-18]")
+        XCTAssertFalse(signedOut.model.busy, "[NATIVE-HOST-RECHECK-18]")
     }
 
     func testFailedRevokePreservesSessionUnlessServerSaysAuthRequired() async throws {

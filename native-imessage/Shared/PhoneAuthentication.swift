@@ -10,6 +10,8 @@ protocol PhoneAuthenticating {
     func requestCode(phone: String) async throws -> PhoneChallenge
     func verifyCode(challenge: PhoneChallenge, code: String) async throws -> SharedSession
     func revoke(session: SharedSession) async throws
+    /// Throws AUTH_REQUIRED when the server no longer accepts this sign-in.
+    func confirm(session: SharedSession) async throws
 }
 
 struct VerifiedPhoneAuthentication: PhoneAuthenticating {
@@ -37,5 +39,11 @@ struct VerifiedPhoneAuthentication: PhoneAuthenticating {
 
     func revoke(session: SharedSession) async throws {
         let _: Ignored? = try await API.mutation("v0Auth:revoke", ["token": session.token, "allDevices": false, "requestId": UUID().uuidString])
+    }
+
+    /// The same question the extension asks on every load, with the same reading of the answer.
+    func confirm(session: SharedSession) async throws {
+        let result: AccountSnapshot? = try await API.query("v0Auth:me", ["token": session.token])
+        guard result?.account.id == session.accountID else { throw APIError(code: "AUTH_REQUIRED") }
     }
 }

@@ -40,6 +40,37 @@ final class HostAuthenticationModel: ObservableObject {
         }
     }
 
+    /// The app at launch: the stored sign-in is already being checked when the first screen is drawn.
+    static func launched() -> HostAuthenticationModel {
+        let model = HostAuthenticationModel()
+        model.activate()
+        return model
+    }
+
+    /// Called when the app starts and each time it comes back to the foreground. A stored sign-in is only what this
+    /// phone remembers, so the server is asked whether it still stands. Only the server's own refusal ends it, and then
+    /// the shared session is cleared the way the extension clears it. A call that failed for any other reason, also after
+    /// the transport's quiet retries, leaves the person signed in; the next activation asks again.
+    @discardableResult
+    func activate() -> Task<Void, Never>? {
+        reload()
+        guard !busy, let checked = session else { return nil }
+        busy = true
+        return Task {
+            defer { busy = false }
+            do {
+                try await service.confirm(session: checked)
+            } catch let failure {
+                guard (failure as? APIError)?.code == "AUTH_REQUIRED" else { return }
+                // The refusal is about the sign-in that was asked about, which may have been replaced meanwhile.
+                reload()
+                guard session == checked else { return }
+                handle(failure)
+                error = nil
+            }
+        }
+    }
+
     func resetChallenge() {
         challenge = nil
         code = ""

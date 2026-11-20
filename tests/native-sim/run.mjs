@@ -12,7 +12,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { actors, bootNativeBackend } from "./backend.mjs";
 import { appConnections, assertBuiltAppHasNoEndpoint, buildManifest, applyTestRetries, combineStatuses, expectedTests, failureMessages, inheritedCredentials, networkIsolation, parseTestCases, planParts, ports, referenceRunHasTestRetry, retryPolicy, testRetryCounts } from "./guard.mjs";
-import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, nonLoopbackConnections, pickRuntime, waitForDestination } from "./simulator.mjs";
+import { assertNoAppleAccount, createDedicatedSimulator, destroySimulator, pickRuntime, waitForDestination } from "./simulator.mjs";
+import { Worker } from "node:worker_threads";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
@@ -101,7 +102,9 @@ mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
 const runnerRetries = [];
 const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, latencyBudgets: { mode: referenceHardware ? "enforced" : "measured-only", measurements: [] }, waitScale, retries: [], strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
-let backend; let closeBackend; let simulator; let sampler; let exitCode = 1; let activationEnds = 0;
+let backend; let closeBackend; let simulator; let sampler; let heartbeat; let beat = 0; let waitingForSimulator = false; let exitCode = 1; let activationEnds = 0;
+// How long the connection samples took and how long this process went without answering anything: see the sampler.
+const responsiveness = { samples: 0, samplesFailed: 0, slowestSampleMs: 0, slowSamples: [], longestStallMs: 0, stalls: [] };
 const egress = new Map();
 const appEgress = new Set();
 // The two older UI test classes need the root provisioner's fixtures (tests/simulator-provisioner), which this lane does not supply.
@@ -266,13 +269,26 @@ async function main() {
 
   if (flag("--demo")) return await demo(manifest, manifestBytes);
 
-  sampler = setInterval(() => {
-    try {
-      const rows = nonLoopbackConnections(simulator.udid);
-      for (const row of rows) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1);
-      for (const row of appConnections(rows)) appEgress.add(row.process + " " + row.remote);
-    } catch { /* a failed sample is a missed observation, not a result */ }
-  }, 5000);
+  // A sample must never hold up this thread: the gateway and the control server answer from it. Samples are taken on a
+  // worker thread. How long they took, and every time this thread answered nothing for more than two seconds while tests
+  // could be running, goes into the evidence so a control call that timed out can be laid beside them.
+  beat = performance.now();
+  sampler = new Worker(new URL("./connection-sampler.mjs", import.meta.url), { workerData: { udid: simulator.udid } });
+  sampler.on("error", (error) => { responsiveness.samplerError = String(error?.message ?? error).slice(0, 200); });
+  sampler.on("message", ({ rows, ms }) => {
+    for (const row of rows ?? []) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1);
+    for (const row of appConnections(rows ?? [])) appEgress.add(row.process + " " + row.remote);
+    responsiveness.samples++;
+    if (rows === null) responsiveness.samplesFailed++;
+    responsiveness.slowestSampleMs = Math.max(responsiveness.slowestSampleMs, ms);
+    if (ms > 2000 && responsiveness.slowSamples.length < 50) responsiveness.slowSamples.push({ at: new Date().toISOString(), ms });
+  });
+  heartbeat = setInterval(() => {
+    const now = performance.now(); const stalled = Math.round(now - beat - 500); beat = now;
+    if (waitingForSimulator) return;
+    responsiveness.longestStallMs = Math.max(responsiveness.longestStallMs, stalled);
+    if (stalled > 2000 && responsiveness.stalls.length < 50) responsiveness.stalls.push({ at: new Date().toISOString(), ms: stalled });
+  }, 500);
   const only = options("--only");
   const selection = only.length ? only.map((name) => "-only-testing:" + (name.startsWith("CalledItUITests") ? name : "CalledItUITests/" + name)) : ["-only-testing:CalledItUITests", ...provisionerOnly.map((name) => "-skip-testing:CalledItUITests/" + name)];
   if (!only.length) evidence.notRun = provisionerOnly.map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
@@ -283,8 +299,11 @@ async function main() {
   // The build and the backend boot take minutes, and xcodebuild can lose sight of the simulator meanwhile. The device is
   // checked again before the tests start, and a start that still cannot find it is repeated once and recorded as a retry.
   for (let attempt = 1; attempt <= 2; attempt++) {
+    waitingForSimulator = true;
     const waited = await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment });
     evidence.simulator.destinationWaitMs = (evidence.simulator.destinationWaitMs ?? 0) + waited.waitedMs;
+    // That wait runs xcodebuild synchronously while no test is running; it has its own measurement and is not a stall.
+    beat = performance.now(); waitingForSimulator = false;
     rmSync(bundle, { recursive: true, force: true });
     const tests = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", bundle, ...selection], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     child = tests;
@@ -330,8 +349,10 @@ async function main() {
       if (activationEnds - Date.now() < 8 * 60_000) { notRetried.push({ test: test.id, reason: "the QA activation was about to expire" }); continue; }
       say("retrying " + test.id + " once in a fresh launch");
       const retryBundle = resolve(output, "native-ui-retry-" + (index + 1) + ".xcresult");
+      waitingForSimulator = true;
       try { await waitForDestination(simulator.udid, { project: "CalledItMessages.xcodeproj", scheme: "CalledItMessages", cwd: native, env: environment }); }
-      catch (error) { secondAttempts.set(test.id, { result: "failed", seconds: null, failures: ["the second attempt could not start: " + String(error?.message ?? error).slice(0, 200)], resultBundle: null }); continue; }
+      catch (error) { beat = performance.now(); waitingForSimulator = false; secondAttempts.set(test.id, { result: "failed", seconds: null, failures: ["the second attempt could not start: " + String(error?.message ?? error).slice(0, 200)], resultBundle: null }); continue; }
+      beat = performance.now(); waitingForSimulator = false;
       const again = spawn("xcodebuild", ["test-without-building", "-project", "CalledItMessages.xcodeproj", "-scheme", "CalledItMessages", "-configuration", "QA", "-destination", "platform=iOS Simulator,id=" + simulator.udid, "-derivedDataPath", evidence.derived, "-parallel-testing-enabled", "NO", "-resultBundlePath", retryBundle, "-only-testing:CalledItUITests/" + test.id], { cwd: native, env: testEnvironment, stdio: ["ignore", "pipe", "pipe"] });
       child = again;
       let attemptLog = "";
@@ -364,7 +385,8 @@ try {
   if (error?.backendLog) log("backend.log", error.backendLog);
   console.error("[native-sim] " + (error?.message ?? error));
 } finally {
-  clearInterval(sampler);
+  sampler?.terminate(); clearInterval(heartbeat);
+  if (sampler) evidence.harnessResponsiveness = responsiveness;
   if (simulator) {
     evidence.safety.outboundNetwork = { mode: networkIsolation, enforced: false, appContactedNonLoopback: [...appEgress], reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
     if (!flag("--keep-simulator")) evidence.simulator.deleted = destroySimulator(simulator.udid);
