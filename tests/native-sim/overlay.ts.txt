@@ -2,6 +2,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { hash, phoneHash } from "./v0Policy";
 import { approvedPolicy, localDateAt, localInstant } from "./v0GamePolicy";
+import { queueNotification } from "./v0Notifications";
 
 const runID = "__QA_RUN_ID__";
 const actors: Record<string, { phone: string; alias: string }> = __QA_ACTORS__;
@@ -16,8 +17,8 @@ function requireRun(id: string) {
 
 // The real backend has no clock override, so every fixture group lives in the fixed-offset zone where it is 09:xx now:
 // inside the 08:00-20:00 turn window and before the noon pass.
-function fixtureZone(now: number) {
-  const offset = (new Date(now).getUTCHours() - 9 + 24) % 24;
+function fixtureZone(now: number, localHour = 9) {
+  const offset = (new Date(now).getUTCHours() - localHour + 24) % 24;
   return offset === 0 ? "Etc/GMT" : offset <= 12 ? "Etc/GMT+" + offset : "Etc/GMT-" + (24 - offset);
 }
 
@@ -83,6 +84,31 @@ export const seedTurn = internalMutation({
     const id = await ctx.db.insert("v0Turns", { groupId: group._id, localDate, creatorId: accounts[args.creator], subjectId: accounts[args.subject], status: "assigned", assignedAt: now - minute, passAt: localInstant(group.timezone, localDate, approvedPolicy.turnPassHour)! });
     await ctx.db.patch(group._id, { lastCreatorId: accounts[args.creator], lastTurnDate: localDate });
     return { turnId: id, localDate };
+  },
+});
+
+// The noon pass. The server clock cannot move, so the group's day is moved instead, the way shiftBet moves a bet: the group
+// goes to the fixed-offset zone where it is 13:xx now, and today's unused turn becomes one that was assigned at 09:00 of
+// that zone's day with its pass at that zone's noon, which is what the turns job would have stored that morning. The
+// group is scheduled for its pass as the job would have scheduled it. Nothing is passed here: the product's own turns
+// job does that, through runJob.
+export const shiftTurnPastNoon = internalMutation({
+  args: { runID: v.string(), group: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { groups } = await ids(ctx);
+    const group = groups[args.group] ? await ctx.db.get(groups[args.group]) : null;
+    if (!group) throw new Error("Unknown fixture group " + args.group);
+    const now = Date.now();
+    const turn = await ctx.db.query("v0Turns").withIndex("by_group_date", (q: any) => q.eq("groupId", group._id).eq("localDate", localDateAt(group.timezone, now)!)).unique();
+    if (!turn || turn.status !== "assigned" || turn.passedFromId !== undefined || turn.betId !== undefined) throw new Error("Only today's unused, unpassed turn can be moved past noon");
+    const timezone = fixtureZone(now, 13);
+    const localDate = localDateAt(timezone, now)!;
+    const passAt = localInstant(timezone, localDate, approvedPolicy.turnPassHour)!;
+    if (!(passAt < now && now - passAt < 2 * hour)) throw new Error("The fixture zone is not between 13:00 and 14:00");
+    await ctx.db.patch(turn._id, { localDate, assignedAt: passAt - 3 * hour, passAt });
+    await ctx.db.patch(group._id, { timezone, lastTurnDate: localDate, nextTurnAt: passAt });
+    return { timezone, localDate, minutesPastNoon: Math.floor((now - passAt) / minute) };
   },
 });
 
@@ -212,6 +238,29 @@ export const expireSessions = internalMutation({
       expired++;
     }
     return { expired };
+  },
+});
+
+// The product closes a recap week at a fixed local weekday and hour, and the server clock cannot move there. This closes a
+// week now for one fixture group, as the recap job would have, and queues each member's notification through the
+// product's own queueNotification with the job's key, so its eligibility rules decide who gets a row. The points the
+// recap shows are still whatever the product's ledger holds.
+export const notifySeedRecap = internalMutation({
+  args: { runID: v.string(), group: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { groups } = await ids(ctx);
+    const group = groups[args.group] ? await ctx.db.get(groups[args.group]) : null;
+    if (!group) throw new Error("Unknown fixture group");
+    const now = Date.now();
+    const localDate = localDateAt(group.timezone, now)!;
+    await ctx.db.insert("v0Recaps", { groupId: group._id, startsAt: now - 7 * 24 * hour, endsAt: now, createdAt: now, localDate });
+    let queued = 0;
+    for (const member of await ctx.db.query("v0Memberships").withIndex("by_group", (q: any) => q.eq("groupId", group._id)).collect()) {
+      if (member.leftAt !== undefined) continue;
+      if (await queueNotification(ctx, { key: "recap:" + group._id + ":" + localDate + ":" + member.accountId, accountId: member.accountId, groupId: group._id, kind: "recap" })) queued++;
+    }
+    return { queued };
   },
 });
 

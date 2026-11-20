@@ -12,6 +12,7 @@ import { convexToJson, jsonToConvex } from "convex/values";
 import { fixtureProviderSettings } from "../qa-runtime/tls-provider.mjs";
 import { startFakeOtp } from "./fake-otp.mjs";
 import { assertLoopbackOrigin, ports, sourceCardOrigin } from "./guard.mjs";
+import { alertFromSource, hostBundle, payloadForRow, pushArguments } from "./notify.mjs";
 
 // The audit's four fixture people. The phone numbers are the reserved synthetic ones the fake code provider accepts.
 export const actors = Object.freeze({
@@ -38,7 +39,7 @@ async function body(request, limit = 1_048_576) {
  * Boots the pinned official Convex backend on loopback with the repository's real handlers, a per-run scratch copy of convex/
  * plus the test-only overlay, the fake phone-code provider, the app-facing gateway and the test-control server.
  */
-export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false, onClose = () => {} }) {
+export async function bootNativeBackend({ root, directory, binary, expectedBinarySHA256, runID, manifestSHA256, backendRevision, configVersion, log, crons = false, onClose = () => {}, simulatorUDID }) {
   assert.equal(sha256(readFileSync(binary)), expectedBinarySHA256, "The backend executable does not match its pin");
   assert.ok(!existsSync(directory) && realpathSync(dirname(directory)) === dirname(directory), "A fresh canonical scratch directory is required");
   assert.ok(!resolve(directory).startsWith(resolve(root) + "/") && Buffer.byteLength(directory) + 45 < 104, "Use a short scratch directory outside the repository");
@@ -60,8 +61,13 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const failures = [];
   // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
   const faults = new Map();
+  // For a fault asked for one program only (the host app or the extension): the path's caller, as the call log names it.
+  const faultCallers = new Map();
   // Replies a test asked to lose: the next calls to a path reach the backend and take effect, and the app is told the server failed.
   const lostReplies = new Map();
+  // Notification payloads a test delivered under a name, so the same arrival can be handed to the simulator again.
+  const deliveries = new Map();
+  const pushAlert = alertFromSource(readFileSync(resolve(root, "convex/v0Apns.ts"), "utf8"));
   let currentTest = "";
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
@@ -153,7 +159,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         if (typeof input.args?.[0]?.conversationKey === "string") conversation = createHash("sha256").update(input.args[0].conversationKey).digest("hex").slice(0, 8);
         if (allowed.get(path) !== match[1] || input.format !== "convex_encoded_json" || !Array.isArray(input.args) || input.args.length !== 1) return reply(403, { status: "error", errorMessage: "Not a public V0 function", errorData: { code: "NOT_AVAILABLE" } });
         const planned = faults.get(path) ?? 0;
-        if (planned > 0) {
+        const faultCaller = faultCallers.get(path);
+        if (planned > 0 && (!faultCaller || faultCaller === String(request.headers["user-agent"] ?? "unknown").split("/")[0].slice(0, 40))) {
           faults.set(path, planned - 1);
           outcome = "injected"; status = 560; failure = "Injected by the test";
           return reply(560, { status: "error", errorMessage: "Injected failure" });
@@ -224,10 +231,14 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture = { ...seeded, bets: {} };
         calls.length = 0;
         faults.clear();
+        faultCallers.clear();
         lostReplies.clear();
+        deliveries.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
+      // Moves a fixture group and today's unused turn to an hour past the group's noon; the turns job then does the pass.
+      async turnPastNoon(input) { return await internal("mutation", "qaNative:shiftTurnPastNoon", { runID, group: input.group }); },
       async seedBet(input) {
         const seeded = await internal("mutation", "qaNative:seedBet", { runID, key: input.key, group: input.group, creator: input.creator, subject: input.subject, format: input.format, ...(input.question ? { question: input.question } : {}), ...(input.revealInMs ? { revealInMs: input.revealInMs } : {}) });
         fixture.bets[input.key] = seeded;
@@ -278,6 +289,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         faults.set(input.path, Number(input.count));
+        // Optional: only calls from this program fail, and the other program's calls to the same function pass through.
+        if (typeof input.caller === "string") faultCallers.set(input.path, input.caller); else faultCallers.delete(input.path);
       },
       // The backend applies the app's next "count" calls to one public mutation, and the app gets a server error with no code
       // instead of the reply: the change happened and the answer was lost. They are logged with outcome "reply_lost".
@@ -293,6 +306,32 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(tokens[input.actor], "Unknown actor");
         return await internal("mutation", "qaNative:expireSessions", { runID, actor: input.actor });
       },
+      // Hands the run's own simulator the notification the product's worker would send for one real outbox row: the worker's
+      // alert, the row's kind and its opaque identifiers. simctl push talks to no Apple service and no provider, so this
+      // shows what the app does with an arrival and never that the server or Apple delivered one. "replay" hands over a
+      // payload this test already delivered under a name, as a late or repeated arrival of the same event.
+      async notifyPush(input) {
+        let payload;
+        if (typeof input.replay === "string") {
+          payload = deliveries.get(input.replay);
+          assert.ok(payload, "Nothing was delivered under that name in this test");
+        } else {
+          const state = await internal("query", "qaNative:inspect", { runID });
+          const betId = input.bet ? fixture.bets[input.bet]?.betId : null;
+          assert.ok(!input.bet || betId, "Unknown fixture bet");
+          const rows = state.outbox.filter((row) => row.actor === input.actor && row.kind === input.kind && row.betId === betId && (!input.group || row.group === input.group));
+          assert.equal(rows.length, 1, "Expected exactly one outbox row for this notification, found " + rows.length);
+          payload = payloadForRow({ row: rows[0], groups: state.groups, bets: state.bets, alert: pushAlert });
+          if (typeof input.remember === "string") deliveries.set(input.remember, payload);
+        }
+        const file = resolve(directory, "push-" + randomBytes(8).toString("hex") + ".json");
+        writeFileSync(file, JSON.stringify(payload), { mode: 0o600 });
+        try { execFileSync("xcrun", pushArguments({ runSimulator: simulatorUDID, bundle: input.bundle ?? hostBundle, file }), { stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }); } finally { rmSync(file, { force: true }); }
+        return { title: payload.aps.alert.title, body: payload.aps.alert.body, kind: payload.kind, fields: Object.keys(payload).sort() };
+      },
+      // Closes a recap week now for one fixture group and queues its notifications through the product's own queue: see
+      // notifySeedRecap in the overlay.
+      async notifySeedRecap(input) { return await internal("mutation", "qaNative:notifySeedRecap", { runID, group: input.group }); },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
         assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");

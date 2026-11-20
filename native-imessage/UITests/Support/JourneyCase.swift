@@ -137,18 +137,19 @@ class JourneyCase: XCTestCase {
             return now == field.placeholderValue ? "" : now
         }
         for round in 1...3 {
-            // Let late keystrokes land before counting what there is to delete.
-            var last: String?
-            _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                let now = held()
-                defer { last = now }
-                return now == last
-            }, object: nil)], timeout: 5 * Self.pace)
+            // Let late keystrokes land before counting what there is to delete: the field has settled once its value stops
+            // changing for a moment. The wait is on the field itself, never a block that reads it: a read still under way
+            // when a waiter's time ends is reported by XCTest as a failure of the test ("Interrupted by waiter").
+            for _ in 0..<5 {
+                let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value != %@", field.value as? String ?? ""), object: field)
+                if XCTWaiter.wait(for: [changed], timeout: Self.pace) != .completed { break }
+            }
             let current = held()
             if current.isEmpty { return true }
             if round > 1, field.isHittable { field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap() }
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
-            if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in held().isEmpty }, object: nil)], timeout: 5 * Self.pace) == .completed { return true }
+            let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == nil OR value == '' OR value == %@", field.placeholderValue ?? ""), object: field)
+            if XCTWaiter.wait(for: [empty], timeout: 5 * Self.pace) == .completed { return true }
         }
         return held().isEmpty
     }
@@ -330,17 +331,24 @@ class JourneyCase: XCTestCase {
 
     /// Launches the host app and returns its phone field. A session left by an earlier test in this run is signed
     /// out first, so the screen under test always starts signed out.
+    ///
+    /// The host app asks the server about a stored session as it starts, and keeps "Sign out" disabled until it has the
+    /// answer. A session left by an earlier test is unknown to the backend this test reset, so the app normally signs
+    /// itself out; a session the server still accepts (a second sign-in inside one test) or could not be asked about
+    /// stays, with "Sign out" usable again. So this waits for whichever the app settles on, the phone field or a "Sign
+    /// out" that can be used, and never for a "Sign out" that is still being checked and may be about to go away. When
+    /// the session stayed, the tap is required, as before.
     func launchHostSignedOut(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         host.launchEnvironment = run.launchEnvironment
         host.launch()
         let phone = element("auth.phone", in: host)
-        let signOut = element("auth.signOut", in: host)
+        let signOut = host.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND enabled == YES", "auth.signOut")).firstMatch
         let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in phone.exists || signOut.exists }, object: nil)
         guard XCTWaiter.wait(for: [settled], timeout: 20 * Self.pace) == .completed else {
-            XCTFail("[NATIVE-UI-AUTH] the host app showed neither sign-in nor a session", file: file, line: line)
+            XCTFail("[NATIVE-UI-AUTH] the host app showed neither sign-in nor a session it had finished checking", file: file, line: line)
             throw Blocked()
         }
-        if signOut.exists {
+        if !phone.exists {
             signOut.tap()
             _ = try required("auth.phone", in: host, timeout: 15, "NATIVE-UI-AUTH", file: file, line: line)
         }

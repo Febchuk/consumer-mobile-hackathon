@@ -98,8 +98,12 @@ struct QAControl {
 
     /// The app's next `count` calls to one public function fail with a server error that carries no code, as an overloaded
     /// server's would. They never reach the backend.
-    func failNext(_ path: String, count: Int) throws {
-        try call("failNext", ["path": path, "count": count])
+    /// With `caller` ("CalledItExtension" or "CalledItMessages", the host app) only that program's calls fail and the
+    /// other's pass through untouched, for a function both of them call.
+    func failNext(_ path: String, count: Int, caller: String? = nil) throws {
+        var arguments: [String: Any] = ["path": path, "count": count]
+        if let caller { arguments["caller"] = caller }
+        try call("failNext", arguments)
     }
 
     /// The public functions the app has called since the last reset, in order, without their arguments.
