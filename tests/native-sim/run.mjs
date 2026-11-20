@@ -101,7 +101,9 @@ mkdirSync(output, { recursive: true, mode: 0o700 });
 const log = (name, text) => writeFileSync(resolve(output, name), text, { mode: 0o600 });
 const runnerRetries = [];
 const evidence = { lane: "native-sim", runID, startedAt: new Date().toISOString(), status: "blocked", networkIsolation, latencyBudgets: { mode: referenceHardware ? "enforced" : "measured-only", measurements: [] }, waitScale, retries: [], strippedEnvironment: stripped, fixtureSetID, configVersion, safety: {} };
-let backend; let closeBackend; let simulator; let sampler; let exitCode = 1; let activationEnds = 0;
+let backend; let closeBackend; let simulator; let sampler; let heartbeat; let exitCode = 1; let activationEnds = 0;
+// How long the connection samples took and how long this process went without answering anything: see the sampler.
+const responsiveness = { samples: 0, samplesSkipped: 0, slowestSampleMs: 0, slowSamples: [], longestStallMs: 0, stalls: [] };
 const egress = new Map();
 const appEgress = new Set();
 // The two older UI test classes need the root provisioner's fixtures (tests/simulator-provisioner), which this lane does not supply.
@@ -266,13 +268,30 @@ async function main() {
 
   if (flag("--demo")) return await demo(manifest, manifestBytes);
 
-  sampler = setInterval(() => {
+  // A sample must never hold up this process: the gateway and the control server answer from it. A sample still running
+  // when the next is due is not doubled up; how long samples took, and every time this process itself answered nothing
+  // for more than two seconds, goes into the evidence so a control call that timed out can be laid beside them.
+  let sampling = false; let beat = performance.now();
+  sampler = setInterval(async () => {
+    if (sampling) { responsiveness.samplesSkipped++; return; }
+    sampling = true;
+    const started = performance.now();
     try {
-      const rows = nonLoopbackConnections(simulator.udid);
+      const rows = await nonLoopbackConnections(simulator.udid);
       for (const row of rows) egress.set(row.process + " " + row.remote, (egress.get(row.process + " " + row.remote) ?? 0) + 1);
       for (const row of appConnections(rows)) appEgress.add(row.process + " " + row.remote);
     } catch { /* a failed sample is a missed observation, not a result */ }
+    const ms = Math.round(performance.now() - started);
+    responsiveness.samples++;
+    responsiveness.slowestSampleMs = Math.max(responsiveness.slowestSampleMs, ms);
+    if (ms > 2000 && responsiveness.slowSamples.length < 50) responsiveness.slowSamples.push({ at: new Date().toISOString(), ms });
+    sampling = false;
   }, 5000);
+  heartbeat = setInterval(() => {
+    const now = performance.now(); const stalled = Math.round(now - beat - 500); beat = now;
+    responsiveness.longestStallMs = Math.max(responsiveness.longestStallMs, stalled);
+    if (stalled > 2000 && responsiveness.stalls.length < 50) responsiveness.stalls.push({ at: new Date().toISOString(), ms: stalled });
+  }, 500);
   const only = options("--only");
   const selection = only.length ? only.map((name) => "-only-testing:" + (name.startsWith("CalledItUITests") ? name : "CalledItUITests/" + name)) : ["-only-testing:CalledItUITests", ...provisionerOnly.map((name) => "-skip-testing:CalledItUITests/" + name)];
   if (!only.length) evidence.notRun = provisionerOnly.map((name) => ({ class: name, status: "blocked", reason: "needs the root simulator provisioner's fixtures" }));
@@ -364,7 +383,8 @@ try {
   if (error?.backendLog) log("backend.log", error.backendLog);
   console.error("[native-sim] " + (error?.message ?? error));
 } finally {
-  clearInterval(sampler);
+  clearInterval(sampler); clearInterval(heartbeat);
+  if (sampler) evidence.harnessResponsiveness = responsiveness;
   if (simulator) {
     evidence.safety.outboundNetwork = { mode: networkIsolation, enforced: false, appContactedNonLoopback: [...appEgress], reason: "macOS offers no unprivileged way to deny a simulator outbound traffic; the app itself accepts only the loopback targets in its manifest", observedNonLoopbackConnections: [...egress.entries()].map(([connection, samples]) => ({ connection, samples })) };
     if (!flag("--keep-simulator")) evidence.simulator.deleted = destroySimulator(simulator.udid);

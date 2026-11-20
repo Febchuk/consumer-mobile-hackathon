@@ -228,6 +228,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
+      // Moves a fixture group and today's unused turn to an hour past the group's noon; the turns job then does the pass.
+      async turnPastNoon(input) { return await internal("mutation", "qaNative:shiftTurnPastNoon", { runID, group: input.group }); },
       async seedBet(input) {
         const seeded = await internal("mutation", "qaNative:seedBet", { runID, key: input.key, group: input.group, creator: input.creator, subject: input.subject, format: input.format, ...(input.question ? { question: input.question } : {}), ...(input.revealInMs ? { revealInMs: input.revealInMs } : {}) });
         fixture.bets[input.key] = seeded;
