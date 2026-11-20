@@ -129,3 +129,7 @@ The approved rules do not cover these. Each was decided the conservative way whi
 45. **Recipients are the members in the group at 6:00 PM who have notifications on.** A recap not yet delivered is withdrawn if the member turns notifications off or leaves, or once a newer recap exists.
 46. **No recap for a week that ended before the group existed,** and none for a group whose timezone cannot be read.
 47. **With the recap built, every approved rule is in place and the backend reports the rules as approved.** The app uses that to switch on creating bets, taking the daily turn and setting goals.
+
+### Board
+
+48. **Members level on points share a rank, and the ranks after them are skipped.** Two leaders are both 1 and the next member is 3, not 2. This is the Captain's default; Febe may overrule it.
