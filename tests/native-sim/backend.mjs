@@ -60,6 +60,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const failures = [];
   // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
   const faults = new Map();
+  // Replies a test asked to lose: the next calls to a path reach the backend and take effect, and the app is told the server failed.
   const lostReplies = new Map();
   let currentTest = "";
   const sockets = new Set();
@@ -159,12 +160,11 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         }
         const upstream = await localFetch(origin + "/api/" + match[1], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, args: input.args, format: "convex_encoded_json" }) });
         const envelope = await upstream.json();
-        // A reply the test asked to lose: the backend has run the call, and the app is told only that the server failed.
         const lost = lostReplies.get(path) ?? 0;
-        if (lost > 0) {
+        if (lost > 0 && envelope.status === "success") {
           lostReplies.set(path, lost - 1);
-          outcome = "injected"; status = 560; failure = "Reply dropped by the test after the backend ran the call";
-          return reply(560, { status: "error", errorMessage: "Injected failure" });
+          outcome = "reply_lost"; status = 560;
+          return reply(560, { status: "error", errorMessage: "Reply lost" });
         }
         if (envelope.status === "success") {
           outcome = "success";
@@ -279,15 +279,20 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         faults.set(input.path, Number(input.count));
       },
-      // The replies to the app's next `count` calls to one public function are lost: the backend runs each call, and the app
-      // gets the same codeless server error as from failNext. For proving that a repeated request changes nothing.
+      // The backend applies the app's next "count" calls to one public mutation, and the app gets a server error with no code
+      // instead of the reply: the change happened and the answer was lost. They are logged with outcome "reply_lost".
       async loseNextReply(input) {
-        assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
+        assert.ok(allowed.get(input.path) === "mutation", "Not a public V0 mutation");
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         lostReplies.set(input.path, Number(input.count));
       },
       // Moves a fixture group's pending invitations past their seven days, since the server clock cannot move.
       async expireInvites(input) { return await internal("mutation", "qaNative:expireInvites", { runID, group: input.group }); },
+      // Moves one fixture person's app sign-ins past their expiry, as time would. The harness's control sessions are left alone.
+      async expireSessions(input) {
+        assert.ok(tokens[input.actor], "Unknown actor");
+        return await internal("mutation", "qaNative:expireSessions", { runID, actor: input.actor });
+      },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
         assert.ok(["retype", "relaunch", "retap", "draft-cancel", "latency"].includes(input.kind), "Unknown note kind");
