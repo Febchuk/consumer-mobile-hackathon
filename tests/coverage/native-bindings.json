@@ -282,5 +282,47 @@
   ],
   "J9.2.cascade.U": [
     "NATIVE-UI.CascadeJourneyTests.testTheSubjectLeavingCancelsTheBetAboutThemAndRejoiningStartsClean"
+  ],
+  "SEC1.public-export-policy.U": [
+    "NATIVE-UI.SecurityJourneyTests.testAFriendIsShownTheEligibleFieldsOfTheirOwnGroupOnly"
+  ],
+  "SEC1.read-matrix.U": [
+    "NATIVE-UI.SecurityJourneyTests.testPeopleOutsideTheGroupAreShownNothingOfItUnderAnyName"
+  ],
+  "SEC1.eligible-members.U": [
+    "NATIVE-UI.SecurityJourneyTests.testAFriendIsShownTheEligibleFieldsOfTheirOwnGroupOnly"
+  ],
+  "SEC1.subject-lock.U": [
+    "NATIVE-UI.SecurityJourneyTests.testTheSubjectIsShownOnlyLockedFieldsUntilTheServerReveals"
+  ],
+  "SEC1.revocation.U": [
+    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp"
+  ],
+  "SEC1.membership-interval.U": [
+    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
+  ],
+  "SEC2.wrong-expired-replay.U": [
+    "NATIVE-UI.SecurityJourneyTests.testAnExpiredCodeIsRefusedEvenWhenItIsTheRightCode",
+    "NATIVE-UI.SecurityJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
+  ],
+  "SEC2.bounded-attempts.U": [
+    "NATIVE-UI.SecurityJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
+  ],
+  "SEC2.stable-account.U": [
+    "NATIVE-UI.SecurityJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
+  ],
+  "SEC2.session-revocation.U": [
+    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
+    "NATIVE-UI.SecurityJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
+  ],
+  "SEC2.no-username-admission.U": [
+    "NATIVE-UI.SecurityJourneyTests.testPeopleOutsideTheGroupAreShownNothingOfItUnderAnyName"
+  ],
+  "SEC3.locked-fields.U": [
+    "NATIVE-UI.SecurityJourneyTests.testTheSubjectIsShownOnlyLockedFieldsUntilTheServerReveals"
+  ],
+  "SEC3.stale-cache-clear.U": [
+    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
+    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
   ]
 }
