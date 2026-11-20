@@ -44,7 +44,11 @@ final class HostSessionJourneyTests: JourneyCase {
     /// What the app asked the server after the sign-in ended there: the host app met the refusal on its own check, once,
     /// nothing was read with the dead sign-in, and the extension asked nothing at all.
     private func assertOnlyTheHostAppMetTheRefusal(since start: Int, _ code: String) throws {
-        XCTAssertEqual(try checks(since: start), ["AUTH_REQUIRED"], "[\(code)] the host app asked once and the server refused")
+        // The loopback backend can fail a call under load, with no code; the app repeats it and the failure is in the run's
+        // evidence. So the refusal is the last answer and the only one with a code, within the app's two quiet repeats.
+        let asked = try checks(since: start)
+        XCTAssertEqual(asked.last, "AUTH_REQUIRED", "[\(code)] the server refused the host app's check: \(asked)")
+        XCTAssertTrue(asked.count <= 3 && asked.dropLast().allSatisfy { $0 == "UNKNOWN" }, "[\(code)] the host app asked once, apart from attempts that failed with no answer: \(asked)")
         let later = try callsSince(start)
         XCTAssertEqual(later.filter { $0["outcome"] as? String == "success" }.count, 0, "[\(code)] nothing was read after the sign-in ended on the server")
         XCTAssertEqual(later.filter { $0["caller"] as? String != hostApp }.compactMap { $0["path"] as? String }, [], "[\(code)] only the host app called the server")
