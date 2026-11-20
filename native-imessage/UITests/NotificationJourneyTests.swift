@@ -60,21 +60,14 @@ final class NotificationJourneyTests: JourneyCase {
             defer { last = now }
             return now == last && toggle.isHittable
         }
-        let saves = { try self.control.calls().filter { $0["path"] as? String == "v0Notifications:setPreferences" }.count }
-        let before = try saves()
-        // The row is the element with the identifier; the control inside it is what a finger touches. Where the row
-        // exposes it, that is what gets tapped, and otherwise the row's trailing edge, where the control sits.
+        // The row carries the identifier; the control inside it is what a finger touches, and that is what gets tapped.
+        // A tap on the row's trailing edge instead was ignored three times in five right after a relaunch on a hosted runner.
         let inner = toggle.switches.firstMatch
-        let flip = { if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() } }
-        print("JOURNEY-DIAGNOSTIC switch: inner control \(inner.exists ? "tapped" : "not exposed, trailing edge tapped")")
-        flip()
-        // On a hosted runner the switch has ignored a tap after the app was relaunched: it did not move and the app asked
-        // the server for nothing. A person would tap again. One more tap is allowed, and written to the run's evidence.
-        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in toggle.value as? String == (on ? "1" : "0") || ((try? saves()) ?? before) > before }, object: nil)
-        if XCTWaiter.wait(for: [reacted], timeout: 10 * Self.pace) != .completed {
-            try recordRetry("retap", "the notifications switch did not react to a tap: it stayed \(on ? "off" : "on") and the app saved nothing")
-            flip()
+        guard inner.exists, inner.isHittable else {
+            XCTFail("[\(code)] the notifications row exposes no switch that can be tapped", file: file, line: line)
+            throw Blocked()
         }
+        inner.tap()
         if on {
             let allow = springboard.buttons["Allow"]
             let status = element("notifications.status", in: host)
