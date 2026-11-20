@@ -32,7 +32,16 @@
     "J7.1.exactly-once.U": "Thin against backend B3.ledger.exactly-once: after retries and repeated sweeps the board and history show the result once.",
     "J7.2.group-history.U": "Each group's board history shows only its own settled bets.",
     "J7.2.no-global-wallet.U": "Thin against backend V0.no-foreign-board and B3.ledger.per-group: one balance per group on screen and no combined total anywhere.",
-    "J7.4.group-progress.U": "Thin against backend B5.progress.group-points: points earned after the goal became active move it, earlier points do not, and it reads reached past its target."
+    "J7.4.group-progress.U": "Thin against backend B5.progress.group-points: points earned after the goal became active move it, earlier points do not, and it reads reached past its target.",
+    "J8.1.every-create-path.U": "Typed text, an earlier suggestion, a refresh, the turn and the subject picker are all closed once the subject opts out. Hosted AI is cut, so there is no AI create path.",
+    "J8.2.cancel-subject-bets.U": "Leaving through Settings voids the open bet about the leaver and their open pick, and leaves settled and unrelated bets alone.",
+    "J8.3.delete-context-proof-picks.U": "Thin against backend V0.delete-cascade: deleting through Settings removes the account's bets with their context and its picks. The proof part is not proven: proof is cut from V0.",
+    "J8.3.idempotent-delete.U": "A delete whose reply is lost is repeated by the app and by another session and changes nothing further. Provider-cleanup reruns are backend-only (J8.3.idempotent.repeat-request).",
+    "J8.4.saved-error-state.U": "Settings shows a saved line or an error, never both, across a failed save, a success, a refusal and a report.",
+    "J9.1.one-use-expiring-invite.U": "An invitation that expires on screen is refused; one accepted admits once; reuse is refused. Expiry is reached by moving the invitation's timestamps; the boundary instant is backend V0.invite-expiry.",
+    "J9.2.no-old-history.U": "After rejoining the screen shows 0 points and none of the earlier bets. Replaying old card links needs delivery; that part is thin against backend V0.history-rejoin.",
+    "J9.2.no-old-token-settlement.U": "Thin against backend J9.2.no-settlement-after-leave.challenge and CONFIRM.rejoin-old-interval-denied: the open bet closes on the leaver's screen and a challenge from before the leave is refused, also after rejoining.",
+    "J9.2.cascade.U": "Leaving closes the membership, expires the turn, revokes the sent invitation and removes the link; rejoining opens a new membership at 0."
   },
   "blocked": {
     "J1.2.same-room.U": "Real delivery between phones: the simulator's Messages has no account, so a card is inserted as a draft and never delivered or received.",

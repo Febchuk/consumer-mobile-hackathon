@@ -161,6 +161,26 @@ export const shiftBet = internalMutation({
   },
 });
 
+// The server clock cannot move, so a group's pending invitations are moved instead: each one becomes an invitation that
+// was sent seven days and one minute ago. Accepted and revoked invitations are left alone.
+export const expireInvites = internalMutation({
+  args: { runID: v.string(), group: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { groups } = await ids(ctx);
+    if (!groups[args.group]) throw new Error("Unknown fixture group " + args.group);
+    const now = Date.now();
+    let expired = 0;
+    for (const invite of await ctx.db.query("v0Invites").withIndex("by_group", (q: any) => q.eq("groupId", groups[args.group])).collect()) {
+      if (invite.acceptedAt !== undefined || invite.revokedAt !== undefined) continue;
+      const lifetime = invite.expiresAt - invite.createdAt;
+      await ctx.db.patch(invite._id, { createdAt: now - lifetime - minute, expiresAt: now - minute });
+      expired += 1;
+    }
+    return { expired };
+  },
+});
+
 export const inspect = internalQuery({
   args: { runID: v.string() },
   handler: async (ctx, args) => {
@@ -175,7 +195,7 @@ export const inspect = internalQuery({
       sessions: (await all("v0Sessions")).map((row: any) => ({ actor: actor(row.accountId), control: row.deviceId.startsWith("qa-control-"), revoked: row.revokedAt !== undefined })),
       memberships: (await all("v0Memberships")).map((row: any) => ({ group: group(row.groupId), actor: actor(row.accountId), alias: row.alias, points: row.points, streak: row.streak, left: row.leftAt !== undefined })),
       groupRows: (await all("v0Groups")).map((row: any) => ({ id: row._id, key: group(row._id), name: row.name, creator: actor(row.creatorId), timezone: row.timezone })),
-      invites: (await all("v0Invites")).map((row: any) => ({ group: group(row.groupId), inviter: actor(row.inviterId), accepted: row.acceptedAt !== undefined, revoked: row.revokedAt !== undefined })),
+      invites: (await all("v0Invites")).map((row: any) => ({ group: group(row.groupId), inviter: actor(row.inviterId), accepted: row.acceptedAt !== undefined, revoked: row.revokedAt !== undefined, expired: row.expiresAt <= Date.now(), lifetimeMs: row.expiresAt - row.createdAt })),
       links: (await all("v0ConversationLinks")).map((row: any) => ({ actor: actor(row.accountId), group: group(row.groupId), control: row.deviceId.startsWith("qa-control-") })),
       turns: (await all("v0Turns")).map((row: any) => ({ group: group(row.groupId), localDate: row.localDate, creator: actor(row.creatorId), subject: actor(row.subjectId), status: row.status, hasBet: row.betId !== undefined, passed: row.passedFromId !== undefined })),
       bets: (await all("v0Bets")).map((row: any) => ({ id: row._id, locator: row.locator, group: group(row.groupId), creator: actor(row.creatorId), subject: actor(row.subjectId), question: row.question, format: row.format, options: row.options, state: row.state, source: row.source, revealAt: row.revealAt, provisionalOutcome: row.provisionalOutcome ?? null, outcome: row.outcome ?? null })),

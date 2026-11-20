@@ -254,5 +254,33 @@
   ],
   "J7.4.group-progress.U": [
     "NATIVE-UI.ScoringJourneyTests.testGroupPointsMoveTheSharedGoal"
+  ],
+  "J8.1.every-create-path.U": [
+    "NATIVE-UI.CascadeJourneyTests.testNoBetsAboutMeClosesEveryWayTheAppCreatesABetUntilItIsTurnedOff"
+  ],
+  "J8.2.cancel-subject-bets.U": [
+    "NATIVE-UI.CascadeJourneyTests.testTheSubjectLeavingCancelsTheBetAboutThemAndRejoiningStartsClean"
+  ],
+  "J8.3.delete-context-proof-picks.U": [
+    "NATIVE-UI.CascadeJourneyTests.testDeletingTheAccountRemovesItsBetsAndPicksAndARepeatedRequestChangesNothing"
+  ],
+  "J8.3.idempotent-delete.U": [
+    "NATIVE-UI.CascadeJourneyTests.testDeletingTheAccountRemovesItsBetsAndPicksAndARepeatedRequestChangesNothing"
+  ],
+  "J8.4.saved-error-state.U": [
+    "NATIVE-UI.CascadeJourneyTests.testSettingsShowASavedStateOrAnErrorNeverBoth"
+  ],
+  "J9.1.one-use-expiring-invite.U": [
+    "NATIVE-UI.CascadeJourneyTests.testAnInvitationAdmitsOnceAndNotAfterItsSevenDays"
+  ],
+  "J9.2.no-old-history.U": [
+    "NATIVE-UI.CascadeJourneyTests.testTheSubjectLeavingCancelsTheBetAboutThemAndRejoiningStartsClean",
+    "NATIVE-UI.CascadeJourneyTests.testAFormerMemberCannotSettleABetFromBeforeTheyLeft"
+  ],
+  "J9.2.no-old-token-settlement.U": [
+    "NATIVE-UI.CascadeJourneyTests.testAFormerMemberCannotSettleABetFromBeforeTheyLeft"
+  ],
+  "J9.2.cascade.U": [
+    "NATIVE-UI.CascadeJourneyTests.testTheSubjectLeavingCancelsTheBetAboutThemAndRejoiningStartsClean"
   ]
 }
