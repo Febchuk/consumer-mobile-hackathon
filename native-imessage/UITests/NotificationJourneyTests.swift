@@ -62,13 +62,18 @@ final class NotificationJourneyTests: JourneyCase {
         }
         let saves = { try self.control.calls().filter { $0["path"] as? String == "v0Notifications:setPreferences" }.count }
         let before = try saves()
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        // The row is the element with the identifier; the control inside it is what a finger touches. Where the row
+        // exposes it, that is what gets tapped, and otherwise the row's trailing edge, where the control sits.
+        let inner = toggle.switches.firstMatch
+        let flip = { if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() } }
+        print("JOURNEY-DIAGNOSTIC switch: inner control \(inner.exists ? "tapped" : "not exposed, trailing edge tapped")")
+        flip()
         // On a hosted runner the switch has ignored a tap after the app was relaunched: it did not move and the app asked
         // the server for nothing. A person would tap again. One more tap is allowed, and written to the run's evidence.
         let reacted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in toggle.value as? String == (on ? "1" : "0") || ((try? saves()) ?? before) > before }, object: nil)
         if XCTWaiter.wait(for: [reacted], timeout: 10 * Self.pace) != .completed {
             try recordRetry("retap", "the notifications switch did not react to a tap: it stayed \(on ? "off" : "on") and the app saved nothing")
-            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            flip()
         }
         if on {
             let allow = springboard.buttons["Allow"]
@@ -165,10 +170,13 @@ final class NotificationJourneyTests: JourneyCase {
     }
 
     private func relaunchSignedIn(_ code: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        let loads = try appCalls("v0Notifications:preferences")
         host.terminate()
         host.launchEnvironment = run.launchEnvironment
         host.launch()
         _ = try required("auth.signOut", in: host, timeout: 30, code, file: file, line: line)
+        // The switch is drawn from the preference the app reads at launch; nothing is tapped before that read is back.
+        eventually(code, timeout: 30, file: file, line: line) { try self.appCalls("v0Notifications:preferences") > loads }
     }
 
     // MARK: J7.3 and N3: the preference
