@@ -8,6 +8,7 @@ struct RootView: View {
         Group {
             if model.style == .compact { CompactView() }
             else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         #if QA && targetEnvironment(simulator)
@@ -27,6 +28,26 @@ struct RootView: View {
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                // A field brings its own controls above the keyboard by asking for them here.
+                .onChange(of: model.revealRequest) { _, target in
+                    guard let target else { return }
+                    withAnimation { proxy.scrollTo(target, anchor: .bottom) }
+                    model.revealRequest = nil
+                }
+                }
+                // The multi-line fields and the number pads have no key that closes the keyboard, so every screen gets a
+                // Done button on top of it.
+                .safeAreaInset(edge: .bottom, spacing: 0) { if model.keyboardVisible { KeyboardDoneBar() } }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in model.keyboardVisible = true }
+                // When the keyboard has come up, and whenever the person moves to another field while it is up, the field
+                // with the keyboard is scrolled clear of the keyboard and the Done bar.
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                    model.revealFocusedField()
+                    model.keyboardShown += 1
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { _ in if model.keyboardVisible { model.revealFocusedField() } }
+                .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification)) { _ in if model.keyboardVisible { model.revealFocusedField() } }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in model.keyboardVisible = false }
                 .background(Theme.page.ignoresSafeArea())
                 .id(model.session?.accountID)
             }
@@ -51,6 +72,31 @@ struct RootView: View {
                 else if model.error == nil { ProgressView().frame(maxWidth: .infinity).padding(40) }
             }
         }
+    }
+}
+
+/// Sits on top of the keyboard on every screen: one tap puts the keyboard away.
+struct KeyboardDoneBar: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        HStack {
+            if let action = model.keyboardAction {
+                Button(action.title) { action.run() }
+                    .font(.body.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .disabled(!action.enabled)
+                    .accessibilityIdentifier("keyboard.action")
+            }
+            Spacer()
+            Button("Done") { model.dismissKeyboard() }
+                .font(.body.weight(.semibold))
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("keyboard.done")
+                .accessibilityHint("Hides the keyboard")
+        }
+        .padding(.horizontal, 16)
+        .background(.bar)
     }
 }
 

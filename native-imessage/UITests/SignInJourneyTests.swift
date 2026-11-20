@@ -29,7 +29,7 @@ final class SignInJourneyTests: JourneyCase {
             try tap(again, scrolling: host)
         }
         XCTAssertTrue(keyboard.waitForExistence(timeout: 10 * Self.pace), "[NATIVE-UI-CODE-04] the code field takes focus again")
-        clear(again)
+        try clear(again, called: "auth.code")
         try enter("000000", into: again, called: "auth.code")
         try tap("auth.verify", in: host)
         _ = try required("auth.returnToMessages", in: host, "NATIVE-UI-CODE-05")
