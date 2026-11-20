@@ -11,7 +11,8 @@ final class ResilienceJourneyTests: JourneyCase {
 
     func testOneFailedFirstLoadRecoversWithoutThePersonDoingAnything() throws {
         try control.seedBet("bet-a", format: "this_that")
-        try control.failNext("v0Auth:me", count: 1)
+        // The host app asks v0Auth:me too, about a session an earlier test left, before the extension is opened.
+        try control.failNext("v0Auth:me", count: 1, caller: "CalledItExtension")
         try start(as: .finn)
         _ = try required("group.bet." + betID("bet-a"), in: messages, "NATIVE-UI-RECOVER-01")
         XCTAssertEqual(Array(try outcomes("v0Auth:me").prefix(2)), ["injected", "success"], "[NATIVE-UI-RECOVER-02] the first load failed once and was repeated")

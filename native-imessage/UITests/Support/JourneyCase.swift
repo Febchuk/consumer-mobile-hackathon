@@ -330,17 +330,24 @@ class JourneyCase: XCTestCase {
 
     /// Launches the host app and returns its phone field. A session left by an earlier test in this run is signed
     /// out first, so the screen under test always starts signed out.
+    ///
+    /// The host app asks the server about a stored session as it starts, and keeps "Sign out" disabled until it has the
+    /// answer. A session left by an earlier test is unknown to the backend this test reset, so the app normally signs
+    /// itself out; a session the server still accepts (a second sign-in inside one test) or could not be asked about
+    /// stays, with "Sign out" usable again. So this waits for whichever the app settles on, the phone field or a "Sign
+    /// out" that can be used, and never for a "Sign out" that is still being checked and may be about to go away. When
+    /// the session stayed, the tap is required, as before.
     func launchHostSignedOut(file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
         host.launchEnvironment = run.launchEnvironment
         host.launch()
         let phone = element("auth.phone", in: host)
-        let signOut = element("auth.signOut", in: host)
+        let signOut = host.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND enabled == YES", "auth.signOut")).firstMatch
         let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in phone.exists || signOut.exists }, object: nil)
         guard XCTWaiter.wait(for: [settled], timeout: 20 * Self.pace) == .completed else {
-            XCTFail("[NATIVE-UI-AUTH] the host app showed neither sign-in nor a session", file: file, line: line)
+            XCTFail("[NATIVE-UI-AUTH] the host app showed neither sign-in nor a session it had finished checking", file: file, line: line)
             throw Blocked()
         }
-        if signOut.exists {
+        if !phone.exists {
             signOut.tap()
             _ = try required("auth.phone", in: host, timeout: 15, "NATIVE-UI-AUTH", file: file, line: line)
         }
