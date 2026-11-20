@@ -37,9 +37,11 @@ jobs:
     timeout-minutes: 80
     strategy:
       fail-fast: false
+      # A free account runs five macOS jobs at once, so the shards run five at a time, in waves.
+      max-parallel: 5
       matrix:
-        # Five shards, because a free account runs five macOS jobs at once. Nine tests at most in each.
-        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin]
+        # Nine tests at most in each shard, so each stays under about 35 minutes.
+        shard: [pick, reveal-membership, controls-resilience, privacy-create, start-board-signin, pick-rules]
         include:
           - shard: pick
             classes: PickJourneyTests
@@ -51,6 +53,8 @@ jobs:
             classes: SubjectPrivacyJourneyTests CreateJourneyTests
           - shard: start-board-signin
             classes: StartJourneyTests BoardJourneyTests SignInJourneyTests
+          - shard: pick-rules
+            classes: PickRulesJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0

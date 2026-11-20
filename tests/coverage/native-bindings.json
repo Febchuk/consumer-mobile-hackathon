@@ -153,5 +153,26 @@
   ],
   "J9.4.account-scoped.U": [
     "NATIVE-UI.SignInJourneyTests.testSwitchingAccountsShowsOnlyTheNewPersonsGroups"
+  ],
+  "J3.1.fair-rotation.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testTheWorkerNamesTheFriendWhoWaitedLongestAndTheCreatorSeesThatFriend"
+  ],
+  "J3.2.offline-truth.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testAConfirmationTheServerNeverGotIsNotShownAsSaved"
+  ],
+  "J3.3.confidence-boundaries.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testConfidenceEndsAtOneAndAtOneHundred"
+  ],
+  "J3.3.concurrent-version.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testThePickTheServerAcceptedReplacesAnUnverifiedDraftAndCannotBeChanged"
+  ],
+  "J3.4.boundary-writes.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testAConfirmationThatArrivesAfterTheRevealIsRefused"
+  ],
+  "J4.2.countdown-reactions.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testTheSealedCardCountsDownToTheServersRevealAndShowsWhoIsIn"
+  ],
+  "J4.3.neutral-old-open.U": [
+    "NATIVE-UI.PickRulesJourneyTests.testAVetoedBetOpensAsANeutralUnavailableCard"
   ]
 }
