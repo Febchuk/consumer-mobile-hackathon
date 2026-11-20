@@ -128,6 +128,24 @@ export const shiftBet = internalMutation({
   },
 });
 
+// The server clock cannot move, so an app sign-in is moved past its expiry instead. Control sessions are left alone.
+export const expireSessions = internalMutation({
+  args: { runID: v.string(), actor: v.string() },
+  handler: async (ctx, args) => {
+    requireRun(args.runID);
+    const { accounts } = await ids(ctx);
+    if (!accounts[args.actor]) throw new Error("Unknown fixture actor " + args.actor);
+    const now = Date.now();
+    let expired = 0;
+    for (const row of await ctx.db.query("v0Sessions").withIndex("by_account", (q: any) => q.eq("accountId", accounts[args.actor])).collect()) {
+      if (row.deviceId.startsWith("qa-control-") || row.revokedAt !== undefined) continue;
+      await ctx.db.patch(row._id, { createdAt: Math.min(row.createdAt, now - 2 * minute), expiresAt: now - minute });
+      expired++;
+    }
+    return { expired };
+  },
+});
+
 export const inspect = internalQuery({
   args: { runID: v.string() },
   handler: async (ctx, args) => {
@@ -139,7 +157,7 @@ export const inspect = internalQuery({
     return {
       accounts, groups,
       accountRows: (await all("v0Accounts")).map((row: any) => ({ actor: actor(row._id), displayName: row.displayName, noBets: row.noBets, blockedTopics: row.blockedTopics, deleted: row.deletedAt !== undefined, notificationsEnabled: row.notificationsEnabled ?? null })),
-      sessions: (await all("v0Sessions")).map((row: any) => ({ actor: actor(row.accountId), control: row.deviceId.startsWith("qa-control-"), revoked: row.revokedAt !== undefined })),
+      sessions: (await all("v0Sessions")).map((row: any) => ({ actor: actor(row.accountId), control: row.deviceId.startsWith("qa-control-"), revoked: row.revokedAt !== undefined, expired: row.expiresAt <= Date.now() })),
       memberships: (await all("v0Memberships")).map((row: any) => ({ group: group(row.groupId), actor: actor(row.accountId), alias: row.alias, points: row.points, streak: row.streak, left: row.leftAt !== undefined })),
       groupRows: (await all("v0Groups")).map((row: any) => ({ id: row._id, key: group(row._id), name: row.name, creator: actor(row.creatorId), timezone: row.timezone })),
       invites: (await all("v0Invites")).map((row: any) => ({ group: group(row.groupId), inviter: actor(row.inviterId), accepted: row.acceptedAt !== undefined, revoked: row.revokedAt !== undefined })),

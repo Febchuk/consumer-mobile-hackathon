@@ -60,6 +60,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const failures = [];
   // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
   const faults = new Map();
+  // Replies a test asked to lose: the next calls to a path reach the backend and take effect, and the app is told the server failed.
+  const lostReplies = new Map();
   let currentTest = "";
   const sockets = new Set();
   const track = (server) => server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
@@ -158,6 +160,12 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         }
         const upstream = await localFetch(origin + "/api/" + match[1], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, args: input.args, format: "convex_encoded_json" }) });
         const envelope = await upstream.json();
+        const lost = lostReplies.get(path) ?? 0;
+        if (lost > 0 && envelope.status === "success") {
+          lostReplies.set(path, lost - 1);
+          outcome = "reply_lost"; status = 560;
+          return reply(560, { status: "error", errorMessage: "Reply lost" });
+        }
         if (envelope.status === "success") {
           outcome = "success";
           if (path === "v0Runtime:attestation") envelope.value = { ...envelope.value, testAdapters: true, qaRunID: runID, qaManifestSHA256: manifestSHA256 };
@@ -216,6 +224,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture = { ...seeded, bets: {} };
         calls.length = 0;
         faults.clear();
+        lostReplies.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
       async seedTurn(input) { return await internal("mutation", "qaNative:seedTurn", { runID, group: input.group, creator: input.creator, subject: input.subject }); },
@@ -259,6 +268,18 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         faults.set(input.path, Number(input.count));
+      },
+      // The backend applies the app's next "count" calls to one public mutation, and the app gets a server error with no code
+      // instead of the reply: the change happened and the answer was lost. They are logged with outcome "reply_lost".
+      async loseReplyNext(input) {
+        assert.ok(allowed.get(input.path) === "mutation", "Not a public V0 mutation");
+        assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
+        lostReplies.set(input.path, Number(input.count));
+      },
+      // Moves one fixture person's app sign-ins past their expiry, as time would. The harness's control sessions are left alone.
+      async expireSessions(input) {
+        assert.ok(tokens[input.actor], "Unknown actor");
+        return await internal("mutation", "qaNative:expireSessions", { runID, actor: input.actor });
       },
       // A retry or a measurement reported by a test, kept for the whole run and written to evidence.json.
       async note(input) {
