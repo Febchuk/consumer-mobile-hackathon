@@ -174,5 +174,26 @@
   ],
   "J4.3.neutral-old-open.U": [
     "NATIVE-UI.PickRulesJourneyTests.testAVetoedBetOpensAsANeutralUnavailableCard"
+  ],
+  "J5.1.resume-refresh.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testAScreenThatWasAwayAtTheRevealShowsItOnReturn"
+  ],
+  "J5.2.minority-tie-majority.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testAMinorityAndATieLetTheAnswerStandAndAMajorityVoids"
+  ],
+  "J5.2.deadline-race.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testTheOpenScreenFollowsTheServerWhenTheChallengeHourEnds"
+  ],
+  "J5.2.exactly-once-finalize.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testTheOpenScreenFollowsTheServerWhenTheChallengeHourEnds"
+  ],
+  "J5.3.late-answer-race.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testATimedOutBetIsVoidOnceAndALateAnswerIsRefused"
+  ],
+  "J5.3.single-terminal-state.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testATimedOutBetIsVoidOnceAndALateAnswerIsRefused"
+  ],
+  "J5.5.cancel-truth.U": [
+    "NATIVE-UI.RevealRulesJourneyTests.testAResultCardThatIsPreparedAndRemovedClaimsNoDelivery"
   ]
 }
