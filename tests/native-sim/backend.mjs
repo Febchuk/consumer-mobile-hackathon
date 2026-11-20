@@ -60,6 +60,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
   const failures = [];
   // Faults a test asked for: the next calls to a path are answered with a server error and never reach the backend.
   const faults = new Map();
+  // For a fault asked for one program only (the host app or the extension): the path's caller, as the call log names it.
+  const faultCallers = new Map();
   // Replies a test asked to lose: the next calls to a path reach the backend and take effect, and the app is told the server failed.
   const lostReplies = new Map();
   let currentTest = "";
@@ -153,7 +155,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         if (typeof input.args?.[0]?.conversationKey === "string") conversation = createHash("sha256").update(input.args[0].conversationKey).digest("hex").slice(0, 8);
         if (allowed.get(path) !== match[1] || input.format !== "convex_encoded_json" || !Array.isArray(input.args) || input.args.length !== 1) return reply(403, { status: "error", errorMessage: "Not a public V0 function", errorData: { code: "NOT_AVAILABLE" } });
         const planned = faults.get(path) ?? 0;
-        if (planned > 0) {
+        const faultCaller = faultCallers.get(path);
+        if (planned > 0 && (!faultCaller || faultCaller === String(request.headers["user-agent"] ?? "unknown").split("/")[0].slice(0, 40))) {
           faults.set(path, planned - 1);
           outcome = "injected"; status = 560; failure = "Injected by the test";
           return reply(560, { status: "error", errorMessage: "Injected failure" });
@@ -224,6 +227,7 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         fixture = { ...seeded, bets: {} };
         calls.length = 0;
         faults.clear();
+        faultCallers.clear();
         lostReplies.clear();
         return { groups: Object.keys(seeded.groups), actors: Object.keys(seeded.accounts), timezone: seeded.timezone };
       },
@@ -280,6 +284,8 @@ export async function bootNativeBackend({ root, directory, binary, expectedBinar
         assert.ok(allowed.has(input.path) && input.path !== "v0Runtime:attestation", "Not a public V0 function");
         assert.ok(Number.isInteger(Number(input.count)) && Number(input.count) >= 1 && Number(input.count) <= 10, "count must be between 1 and 10");
         faults.set(input.path, Number(input.count));
+        // Optional: only calls from this program fail, and the other program's calls to the same function pass through.
+        if (typeof input.caller === "string") faultCallers.set(input.path, input.caller); else faultCallers.delete(input.path);
       },
       // The backend applies the app's next "count" calls to one public mutation, and the app gets a server error with no code
       // instead of the reply: the change happened and the answer was lost. They are logged with outcome "reply_lost".
