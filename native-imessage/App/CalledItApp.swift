@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct CalledItApp: App {
     @UIApplicationDelegateAdaptor(ApplicationDelegate.self) private var applicationDelegate
-    @StateObject private var authentication = HostAuthenticationModel()
+    @StateObject private var authentication = HostAuthenticationModel.launched()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -18,7 +18,7 @@ struct CalledItApp: App {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    authentication.reload()
+                    authentication.activate()
                     Task { await HostNotifications.shared.refresh() }
                 }
             }

@@ -296,24 +296,27 @@
     "NATIVE-UI.SecurityJourneyTests.testTheSubjectIsShownOnlyLockedFieldsUntilTheServerReveals"
   ],
   "SEC1.revocation.U": [
-    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp"
+    "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppWhenItComesBackToTheForeground"
   ],
   "SEC1.membership-interval.U": [
     "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
   ],
   "SEC2.wrong-expired-replay.U": [
-    "NATIVE-UI.SecurityJourneyTests.testAnExpiredCodeIsRefusedEvenWhenItIsTheRightCode",
-    "NATIVE-UI.SecurityJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
+    "NATIVE-UI.SignInLimitsJourneyTests.testAnExpiredCodeIsRefusedEvenWhenItIsTheRightCode",
+    "NATIVE-UI.SignInLimitsJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
   ],
   "SEC2.bounded-attempts.U": [
-    "NATIVE-UI.SecurityJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
+    "NATIVE-UI.SignInLimitsJourneyTests.testFiveWrongCodesCloseTheChallengeEvenForTheRightCode"
   ],
   "SEC2.stable-account.U": [
-    "NATIVE-UI.SecurityJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
+    "NATIVE-UI.SignInLimitsJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
   ],
   "SEC2.session-revocation.U": [
     "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
-    "NATIVE-UI.SecurityJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount"
+    "NATIVE-UI.SignInLimitsJourneyTests.testSigningInAgainByPhoneLandsOnTheSameAccount",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppWhenItComesBackToTheForeground",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppAtAColdLaunchAndTheExtensionKeepsNothing"
   ],
   "SEC2.no-username-admission.U": [
     "NATIVE-UI.SecurityJourneyTests.testPeopleOutsideTheGroupAreShownNothingOfItUnderAnyName"
@@ -323,6 +326,53 @@
   ],
   "SEC3.stale-cache-clear.U": [
     "NATIVE-UI.SecurityJourneyTests.testASignInRevokedElsewhereClosesTheExtensionAndTheHostApp",
-    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack"
+    "NATIVE-UI.SecurityJourneyTests.testAMemberWhoLeftLosesTheGroupAndRejoiningBringsNothingBack",
+    "NATIVE-UI.HostSessionJourneyTests.testASignInRevokedElsewhereEndsInTheHostAppAtAColdLaunchAndTheExtensionKeepsNothing"
+  ],
+  "J1.1.consenting-subject.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testAFriendWhoOptedOutCannotBeMadeTheSubjectAndIsNoLongerOffered"
+  ],
+  "J1.3.idempotent-create.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testACreateWhoseReplyIsLostIsSentAgainAsTheSameRequestAndMakesOneBet",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testADoubleTapOnCreateCardMakesOneRequestAndOneBet"
+  ],
+  "J1.3.cancel-resume.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testADraftThePersonRemovedCanBePreparedAgainFromTheSameBet"
+  ],
+  "J2.2.logout-expiry.U": [
+    "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheHostAppSignsTheExtensionOut",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testSigningOutInTheExtensionSignsTheHostAppOut",
+    "NATIVE-UI.DraftAndSessionJourneyTests.testAnExpiredSignInEndsTheSessionInTheExtensionAndTheHostApp"
+  ],
+  "J3.1.noon-pass.U": [
+    "NATIVE-UI.TurnRulesJourneyTests.testAnUnusedTurnPassesOnceAtNoonAndTheFirstCreatorIsNoLongerOfferedIt",
+    "NATIVE-UI.TurnRulesJourneyTests.testTheMemberTheTurnPassedToAtNoonMakesTheDaysOneBet"
+  ],
+  "J7.3.recipient-preferences.U": [
+    "NATIVE-UI.NotificationJourneyTests.testThePreferenceSwitchSavesToTheServerAndIsShownAgainAfterARelaunch"
+  ],
+  "N3.recap-preference.U": [
+    "NATIVE-UI.NotificationJourneyTests.testThePreferenceSwitchSavesToTheServerAndIsShownAgainAfterARelaunch"
+  ],
+  "N2.eligible-locator.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "N2.stale-event-denied.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "N2.neutral-payload.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "SEC3.neutral-push.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARevealArrivingInFrontIsNeutralOpensItsBetAndALateCopyAfterLeavingShowsNothing"
+  ],
+  "J3.1.neutral-push.U": [
+    "NATIVE-UI.NotificationJourneyTests.testATurnArrivingInTheBackgroundIsNeutralAndOpensTheCreatorTurn"
+  ],
+  "J7.3.aggregate.U": [
+    "NATIVE-UI.NotificationJourneyTests.testARecapArrivalShowsTheWeeksPointsFromTheLedger"
+  ],
+  "N3.logout-switch.U": [
+    "NATIVE-UI.NotificationJourneyTests.testSigningOutClosesAnOpenedNotificationAndALateArrivalShowsTheNextPersonNothing"
   ]
 }
