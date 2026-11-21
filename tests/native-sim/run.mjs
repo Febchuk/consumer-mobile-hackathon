@@ -47,7 +47,7 @@ if (process.env.DEVELOPER_DIR) environment.DEVELOPER_DIR = process.env.DEVELOPER
 process.env.PATH = environment.PATH;
 const run = (command, args, extra = {}) => execFileSync(command, args, { encoding: "utf8", env: environment, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, ...extra });
 
-const guard = spawnSync(process.execPath, ["--test", resolve(here, "guard.test.mjs")], { cwd: root, env: environment, stdio: "inherit" });
+const guard = spawnSync(process.execPath, ["--test", resolve(here, "guard.test.mjs"), resolve(here, "notify.test.mjs")], { cwd: root, env: environment, stdio: "inherit" });
 if (guard.status !== 0) { console.error("[native-sim] The loopback guard's own tests failed; nothing was started."); process.exit(1); }
 
 // A QA activation lasts at most one hour, and the whole suite takes longer than that. A run without --only therefore
@@ -262,7 +262,7 @@ async function main() {
   evidence.safety.cardTarget = manifest.cardOrigin;
 
   say("booting the local backend on loopback");
-  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log, crons: flag("--demo"), onClose: (close) => { closeBackend = close; } });
+  backend = await bootNativeBackend({ root, directory: resolve(scratchRoot, "ns-" + runID.slice(0, 8).toLowerCase()), binary: pinned.binary, expectedBinarySHA256: pinned.sha, runID, manifestSHA256: evidence.manifestSHA256, backendRevision: sourceRevision, configVersion, log, crons: flag("--demo"), onClose: (close) => { closeBackend = close; }, simulatorUDID: simulator?.udid });
   evidence.backend.selfCheck = await selfCheck();
   say("backend self-check passed: real handlers, fake code provider, policy " + evidence.backend.selfCheck.policy.status);
   if (flag("--backend-only")) { evidence.status = "backend-only"; exitCode = 0; return; }

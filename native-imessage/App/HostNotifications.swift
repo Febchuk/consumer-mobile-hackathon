@@ -19,14 +19,11 @@ final class HostNotifications: ObservableObject {
         }
         await loadPreferences()
         guard (try? Config.load()) != nil else { status = "Not configured"; return }
-        #if QA && targetEnvironment(simulator)
-        if (try? Config.load())?.qaContext != nil { status = "QA provider delivery disabled"; return }
-        #endif
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             status = "Allowed"
-            UIApplication.shared.registerForRemoteNotifications()
+            registerWithProvider()
         case .denied:
             status = "Off in iOS Settings"
             await unregister()
@@ -85,14 +82,20 @@ final class HostNotifications: ObservableObject {
         }
     }
 
+    /// A QA run on a simulator asks for the local permission, so an alert handed to the simulator can be shown, and never
+    /// registers with a provider: it gets no device token and stores none.
+    private func registerWithProvider() {
+        #if QA && targetEnvironment(simulator)
+        if (try? Config.load())?.qaContext != nil { status = "Allowed. QA provider delivery disabled"; return }
+        #endif
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+
     func requestPermission() async {
         guard (try? Config.load()) != nil else { status = "Not configured"; return }
-        #if QA && targetEnvironment(simulator)
-        if (try? Config.load())?.qaContext != nil { status = "QA provider delivery disabled"; return }
-        #endif
         do {
             let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-            if allowed { UIApplication.shared.registerForRemoteNotifications() }
+            if allowed { registerWithProvider() }
             else { await unregister() }
             await refresh()
         } catch { self.error = "Couldn't change notification permission. You can still open Called It manually." }
