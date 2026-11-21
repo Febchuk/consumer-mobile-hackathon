@@ -62,9 +62,10 @@ struct DailyTurnView: View {
         guard model.token == token else { return }
         turn = current
         if let current, current.offersBet(to: model.session?.accountID) { return model.compose(subjectID: current.subjectId) }
-        moved = current?.creatorId == model.session?.accountID
-            ? "Today's bet has already been made from your turn."
-            : "Your turn passed to another member, so today's bet is theirs to make."
+        guard let current else { return moved = "Your turn is over, so there's no bet to make from it." }
+        if current.creatorId != model.session?.accountID { moved = "Your turn passed to another member, so today's bet is theirs to make." }
+        else if current.status == "created" { moved = "Today's bet has already been made from your turn." }
+        else { moved = "Your turn ended without a bet, so there's no bet to make from it today." }
     }
 
     private func pass() async {
