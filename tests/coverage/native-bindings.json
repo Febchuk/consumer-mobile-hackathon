@@ -346,7 +346,9 @@
   ],
   "J3.1.noon-pass.U": [
     "NATIVE-UI.TurnRulesJourneyTests.testAnUnusedTurnPassesOnceAtNoonAndTheFirstCreatorIsNoLongerOfferedIt",
-    "NATIVE-UI.TurnRulesJourneyTests.testTheMemberTheTurnPassedToAtNoonMakesTheDaysOneBet"
+    "NATIVE-UI.TurnRulesJourneyTests.testTheMemberTheTurnPassedToAtNoonMakesTheDaysOneBet",
+    "NATIVE-UI.TurnRulesJourneyTests.testATurnThatPassesWhileTheHomeIsOpenIsTakenOffTheCardWhenTheFirstCreatorTapsIt",
+    "NATIVE-UI.TurnRulesJourneyTests.testABetWrittenWhileTheTurnPassesIsRefusedInPlainWordsAndTheHomeShowsWhoseTurnItIs"
   ],
   "J7.3.recipient-preferences.U": [
     "NATIVE-UI.NotificationJourneyTests.testThePreferenceSwitchSavesToTheServerAndIsShownAgainAfterARelaunch"
