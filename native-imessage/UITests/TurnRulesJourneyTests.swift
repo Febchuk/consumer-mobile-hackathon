@@ -3,7 +3,8 @@ import XCTest
 /// Journey 3.1, the noon pass: a creator who has not sent a bet by 12:00 noon group time loses the turn, once, to the
 /// next member. The server clock cannot move, so the fixture moves the group and its unused turn to an hour past the
 /// group's noon (see shiftTurnPastNoon in the overlay); the pass itself is done by the product's own turns job. The
-/// home screen reads the turn when it opens, so each check of the screen opens the home again.
+/// home screen reads the turn when it opens and again when the person taps "Create today's bet"; the first two tests
+/// open the home again for each check, and the last two leave the screen open while the turn passes.
 final class TurnRulesJourneyTests: JourneyCase {
     /// Today's turn in G1 as the server holds it.
     private func turns(_ code: String, file: StaticString = #filePath, line: UInt = #line) throws -> [String: Any] {
@@ -121,5 +122,55 @@ final class TurnRulesJourneyTests: JourneyCase {
         XCTAssertEqual(try passedByTheTurnsJob("NATIVE-UI-NOON-20"), 0, "[NATIVE-UI-NOON-20]")
         XCTAssertEqual(try control.rows("bets").count, 1, "[NATIVE-UI-NOON-20] still one bet for the day")
         XCTAssertEqual(try turns("NATIVE-UI-NOON-20")["status"] as? String, "created", "[NATIVE-UI-NOON-20]")
+    }
+
+    func testATurnThatPassesWhileTheHomeIsOpenIsTakenOffTheCardWhenTheFirstCreatorTapsIt() throws {
+        try control.seedTurn(group: "G1", creator: "cora", subject: "finn")
+        try start(as: .cora)
+        assertText("Your creator turn", in: messages, "NATIVE-UI-STALE-01")
+        _ = try required("turn.create", in: messages, "NATIVE-UI-STALE-01")
+
+        // The turn passes while Cora's home screen stays open. She does not leave it or open it again.
+        try moveGroupPastNoon("NATIVE-UI-STALE-02")
+        XCTAssertEqual(try passedByTheTurnsJob("NATIVE-UI-STALE-02"), 1, "[NATIVE-UI-STALE-02] the turns job passes the unused turn after noon")
+        let turnReads = try appCalls("v0Groups:turn")
+        try tap("turn.create", in: messages)
+
+        assertText("Your turn passed to another member, so today's bet is theirs to make.", in: messages, "NATIVE-UI-STALE-03")
+        XCTAssertGreaterThan(try appCalls("v0Groups:turn"), turnReads, "[NATIVE-UI-STALE-03] the tap read the turn from the server")
+        assertText("Today's creator turn", in: messages, "NATIVE-UI-STALE-04")
+        XCTAssertFalse(text("Your creator turn", in: messages).exists, "[NATIVE-UI-STALE-04] the card no longer says the turn is hers")
+        assertGone(element("turn.create", in: messages), "NATIVE-UI-STALE-04")
+        XCTAssertFalse(element("turn.pass", in: messages).exists, "[NATIVE-UI-STALE-04] she has nothing left to pass")
+        XCTAssertFalse(element("compose.question", in: messages).exists, "[NATIVE-UI-STALE-05] the new bet form did not open")
+        _ = try required("navigation.board", in: messages, "NATIVE-UI-STALE-05")
+        XCTAssertEqual(try control.calls().filter { $0["path"] as? String == "v0Bets:create" }.count, 0, "[NATIVE-UI-STALE-06] no create request was sent")
+        XCTAssertEqual(try control.rows("bets").count, 0, "[NATIVE-UI-STALE-06] no bet exists")
+        XCTAssertEqual(try turns("NATIVE-UI-STALE-06")["creator"] as? String, "sage", "[NATIVE-UI-STALE-06] the turn is still the next member's")
+    }
+
+    func testABetWrittenWhileTheTurnPassesIsRefusedInPlainWordsAndTheHomeShowsWhoseTurnItIs() throws {
+        try control.seedTurn(group: "G1", creator: "cora", subject: "finn")
+        try start(as: .cora)
+        try tap("turn.create", in: messages)
+        _ = try required("compose.subject", in: messages, "NATIVE-UI-STALE-07")
+        try type("Will the stale fixture finish first " + run.manifest.runID.prefix(8), into: "compose.question")
+
+        // The turn passes while the form is open with her question in it.
+        try moveGroupPastNoon("NATIVE-UI-STALE-08")
+        XCTAssertEqual(try passedByTheTurnsJob("NATIVE-UI-STALE-08"), 1, "[NATIVE-UI-STALE-08] the turns job passes the unused turn after noon")
+        try tap("compose.create", in: messages)
+
+        assertText("Today's turn isn't yours, so this bet wasn't created. Only today's creator can make today's bet.", in: messages, "NATIVE-UI-STALE-09")
+        XCTAssertFalse(text("This isn't available to your account. An earlier card may be outside your membership.", in: messages).exists, "[NATIVE-UI-STALE-09] the general refusal is not what she is told")
+        XCTAssertEqual(try control.calls().filter { $0["path"] as? String == "v0Bets:create" }.compactMap { $0["outcome"] as? String }, ["FORBIDDEN"], "[NATIVE-UI-STALE-10] the server refused the one request, and the app did not repeat it")
+        XCTAssertEqual(try control.rows("bets").count, 0, "[NATIVE-UI-STALE-10] no bet exists")
+        _ = try required("compose.question", in: messages, "NATIVE-UI-STALE-10")
+
+        try goHome()
+        assertText("Today's creator turn", in: messages, "NATIVE-UI-STALE-11")
+        XCTAssertFalse(text("Your creator turn", in: messages).exists, "[NATIVE-UI-STALE-11]")
+        XCTAssertFalse(element("turn.create", in: messages).exists, "[NATIVE-UI-STALE-11] the first creator is no longer offered today's bet")
+        XCTAssertEqual(try turns("NATIVE-UI-STALE-11")["creator"] as? String, "sage", "[NATIVE-UI-STALE-11]")
     }
 }

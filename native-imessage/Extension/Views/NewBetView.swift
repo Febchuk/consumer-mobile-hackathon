@@ -196,8 +196,17 @@ struct NewBetView: View {
             model.go(.bet(locator.value))
             model.send(bet)
         } catch {
-            self.error = error.localizedDescription
             model.handle(error)
+            self.error = error.localizedDescription
+            // The server refuses a bet from anyone who doesn't hold today's turn, and the turn can pass at noon while this
+            // form is open. The refusal then says so instead of the general "isn't available" text.
+            guard (error as? APIError)?.code == "FORBIDDEN" else { return }
+            do {
+                let turn: CreatorTurn? = try await API.query("v0Groups:turn", ["token": token, "groupId": groupID])
+                guard model.token == token, turn?.offersBet(to: model.session?.accountID) != true else { return }
+                self.error = "Today's turn isn't yours, so this bet wasn't created. Only today's creator can make today's bet."
+                model.error = self.error
+            } catch {}
         }
     }
 }

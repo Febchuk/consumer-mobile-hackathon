@@ -225,6 +225,11 @@ struct CreatorTurn: Decodable {
     let assignedAt: Double
     let passAt: Double
     let canPass: Bool
+
+    /// True while this account may still make the day's bet from this turn: it holds the turn and no bet has used it.
+    func offersBet(to accountID: String?) -> Bool {
+        creatorId == accountID && (status == "assigned" || status == "passed")
+    }
 }
 struct WeeklyRecap: Decodable {
     struct Row: Decodable, Identifiable {
