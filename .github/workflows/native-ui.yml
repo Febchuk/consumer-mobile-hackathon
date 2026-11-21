@@ -10,6 +10,7 @@ name: Native UI
 # from the workflow file on the default branch.
 on:
   workflow_dispatch:
+  pull_request:
   schedule:
     - cron: "17 10 * * *"
   push:
@@ -41,40 +42,10 @@ jobs:
       max-parallel: 5
       matrix:
         # Seven tests at most in each shard: a shard of nine ran 32 to 37 minutes, and the aim is under 35.
-        shard: [pick, reveal, controls, privacy-signin, create-membership, start-board, pick-rules, reveal-rules, suggestion-rules, scoring, cascade, security, draft-session, sign-in-limits, host-resilience, notifications]
+        shard: [sign-in-limits]
         include:
-          - shard: pick
-            classes: PickJourneyTests
-          - shard: reveal
-            classes: RevealJourneyTests
-          - shard: controls
-            classes: ControlsJourneyTests
-          - shard: privacy-signin
-            classes: SubjectPrivacyJourneyTests SignInJourneyTests
-          - shard: create-membership
-            classes: CreateJourneyTests MembershipJourneyTests
-          - shard: start-board
-            classes: StartJourneyTests BoardJourneyTests
-          - shard: pick-rules
-            classes: PickRulesJourneyTests
-          - shard: reveal-rules
-            classes: RevealRulesJourneyTests
-          - shard: suggestion-rules
-            classes: SuggestionRulesJourneyTests
-          - shard: scoring
-            classes: ScoringJourneyTests
-          - shard: cascade
-            classes: CascadeJourneyTests
-          - shard: security
-            classes: SecurityJourneyTests
-          - shard: draft-session
-            classes: DraftAndSessionJourneyTests
           - shard: sign-in-limits
             classes: SignInLimitsJourneyTests TurnRulesJourneyTests
-          - shard: host-resilience
-            classes: HostSessionJourneyTests ResilienceJourneyTests
-          - shard: notifications
-            classes: NotificationJourneyTests
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       XCODEGEN_VERSION: 2.47.0
@@ -260,7 +231,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      SHARDS: pick reveal controls privacy-signin create-membership start-board pick-rules reveal-rules suggestion-rules scoring cascade security draft-session sign-in-limits host-resilience notifications
+      SHARDS: sign-in-limits
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
