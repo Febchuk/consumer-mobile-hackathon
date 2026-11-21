@@ -62,12 +62,14 @@ final class NotificationJourneyTests: JourneyCase {
         }
         // The row carries the identifier; the control inside it is what a finger touches, and that is what gets tapped.
         // A tap on the row's trailing edge instead was ignored three times in five right after a relaunch on a hosted runner.
+        // The touch is held for a quarter of a second: the 66 ms touch of tap() was ignored by the switch 13 times in 80 right
+        // after a relaunch, mostly when the app received touch-down so late that about 10 ms was left before touch-up, while 28 held touches all flipped it.
         let inner = toggle.switches.firstMatch
         guard inner.exists, inner.isHittable else {
             XCTFail("[\(code)] the notifications row exposes no switch that can be tapped", file: file, line: line)
             throw Blocked()
         }
-        inner.tap()
+        inner.press(forDuration: 0.25)
         if on {
             let allow = springboard.buttons["Allow"]
             let status = element("notifications.status", in: host)
